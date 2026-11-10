@@ -30,6 +30,7 @@ var reaction_text: Label
 var deck_count_label: Label
 var discard_count_label: Label
 var discard_pending_label: Label
+var discard_dialog: AcceptDialog
 var boost_dialog: AcceptDialog
 var scry_dialog: ConfirmationDialog
 var scry_body: VBoxContainer
@@ -154,7 +155,7 @@ func _build_ui() -> void:
 	reaction_panel.add_child(reaction_text)
 	hand_view = _named(Fan.new(), "Hand", canvas)
 	_button(canvas, "DeckPile", "Deck", func(): %Inspection.text = "Remaining draw pile: %d cards. Order is hidden." % state.deck.size())
-	_button(canvas, "DiscardPile", "Discard", func(): %Inspection.text = "Discard: %d cards. Played cards stay in the circle until next turn." % state.discard.size())
+	_button(canvas, "DiscardPile", "Discard", _show_discard)
 	_build_pile_counters()
 	actions = HFlowContainer.new()
 	actions.add_theme_constant_override("h_separation", 7)
@@ -309,7 +310,7 @@ func _show_piles(_snapshot: Dictionary) -> void:
 			pending_names.append(state.card(uid).name)
 		if basic_target >= 0:
 			pending_names.append(state.card(selected_uid).name)
-	%DiscardPile.tooltip_text = "Discard: %d cards." % state.discard.size() + ("\nPending: " + ", ".join(pending_names) + ". Cancel Play returns these cards." if not pending_names.is_empty() else "")
+	%DiscardPile.tooltip_text = "Click to inspect %d discarded cards, newest first." % state.discard.size() + ("\nPending: " + ", ".join(pending_names) + ". Cancel Play returns these cards." if not pending_names.is_empty() else "")
 
 
 func _show_board(snapshot: Dictionary) -> void:
@@ -1112,3 +1113,47 @@ func _reaction_exited(uid: int) -> void:
 	reaction_panel.hide()
 	%Status.show()
 	if not busy: _update_controls()
+
+
+func _show_discard() -> void:
+	if is_instance_valid(discard_dialog):
+		discard_dialog.free()
+	discard_dialog = AcceptDialog.new()
+	discard_dialog.name = "DiscardViewer"
+	discard_dialog.title = "Discard pile / %d cards" % state.discard.size()
+	discard_dialog.get_ok_button().text = "Close"
+	add_child(discard_dialog)
+	var body := VBoxContainer.new()
+	discard_dialog.add_child(body)
+	var heading := Label.new()
+	heading.text = "Newest (top of pile) to oldest (bottom).\nPending payments are not yet discarded."
+	heading.add_theme_font_size_override("font_size", 14)
+	body.add_child(heading)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(scroll)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	scroll.add_child(row)
+	if state.discard.is_empty():
+		var empty := Label.new()
+		empty.text = "The discard pile is empty."
+		row.add_child(empty)
+	for offset in state.discard.size():
+		var uid: int = state.discard[state.discard.size() - 1 - offset]
+		var column := VBoxContainer.new()
+		row.add_child(column)
+		var order := Label.new()
+		order.set_meta("plain_text", true)
+		order.text = "#%d%s" % [offset + 1, " - TOP / NEWEST" if offset == 0 else (" - BOTTOM / OLDEST" if offset == state.discard.size() - 1 else "")]
+		column.add_child(order)
+		var face := CardFace.new()
+		face.set_meta("discard_uid", uid)
+		face.custom_minimum_size = Vector2(240, 350)
+		face.toggle_mode = false
+		face.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		face.configure(state.card(uid), state.ships[state.card(uid).owner])
+		column.add_child(face)
+	var viewer_size := Vector2i(minf(960, get_viewport_rect().size.x * 0.9), minf(490, get_viewport_rect().size.y * 0.9))
+	body.custom_minimum_size.x = maxf(240, viewer_size.x - 40)
+	discard_dialog.popup_centered(viewer_size)
