@@ -1,0 +1,87 @@
+[gd_scene format=3]
+
+[node name="HandCard" type="Button"]
+custom_minimum_size = Vector2(0, 218)
+size_flags_horizontal = 3
+toggle_mode = true
+mouse_default_cursor_shape = 2
+clip_contents = true
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1
+anchor_bottom = 1
+offset_left = 11
+offset_top = 12
+offset_right = -11
+offset_bottom = -12
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 5
+
+[node name="Numbers" type="HBoxContainer" parent="Margin/Content"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Cost" type="Label" parent="Margin/Content/Numbers"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = ""
+mouse_filter = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.91, 0.74, 0.47, 1)
+
+[node name="Payment" type="Label" parent="Margin/Content/Numbers"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = ""
+mouse_filter = 2
+
+[node name="Owner" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = ""
+mouse_filter = 2
+
+[node name="CardName" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = ""
+mouse_filter = 2
+custom_minimum_size = Vector2(0, 44)
+autowrap_mode = 2
+
+[node name="Ranks" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = ""
+mouse_filter = 2
+
+[node name="Effect" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = ""
+mouse_filter = 2
+size_flags_vertical = 3
+autowrap_mode = 2
+
+[node name="Tags" type="Label" parent="Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = ""
+mouse_filter = 2
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.57, 0.73, 0.78, 1)
