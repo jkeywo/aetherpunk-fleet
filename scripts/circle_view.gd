@@ -1,5 +1,7 @@
 extends Control
 signal slot_selected(slot: int)
+signal slot_hovered(slot: int)
+signal slot_exited(slot: int)
 signal drag_slot_hovered(slot: int, data: Variant)
 signal drag_slot_exited(slot: int)
 signal card_dropped(slot: int, data: Variant)
@@ -23,6 +25,7 @@ var drop_check: Callable
 var drag_active := false
 var valid_drop_slots: Array = []
 var drop_errors: Dictionary = {}
+var trigger_bases: Dictionary={}
 
 
 func _ready() -> void:
@@ -41,6 +44,7 @@ func _ready() -> void:
 
 
 func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictionary = {}, selected_slot: int = -1, contributors: Array = [], details: Dictionary = {}, persistence: Dictionary = {}) -> void:
+	trigger_bases.clear()
 	expanded = is_expanded
 	circle_art.texture = preload("res://scripts/art_assets.gd").texture("circle/stage-%d.png" % (2 if expanded else 1))
 	selected = selected_slot
@@ -55,7 +59,8 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 			button.clip_text = true
 			button.pressed.connect(func(): slot_selected.emit(slot))
 			button.set_drag_forwarding(Callable(), _can_drop_at.bind(slot), _drop_at.bind(slot))
-			button.mouse_exited.connect(func(): drag_slot_exited.emit(slot))
+			button.mouse_exited.connect(func(): drag_slot_exited.emit(slot);slot_exited.emit(slot))
+			button.mouse_entered.connect(func():slot_hovered.emit(slot))
 			add_child(button)
 			buttons.append(button)
 		link_overlay = Control.new()
@@ -220,3 +225,23 @@ func _drop_at(_at_position: Vector2, data: Variant, slot: int) -> void:
 func _process(_delta: float) -> void:
 	if circle_art != null and is_visible_in_tree():
 		circle_art.modulate.a = .48 + .045*sin(Time.get_ticks_msec()/1000.0*TAU/8)
+
+func show_trigger_preview(triggers: Dictionary = {}) -> void:
+	for point in contents.size():
+		var uid: int=contents[point]
+		var button: Button=buttons[point]
+		if not trigger_bases.has(point):
+			var styles: Dictionary={}
+			for state in ["normal","hover","pressed","hover_pressed"]:styles[state]=button.get_theme_stylebox(state)
+			trigger_bases[point]={"text":button.text,"tooltip":button.tooltip_text,"styles":styles}
+		button.text=trigger_bases[point].text
+		button.tooltip_text=trigger_bases[point].tooltip
+		for state in trigger_bases[point].styles:button.add_theme_stylebox_override(state,trigger_bases[point].styles[state])
+		if not triggers.has(uid):continue
+		button.text+="\nTRIGGER"
+		button.tooltip_text+="\nWould trigger:\n"+"\n".join(triggers[uid])
+		for state in ["normal","hover","pressed","hover_pressed"]:
+			var style: StyleBoxFlat=button.get_theme_stylebox(state).duplicate()
+			style.border_color=Color("#97f1cf")
+			style.set_border_width_all(3)
+			button.add_theme_stylebox_override(state,style)

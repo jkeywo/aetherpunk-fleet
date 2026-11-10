@@ -763,9 +763,9 @@ func _drain() -> void:
 				used_triggers[c.get("usage_key", c.key)] = "fired"
 				if c.uid >= 0 and not (rule.trigger.kind == "on_play" and c.event.get("uid") == c.uid):
 					history.append("Card trigger: " + c.title + " / " + str(rule.get("name", rule.id)))
-					_record("card_triggered", {"uid": c.uid, "source_uid": c.event.get("uid", -1), "source_event": c.event.get("kind", ""), "source_amount": c.event.get("amount", 0), "title": c.title + " / " + str(rule.get("name", rule.id))})
+					_record("card_triggered", {"uid": c.uid, "source_uid": c.event.get("uid", -1), "source_event": c.event.get("kind", ""), "source_amount": c.event.get("amount", 0), "rule_key":c.key, "rule_text":Rules.rule_text(rule,unit(c.owner).name), "title": c.title + " / " + str(rule.get("name", rule.id))})
 				elif c.uid < 0:
-					_record("ship_rule", {"target": c.owner, "title": c.title})
+					_record("ship_rule", {"target": c.owner, "rule_key":c.key, "rule_text":Rules.rule_text(rule,unit(c.owner).name), "title": c.title})
 				_prepend(_effect_jobs(rule.get("effects", []), c))
 			"effect": Rules.execute(job.spec, c)
 			"hit": _hit(job, c)
@@ -960,7 +960,7 @@ func _hit(job: Dictionary, c: Dictionary) -> void:
 	u.hull -= hull_lost
 	if _mode == "player" and target < 0:
 		root_context.damage[target] = int(root_context.damage.get(target, 0)) + hull_lost
-	var metrics := {"target": target, "amount": hull_lost, "hull_damage": hull_lost, "cover_absorbed": cover_absorbed, "armour_absorbed": armour_absorbed, "shields_absorbed": shields_absorbed, "blocked": cover_absorbed + armour_absorbed + shields_absorbed, "hit_id": hit_id, "hit_index": job.index, "hit_total": job.total}
+	var metrics := {"attacker": int(c.owner), "incoming_damage": incoming, "target": target, "amount": hull_lost, "hull_damage": hull_lost, "cover_absorbed": cover_absorbed, "armour_absorbed": armour_absorbed, "shields_absorbed": shields_absorbed, "blocked": cover_absorbed + armour_absorbed + shields_absorbed, "hit_id": hit_id, "hit_index": job.index, "hit_total": job.total}
 	if _mode == "player" and target < 0:
 		if not root_context.has("metrics"): root_context["metrics"] = {}
 		if not root_context.metrics.has(target): root_context.metrics[target] = {}
@@ -1608,3 +1608,60 @@ func result_summary(reported: String = "") -> Dictionary:
 		if ship.has("visual_rig"): summary_ship["visual_rig"] = ship.visual_rig.duplicate(true)
 		fleet.append(summary_ship)
 	return {"outcome": result, "ships": fleet, "survivors": survivors, "remaining_hull": hull, "starting_hull": maximum, "hull_percent": roundi(100.0 * hull / maxi(1, maximum)), "rounds": round_number, "is_test": result != outcome, "enemies_remaining": alive_ids(true).size()}
+
+
+func trigger_preview(uid: int, payment: Array = [], target: int = -1, movement: int = -1, slot: int = -1, options: Dictionary = {}, basic_recipient: int = -1) -> Dictionary:
+	var result: Dictionary={"reactions":[],"cards":{},"ships":{},"provisional":false,"uncertain":false}
+	if phase!="fleet" or outcome!="" or uid<0 or not hand.has(uid):return result
+	var sim=_simulation()
+	var error: String
+	if basic_recipient>=0:
+		error=sim.play_basic(uid,basic_recipient,options)
+	else:
+		if slot<0:slot=first_slot()
+		if slot<0:return result
+		var chosen:=options.duplicate(true)
+		# Simulate only the player's known payment choices, never invent discard chains.
+		# A detached cost override allows unpaid actions to preview their own effects.
+		var crystals: int=int(chosen.get("crystals",0))
+		var due: int=int(chosen.get("locked_cost",effective_cost(uid,slot)))
+		result.provisional=payment_total(payment)+crystals<due
+		chosen.locked_cost=payment_total(payment)+crystals
+		for group in ["primary","movement","enemy","circle","stance","reaction","slot"]:
+			var available:=choices(uid,group,slot,chosen)
+			if available.is_empty():continue
+			var current: Variant=target if group=="primary" else (movement if group=="movement" else chosen.get(group,-999))
+			if not _has_choice(available,current):
+				var unset: bool=current in [-1,-999] if group in ["primary","movement"] else current==-999
+				if not unset:return result
+				result.provisional=true
+				current=available[0].value
+			if group=="primary":target=int(current)
+			elif group=="movement":movement=int(current)
+			else:chosen[group]=current
+		error=sim.play(uid,payment,target,movement,slot,chosen)
+	if error!="":return result
+	return _trigger_cues(sim,result)
+
+func turn_trigger_preview() -> Dictionary:
+	var result: Dictionary={"reactions":[],"cards":{},"ships":{},"provisional":false,"uncertain":false}
+	if phase!="fleet" or outcome!="":return result
+	var sim=_simulation()
+	if sim.end_phase()!="":return result
+	return _trigger_cues(sim,result)
+
+func _trigger_cues(sim, result: Dictionary) -> Dictionary:
+	result.uncertain=sim._uncertain or sim.phase in ["scry","discard"]
+	for event in sim.feedback_events:
+		if event.kind=="reaction_triggered" and not result.reactions.has(event.reaction_key):result.reactions.append(event.reaction_key)
+		elif event.kind=="card_triggered":
+			var source: int=event.uid
+			if not result.cards.has(source):result.cards[source]=[]
+			var description: String=event.get("rule_text",event.title)
+			if not result.cards[source].has(description):result.cards[source].append(description)
+		elif event.kind=="ship_rule":
+			var owner: int=event.target
+			if not result.ships.has(owner):result.ships[owner]=[]
+			var description: String=event.get("rule_text",event.title)
+			if not result.ships[owner].has(description):result.ships[owner].append(description)
+	return result

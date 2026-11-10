@@ -8,6 +8,8 @@ const Rules = preload("res://scripts/rules/rule_registry.gd")
 var buttons: Array = []
 var row: Array = []
 var selected := -1
+var reaction_buttons: Dictionary={}
+var trigger_keys: Array=[]
 
 
 func _ready() -> void:
@@ -21,6 +23,8 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 		remove_child(child)
 		child.queue_free()
 	buttons.clear()
+	reaction_buttons.clear()
+	trigger_keys.clear()
 	for index in (1 if row.size() == 1 and size.x < 400 else 3):
 		var button := Button.new()
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -74,6 +78,8 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 				style.set_corner_radius_all(3)
 				react.add_theme_stylebox_override(state,style)
 			react.tooltip_text=reaction.name+"\n"+Rules.reaction_condition_text(reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
+			react.set_meta("base_tooltip",react.tooltip_text)
+			reaction_buttons[key]=react
 			column.add_child(react)
 			react.pressed.connect(func(): reaction_selected.emit(key))
 			react.mouse_entered.connect(func(): card_hovered.emit(stance.uid))
@@ -101,3 +107,18 @@ func _arrange() -> void:
 	for index in buttons.size():
 		buttons[index].position = Vector2(index * size.x / maxf(1, buttons.size()), 0)
 		buttons[index].size = Vector2(size.x / maxf(1, buttons.size()) - 5, size.y)
+
+func show_trigger_preview(keys: Array = [], provisional: bool = false) -> void:
+	trigger_keys=keys.duplicate()
+	for key in reaction_buttons:
+		var button: Button=reaction_buttons[key]
+		var active: bool=keys.has(key)
+		button.tooltip_text=str(button.get_meta("base_tooltip",""))+("\nWould trigger with this action; complete payment/targets." if provisional else "\nWill trigger with this action.") if active else str(button.get_meta("base_tooltip",""))
+		for state in ["normal","hover","pressed","hover_pressed"]:
+			var style:=StyleBoxFlat.new()
+			style.bg_color=Color("#4a3029") if active else Color("#152e3b")
+			style.border_color=Color("#ffbd78") if active else Color("#3d6476")
+			style.set_border_width_all(3 if active else 1)
+			style.set_corner_radius_all(3)
+			button.add_theme_stylebox_override(state,style)
+		button.set_meta("trigger_preview",active)

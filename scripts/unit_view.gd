@@ -7,6 +7,9 @@ var resource_label: Label
 var cover_label: Label
 var bar: ProgressBar
 var art: Control
+var shield_fx: Control
+var trigger_badge: Label
+var predicted_rules: Array=[]
 var info_column: VBoxContainer
 
 
@@ -70,6 +73,19 @@ func _init() -> void:
 	column.add_child(cover_label)
 	for child in column.get_children():
 		child.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shield_fx=preload("res://scripts/visuals/defence_vfx.gd").new()
+	add_child(shield_fx)
+	art.resized.connect(_defence_layout)
+	column.resized.connect(_defence_layout)
+	trigger_badge=Label.new()
+	trigger_badge.set_meta("plain_text",true)
+	trigger_badge.text="◆ TRIGGER"
+	trigger_badge.add_theme_font_size_override("font_size",9)
+	trigger_badge.modulate=Color("#97f1cf")
+	trigger_badge.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	trigger_badge.position=Vector2(0,-15)
+	add_child(trigger_badge)
+	trigger_badge.hide()
 
 
 func configure(data: Dictionary, enemy: bool = false) -> void:
@@ -91,6 +107,7 @@ func configure(data: Dictionary, enemy: bool = false) -> void:
 	var weapon: Dictionary = data.get("weapon", {"damage": 0, "range": "Long"})
 	guard_label.text="Shields %d" % data.get("guard",0)
 	guard_label.visible=int(data.get("guard",0))>0
+	shield_fx.configure(int(data.get("guard",0)),0,enemy)
 	resource_label.visible=not enemy
 	resource_label.text="%s %d/%d" % [data.get("resource_name","Charge"),data.get("resource",0),data.get("resource_capacity",6)] if not enemy else ""
 	cover_label.hide()
@@ -128,8 +145,23 @@ func _art_layout() -> void:
 	var footer := float(get_meta("footer_space",0))
 	info_column.offset_bottom = -4-footer
 	art.custom_minimum_size.y = maxf(28,size.y-40-footer-(12 if resource_label.visible else 0)-(12 if guard_label.visible else 0)-(12 if cover_label.visible else 0))
+	_defence_layout.call_deferred()
 
 func set_cover(amount: int) -> void:
 	cover_label.text="Cover %d" % amount
 	cover_label.visible=amount>0
 	_art_layout()
+
+func _defence_layout() -> void:
+	if shield_fx==null or art==null:return
+	shield_fx.position=info_column.position+art.position
+	shield_fx.size=art.size
+
+func show_trigger_preview(rules: Array = []) -> void:
+	predicted_rules=rules.duplicate()
+	trigger_badge.visible=not rules.is_empty()
+	trigger_badge.tooltip_text="\n".join(rules)
+	art.modulate=Color("#b5ffe3") if not rules.is_empty() else Color.WHITE
+
+func _get_tooltip(_at_position: Vector2) -> String:
+	return tooltip_text+("\n\nWould trigger:\n"+"\n".join(predicted_rules) if not predicted_rules.is_empty() else "")

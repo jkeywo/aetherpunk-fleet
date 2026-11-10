@@ -9,6 +9,10 @@ var discard_choice := false:
 	set(value):
 		discard_choice=value
 		queue_redraw()
+var trigger_rules: Array=[]:
+	set(value):
+		trigger_rules=value
+		queue_redraw()
 var ship_color := Color("#91c8ad")
 
 func _init() -> void:
@@ -99,6 +103,13 @@ func _draw() -> void:
 		draw_colored_polygon(points,Color("#cb7af1"))
 		draw_polyline(points+PackedVector2Array([points[0]]),Color("#572d71"),1,true)
 	if count > 4: draw_string(font,Vector2(size.x-36,60),"×"+str(count),HORIZONTAL_ALIGNMENT_LEFT,-1,10,Color("#d8a8f5"))
+	if not trigger_rules.is_empty() and not discard_choice:
+		var trigger_style:=StyleBoxFlat.new()
+		trigger_style.draw_center=false
+		trigger_style.border_color=Color("#97f1cf")
+		trigger_style.set_border_width_all(3)
+		trigger_style.set_corner_radius_all(7)
+		draw_style_box(trigger_style,Rect2(Vector2(4,4),size-Vector2(8,8)))
 	if discard_choice:
 		# Hollow concentric strokes keep the art and rules readable through the halo.
 		for ring in range(6,0,-1):
@@ -114,7 +125,7 @@ func _draw() -> void:
 func _get_tooltip(at_position: Vector2) -> String:
 	if Rect2(5,5,32,38).has_point(at_position): return Icons.description(Icons.key(info.get("type","Support")))
 	if Rect2(size.x-43,3,42,58).has_point(at_position): return "Mana cost: %d\nDiscard production: %d mana. Purple crystals show the amount produced." % [info.get("cost",0),info.get("pays",1)]
-	return tooltip_text
+	return tooltip_text+("\nWould trigger:\n"+"\n".join(trigger_rules) if not trigger_rules.is_empty() else "")
 
 func _get_drag_data(_at_position: Vector2) -> Variant:
 	if disabled or not drag_provider.is_valid(): return null

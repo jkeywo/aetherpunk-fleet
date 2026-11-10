@@ -4,6 +4,8 @@ signal ship_drag_exited(ship_id: int)
 signal ship_dropped(ship_id: int, data: Variant)
 signal position_selected(point: int)
 signal unit_selected(id: int)
+signal unit_hovered(id: int)
+signal unit_exited(id: int)
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const Unit = preload("res://scripts/unit_view.gd")
 var widgets: Dictionary = {}
@@ -12,6 +14,7 @@ var large_cards := false
 var drop_check: Callable
 var enemy := false
 var snapshot: Dictionary = {}
+var cover_clouds: Dictionary={}
 
 
 func _ready() -> void:
@@ -26,6 +29,7 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 		child.queue_free()
 	widgets.clear()
 	wreck_widgets.clear()
+	cover_clouds.clear()
 	for point in 4:
 		var id: int = -1
 		if is_enemy:
@@ -45,6 +49,9 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 				data["hull"] = board.monster_hull
 			widget.configure(data, is_enemy)
 			widget.set_meta("ship_index", -1 - id if is_enemy else id)
+			var unit_id: int=-1-id if is_enemy else id
+			widget.mouse_entered.connect(func():unit_hovered.emit(unit_id))
+			widget.mouse_exited.connect(func():unit_exited.emit(unit_id))
 			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
 			widget.set_cover(cover_amount)
 			widget.tooltip_text += "\nSlot cover: " + str(cover_amount)
@@ -82,7 +89,15 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 			_wire_target(wreck, ship_id)
 			wreck_widgets[ship_id] = wreck
 			wreck.pressed.connect(func(): unit_selected.emit(ship_id))
+	for point in 4:
+		var amount: int=int(board.get("cover",[0,0,0,0,0,0,0,0])[point+(4 if is_enemy else 0)])
+		if amount<=0:continue
+		var cloud=preload("res://scripts/visuals/defence_vfx.gd").new()
+		cloud.configure(0,amount,is_enemy)
+		add_child(cloud)
+		cover_clouds[point]=cloud
 	_arrange()
+	_layout_clouds.call_deferred()
 
 
 func _arrange() -> void:
@@ -98,6 +113,7 @@ func _arrange() -> void:
 		wreck.position = Vector2(index * size.x / maxf(1, wreck_widgets.size()), size.y + 8)
 		wreck.size = Vector2(size.x / maxf(1, wreck_widgets.size()) - 6, 48)
 		index += 1
+	_layout_clouds()
 	queue_redraw()
 
 
@@ -226,3 +242,10 @@ func show_rule_preview(notes: Dictionary = {}, source: int = -999) -> void:
 			label.modulate=color
 			label.mouse_filter=Control.MOUSE_FILTER_IGNORE
 			widget.add_child(label)
+
+func _layout_clouds() -> void:
+	for point in cover_clouds:
+		var widget: Control=widgets[point]
+		var cloud: Control=cover_clouds[point]
+		cloud.position=widget.position+Vector2(8,22)
+		cloud.size=Vector2(widget.size.x-16,maxf(30,widget.size.y-68))

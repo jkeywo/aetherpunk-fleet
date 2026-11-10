@@ -54,6 +54,7 @@ var drag_serial := 0
 var drag_payload: Dictionary = {}
 var history_dialog: AcceptDialog
 var header: HBoxContainer
+var trigger_preview_data: Dictionary={}
 var actions: HFlowContainer
 
 
@@ -127,8 +128,14 @@ func _build_ui() -> void:
 	allies.position_selected.connect(_ally_position_pressed)
 	allies.unit_selected.connect(func(id): if pending_play and not busy: _set_group_value("primary",id))
 	enemies.position_selected.connect(_enemy_position_pressed)
+	allies.unit_hovered.connect(func(id):_refresh_trigger_preview(-1,id))
+	enemies.unit_hovered.connect(func(id):_refresh_trigger_preview(-1,id))
+	allies.unit_exited.connect(func(_id):_refresh_trigger_preview())
+	enemies.unit_exited.connect(func(_id):_refresh_trigger_preview())
 	circle_view = _named(Circle.new(), "Circle", canvas)
 	circle_view.slot_selected.connect(_circle_selected)
+	circle_view.slot_hovered.connect(func(slot):_refresh_trigger_preview(-1,-999,slot))
+	circle_view.slot_exited.connect(func(_slot):_refresh_trigger_preview())
 	circle_view.drop_check = _can_drop_card
 	circle_view.drag_slot_hovered.connect(_drag_over_slot)
 	circle_view.drag_slot_exited.connect(_drag_leave_slot)
@@ -179,6 +186,9 @@ func _build_ui() -> void:
 	_button(actions, "BoostButton", "Boosts", _show_boosts)
 	_button(actions, "CancelButton", "Cancel", _cancel)
 	_button(actions, "EndPhaseButton", "End Fleet Phase", _end_phase)
+	%EndPhaseButton.mouse_entered.connect(func():
+		if not busy and not pending_play and dragged_uid<0:_apply_trigger_preview(state.turn_trigger_preview()))
+	%EndPhaseButton.mouse_exited.connect(func():_refresh_trigger_preview())
 	_button(actions, "HistoryButton", "History", _show_history)
 	_button(actions, "WinButton", "Test Win", _navigate.bind("res://scenes/victory.tscn"))
 	_button(actions, "LossButton", "Test Loss", _navigate.bind("res://scenes/defeat.tscn"))
@@ -290,8 +300,8 @@ func _render() -> void:
 		face.pressed.connect(_choose_card.bind(uid))
 		face.drag_provider = _begin_card_drag.bind(uid)
 		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, or an adjacent ally/empty position to swap/move. Basic actions immediately discard this card on drop." % state.ships[state.card(uid).owner].name
-		face.mouse_entered.connect(func(): hand_view.hover(face, true))
-		face.mouse_exited.connect(func(): hand_view.hover(face, false))
+		face.mouse_entered.connect(func(): hand_view.hover(face, true);_refresh_trigger_preview(uid))
+		face.mouse_exited.connect(func(): hand_view.hover(face, false);_refresh_trigger_preview())
 	hand_view.arrange()
 	%Round.text = "ROUND %02d / %s" % [state.round_number, state.phase.to_upper()]
 	_update_controls()
@@ -560,6 +570,7 @@ func _update_controls() -> void:
 	circle_view.configure(shown,state.expanded,cards,state.used_triggers,selected_slot,contributors,details,state.persistence)
 	%Status.text = "Hand %d / In circle %d" % [state.hand.size(),state.play_order.size()]
 	_show_piles(state.board_snapshot())
+	_refresh_trigger_preview()
 
 
 func _try_resolve_pending() -> void:
@@ -752,9 +763,11 @@ func _update_drag_feedback() -> void:
 	var contributors: Array = []
 	var details: Dictionary = {}
 	var highlight := -1
+	var trigger_data: Dictionary={}
 	var title: String = state.card(dragged_uid).name
 	if drag_hover_ship >= 0:
 		var preview: Dictionary = state.basic_preview(dragged_uid, drag_hover_ship)
+		trigger_data=state.trigger_preview(dragged_uid,[], -1,-1,-1,{},drag_hover_ship)
 		%Inspection.text = ("Release to act immediately. " if preview.ok else "Cannot drop: ") + preview.text
 	elif drag_hover_slot >= 0:
 		var error: String = circle_view.drop_errors[drag_hover_slot]
@@ -766,6 +779,7 @@ func _update_drag_feedback() -> void:
 			var movement: int = movements[0].value if not movements.is_empty() else -1
 			var selected_payment: Array = payment if selected_uid == dragged_uid and state.effective_cost(dragged_uid, highlight) > 0 else []
 			var preview: Dictionary = state.preview(dragged_uid, selected_payment, ally, movement, highlight, _first_options(dragged_uid, highlight))
+			trigger_data=state.trigger_preview(dragged_uid,selected_payment,ally,movement,highlight,_first_options(dragged_uid,highlight))
 			contributors = preview.contributors
 			details = preview.contribution_details
 			%Inspection.text = "Drop %s → %s, then click cards to discard as payment and click any required target. %s" % [title, Geometry.SLOT_NAMES[highlight], preview.text]
@@ -774,6 +788,7 @@ func _update_drag_feedback() -> void:
 	else:
 		%Inspection.text = "Drag %s to the circle to stage a play, its own ship to repair/recover, or an adjacent ship/empty position to swap/move. Basic actions resolve immediately on drop." % title
 	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, highlight, contributors, details, state.persistence)
+	_apply_trigger_preview(trigger_data)
 
 
 func _drop_card(slot: int, data: Variant) -> void:
@@ -1159,3 +1174,34 @@ func _show_discard() -> void:
 	var viewer_size := Vector2i(minf(960, get_viewport_rect().size.x * 0.9), minf(490, get_viewport_rect().size.y * 0.9))
 	body.custom_minimum_size.x = maxf(240, viewer_size.x - 40)
 	discard_dialog.popup_centered(viewer_size)
+
+func _refresh_trigger_preview(hover_uid: int = -1, hover_target: int = -999, hover_slot: int = -1) -> void:
+	if dragged_uid>=0:return
+	var data: Dictionary={}
+	var uid: int=selected_uid if pending_play or hover_uid<0 else hover_uid
+	if not busy and state.phase=="fleet" and uid>=0:
+		var payments:=payment.duplicate() if pending_play else []
+		if pending_play and hover_uid>=0 and hover_uid!=uid and not payments.has(hover_uid) and _payment_amount()<_current_cost():payments.append(hover_uid)
+		var primary: int=target
+		var move: int=movement_target
+		var slot: int=selected_slot if pending_play or hover_slot<0 else hover_slot
+		var choices: Dictionary=_action_options() if uid==selected_uid else {}
+		if hover_target!=-999 and pending_play:
+			var flags: Dictionary=state.choice_flags(uid,slot,choices)
+			if hover_target<0:choices.enemy=hover_target
+			elif flags.ally:primary=hover_target
+			elif flags.movement:primary=state.position_of(hover_target)
+			elif flags.slot:choices.slot=state.position_of(hover_target)
+		data=state.trigger_preview(uid,payments,primary,move,slot,choices)
+	_apply_trigger_preview(data)
+
+func _apply_trigger_preview(data: Dictionary = {}) -> void:
+	trigger_preview_data=data.duplicate(true)
+	stance_panel.show_trigger_preview(data.get("reactions",[]),data.get("provisional",false))
+	circle_view.show_trigger_preview(data.get("cards",{}))
+	for face in hand_view.get_children():face.trigger_rules=data.get("cards",{}).get(face.get_meta("uid",-1),[])
+	for id in state.ships.size():
+		var widget=allies.target_widget(id)
+		if widget!=null and widget.has_method("show_trigger_preview"):widget.show_trigger_preview(data.get("ships",{}).get(id,[]))
+	var discard_face=%DiscardPile.face
+	if discard_face!=null and not state.discard.is_empty():discard_face.trigger_rules=data.get("cards",{}).get(state.discard.back(),[])

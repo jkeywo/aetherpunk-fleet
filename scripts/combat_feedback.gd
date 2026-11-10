@@ -1,6 +1,8 @@
 extends CanvasLayer
 signal beat_started(kind: String)
 signal finished
+signal attack_started(attacker: int, target: int)
+signal movement_started(paths: Dictionary)
 var duration_scale := 1.0
 var running := false
 var view: Control
@@ -68,10 +70,12 @@ func play(events: Array, battle_view: Control) -> void:
 			"movement":
 				await _move_ships(event.board)
 			"reaction_triggered":
+				view.stance_panel.show_trigger_preview([event.get("reaction_key","")])
 				_message("MONSTER REACTION\n" + event.title, Color("#ff927f"))
 				view.stance_panel.modulate = Color("#ff927f")
 				await _pause(0.50)
 				view.stance_panel.modulate = Color.WHITE
+				view.stance_panel.show_trigger_preview()
 			"stance_changed":
 				await _apply_board(event.board)
 				_message("NEW STANCE / " + event.title, Color("#e8bd77"))
@@ -152,6 +156,7 @@ func _unit(id: int) -> Control:
 
 
 func _stat_change(event: Dictionary) -> void:
+	if event.kind=="damage":await _attack_effect(event)
 	await _apply_board(event.board)
 	var unit := _unit(event.target)
 	if unit == null:
@@ -183,33 +188,79 @@ func _stat_change(event: Dictionary) -> void:
 
 
 func _move_ships(snapshot: Dictionary) -> void:
-	var ghosts: Dictionary = {}
-	for widget in view.allies.widgets.values():
-		var id: int = widget.get_meta("ship_index", -1)
-		if id < 0:
-			continue
-		var ghost := widget.duplicate(0) as Control
-		overlay.add_child(ghost)
-		ghost.theme = view.theme
-		ghost.size = widget.size
-		ghost.position = widget.global_position
-		_ignore_input(ghost)
-		ghosts[id] = ghost
-	await _apply_board(snapshot)
-	var tween := create_tween().set_parallel(true)
+	var ghosts: Dictionary={}
+	var starts: Dictionary={}
+	for side in [view.allies,view.enemies]:
+		for widget in side.widgets.values():
+			if not widget.has_meta("ship_index"):continue
+			var id: int=widget.get_meta("ship_index")
+			starts[id]=widget.global_position
+			# Recreate a clean visual instead of duplicating script-owned child trees.
+			var ghost=preload("res://scripts/unit_view.gd").new()
+			overlay.add_child(ghost)
+			ghost.theme=view.theme
+			ghost.size=widget.size
+			var unit_data: Dictionary=side.snapshot.enemies[-1-id] if id<0 else side.snapshot.ships[id]
+			ghost.configure(unit_data,id<0)
+			ghost.position=widget.global_position
+			_ignore_input(ghost)
+			ghosts[id]=ghost
+	# Hide destination sprites synchronously, before a rendered frame can show a teleport.
+	view._show_board(snapshot)
+	var paths: Dictionary={}
+	var tween:=create_tween().set_parallel(true)
 	for id in ghosts:
-		var unit := _unit(id)
-		if unit != null:
-			unit.modulate.a = 0
-			tween.tween_property(ghosts[id], "position", unit.global_position, _time(0.28)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	if ghosts.is_empty():
-		await _pause(0.01)
-	else:
-		await tween.finished
+		var unit:=_unit(id)
+		if unit==null or starts[id].distance_to(unit.global_position)<.1:
+			ghosts[id].queue_free()
+			continue
+		unit.modulate.a=0
+		var finish: Vector2=unit.global_position
+		paths[id]={"from":starts[id],"to":finish}
+		var ghost: Control=ghosts[id]
+		var start: Vector2=starts[id]
+		tween.tween_method(func(progress):
+			if is_instance_valid(ghost):ghost.position=arc_position(start,finish,progress),0.0,1.0,_time(.42)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	movement_started.emit(paths.duplicate(true))
+	if paths.is_empty():tween.kill();await _pause(.01)
+	else:await tween.finished
 	for ghost in ghosts.values():
-		ghost.queue_free()
-	for widget in view.allies.widgets.values():
-		widget.modulate.a = 1
+		if is_instance_valid(ghost):ghost.queue_free()
+	for side in [view.allies,view.enemies]:
+		for widget in side.widgets.values():widget.modulate.a=1
+
+static func arc_position(start: Vector2, finish: Vector2, progress: float) -> Vector2:
+	var displacement:=finish-start
+	var normal:=Vector2(-displacement.y,displacement.x).normalized()
+	var bend:=clampf(displacement.length()*.18,18,38)
+	return start.lerp(finish,progress)+normal*sin(progress*PI)*bend
+
+func _attack_effect(event: Dictionary) -> void:
+	var target:=_unit(int(event.target))
+	if target==null:return
+	var attacker: int=int(event.get("attacker",-999))
+	var source:=_unit(attacker)
+	var effect=preload("res://scripts/visuals/attack_vfx.gd").new()
+	effect.set_meta("attack_vfx",true)
+	effect.finish=_impact_point(target,event)
+	effect.start=_art_centre(source) if source!=null else effect.finish+Vector2(45 if attacker<0 else -45,0)
+	effect.tint=Color("#ffac79") if attacker<0 else Color("#8ceaff")
+	overlay.add_child(effect)
+	effect.impacted.connect(func():
+		if int(event.get("shields_absorbed",0))>0 and is_instance_valid(target):target.shield_fx.flash()
+		if int(event.get("cover_absorbed",0))>0:
+			var side: Control=view.enemies if int(event.target)<0 else view.allies
+			var formation: Array=event.board.enemy_formation if int(event.target)<0 else event.board.formation
+			var point: int=formation.find(-1-int(event.target) if int(event.target)<0 else int(event.target))
+			if side.cover_clouds.has(point):side.cover_clouds[point].flash())
+	attack_started.emit(attacker,int(event.target))
+	var tween:=create_tween()
+	tween.tween_property(effect,"progress",1.0,_time(.30))
+	await tween.finished
+	effect.queue_free()
+
+func _art_centre(unit: Control) -> Vector2:
+	return unit.art.global_position+unit.art.size/2 if "art" in unit else unit.get_global_rect().get_center()
 
 
 func _ready() -> void:
@@ -383,3 +434,15 @@ func stage_payment(uid: int, battle_view: Control) -> void:
 	await _discard_cards([uid])
 	banner.hide()
 	running = false
+
+func _impact_point(target: Control, event: Dictionary) -> Vector2:
+	var enemy: bool=int(event.target)<0
+	var side: Control=view.enemies if enemy else view.allies
+	var points: Array=event.board.enemy_formation if enemy else event.board.formation
+	var point: int=points.find(-1-int(event.target) if enemy else int(event.target))
+	if int(event.get("cover_absorbed",0))>0 and side.cover_clouds.has(point):
+		var cloud: Control=side.cover_clouds[point]
+		return cloud.global_position+cloud.size*Vector2(.22 if enemy else .78,.53)
+	if int(event.get("shields_absorbed",0))>0 and "shield_fx" in target:
+		return target.shield_fx.global_position+target.shield_fx.size*Vector2(.05 if enemy else .95,.53)
+	return _art_centre(target)
