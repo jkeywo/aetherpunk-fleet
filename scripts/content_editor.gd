@@ -2,6 +2,19 @@ extends Control
 ## Three-tab editor. All widgets edit a detached draft; only Save writes content.
 
 const Catalog = preload("res://scripts/content_catalog.gd")
+const Geometry = preload("res://scripts/battle_geometry.gd")
+const CardFace = preload("res://scripts/card_face.gd")
+const FormationView = preload("res://scripts/formation_view.gd")
+const CircleView = preload("res://scripts/circle_view.gd")
+const StanceView = preload("res://scripts/stance_view.gd")
+var preview_form: VBoxContainer
+var inspector_tabs: TabContainer
+var preview_widget: Control
+var preview_slot := 0
+var preview_expanded := false
+var preview_tags: Dictionary = {}
+var preview_position := "front"
+var editing_stance := ""
 const KINDS := ["leviathans", "ships", "cards"]
 const TITLES := ["Leviathans", "Ships", "Cards"]
 var draft: Dictionary = {}
@@ -27,8 +40,13 @@ var leave_destination: String = "menu"
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = false
-	draft = Catalog.normalized(ContentStore.snapshot()) if not ContentStore.saved.is_empty() else Catalog.empty_document()
+	draft = Catalog.migrate(ContentStore.snapshot()) if not ContentStore.saved.is_empty() else Catalog.empty_document()
 	selected_ids = ContentStore.editor_state.get("selected", {}).duplicate()
+	editing_stance = ContentStore.editor_state.get("editing_stance", "")
+	preview_slot = int(ContentStore.editor_state.get("preview_slot", 0))
+	preview_expanded = ContentStore.editor_state.get("preview_expanded", false)
+	preview_position = ContentStore.editor_state.get("preview_position", "front")
+	preview_tags = ContentStore.editor_state.get("preview_tags", {}).duplicate()
 	theme = _editor_theme()
 	_build_ui()
 	tabs.current_tab = clampi(int(ContentStore.editor_state.get("tab", 0)), 0, 2)
@@ -37,6 +55,8 @@ func _ready() -> void:
 	_refresh_all()
 	if not ContentStore.last_error.is_empty():
 		_message("Content loading failed. Repair the draft before saving:\n" + ContentStore.last_error, true)
+	elif ContentStore.migration_pending:
+		_message("Version-1 content is loaded in compatibility mode. Save All explicitly upgrades the file to version 2.")
 	else:
 		_message("Choose a tab to edit content. Save All applies the draft to the next battle; Save & Test Battle launches it now.")
 
@@ -261,9 +281,18 @@ func _build_ui() -> void:
 		form.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		forms[kind] = form
 	tabs.tab_changed.connect(func(_index): _rebuild_form())
+	inspector_tabs = TabContainer.new()
+	inspector_tabs.custom_minimum_size.x = 330
+	workspace.add_child(inspector_tabs)
+	var preview_scroll := ScrollContainer.new()
+	preview_scroll.name = "Preview"
+	preview_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	inspector_tabs.add_child(preview_scroll)
+	preview_form = _box(preview_scroll) as VBoxContainer
+	preview_form.custom_minimum_size.x = 305
 	var setup_panel := PanelContainer.new()
-	setup_panel.custom_minimum_size.x = 310
-	workspace.add_child(setup_panel)
+	setup_panel.name = "Battle Setup"
+	inspector_tabs.add_child(setup_panel)
 	var setup_scroll := ScrollContainer.new()
 	setup_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	setup_panel.add_child(setup_scroll)
@@ -336,6 +365,7 @@ func _rebuild_form() -> void:
 	var entry := selected_entry(kind)
 	if entry.is_empty():
 		_label(form, "Choose an entry, or use New to create one.")
+		_update_preview()
 		return
 	_label(form, str(entry.id), 12).modulate = Color("#80a7b7")
 	_line(form, "Name", entry.name, func(value): _edit_value(entry, "name", value), "name")
@@ -345,6 +375,7 @@ func _rebuild_form() -> void:
 		_card_form(form, entry)
 	else:
 		_leviathan_form(form, entry)
+	_update_preview()
 
 
 func _edit_value(entry: Dictionary, key: String, value: Variant) -> void:
@@ -363,7 +394,7 @@ func _dirty_changed() -> void:
 
 
 func is_dirty() -> bool:
-	return JSON.stringify(draft) != JSON.stringify(Catalog.normalized(ContentStore.saved))
+	return ContentStore.migration_pending or JSON.stringify(draft) != JSON.stringify(Catalog.migrate(ContentStore.saved))
 
 
 func _options(kind: String) -> Array:
@@ -424,10 +455,10 @@ func _card_form(form: VBoxContainer, entry: Dictionary) -> void:
 	_dropdown(form, "Owning ship", _options("ships"), entry.owner, func(value): _edit_value(entry, "owner", value), "owner")
 	_number(form, "Cost", int(entry.cost), func(value): _edit_value(entry, "cost", value), "cost")
 	_number(form, "Payment value", int(entry.pays), func(value): _edit_value(entry, "pays", value), "pays", 1)
+	_label(form, "Acting positions", 14)
 	var ranks := _box(form, false)
-	_label(ranks, "Permitted ranks", 14)
-	for rank in [1, 2, 3]:
-		_check(ranks, str(rank), entry.ranks.has(rank), func(checked): _toggle_value(entry.ranks, rank, checked), "rank_" + str(rank))
+	for point in Geometry.POSITIONS:
+		_check(ranks, point, entry.positions.has(point), func(checked): _toggle_value(entry.positions, point, checked), "position_" + point)
 	var tags := _box(form, false)
 	for tag in Catalog.TAGS:
 		_check(tags, tag, entry.tags.has(tag), func(checked): _toggle_value(entry.tags, tag, checked), "tag_" + tag)
@@ -435,6 +466,7 @@ func _card_form(form: VBoxContainer, entry: Dictionary) -> void:
 	var preview := _label(form, Catalog.effects_text(entry.effects), 14)
 	preview.modulate = Color("#e8bd77")
 	fields["preview"] = preview
+	_circle_rules_form(form, entry)
 
 
 func _toggle_value(items: Array, value: Variant, enabled: bool) -> void:
@@ -443,78 +475,80 @@ func _toggle_value(items: Array, value: Variant, enabled: bool) -> void:
 	elif not enabled:
 		items.erase(value)
 	_dirty_changed()
+	_update_preview()
 
 
 func _leviathan_form(form: VBoxContainer, entry: Dictionary) -> void:
 	_number(form, "Maximum hull", int(entry.hull), func(value): _edit_value(entry, "hull", value), "hull", 1)
-	for list_name in ["reactions", "intents"]:
-		var options: Array = []
-		for behavior in entry[list_name]:
-			options.append({"value": behavior.id, "label": behavior.name})
-		var key := "starting_reaction" if list_name == "reactions" else "starting_intent"
-		_dropdown(form, "Starting " + ("reaction" if list_name == "reactions" else "intent"), options, entry[key], func(value): _edit_value(entry, key, value), key)
-	for list_name in ["reactions", "intents"]:
-		var section := _box(form, false)
-		_label(section, list_name.to_upper(), 18)
-		_button(section, "Add " + ("Reaction" if list_name == "reactions" else "Intent"), _add_behavior.bind(entry, list_name))
-		for index in entry[list_name].size():
-			var behavior: Dictionary = entry[list_name][index]
-			var panel := PanelContainer.new()
-			form.add_child(panel)
-			var content := _box(panel)
-			var toolbar := _box(content, false)
-			_label(toolbar, behavior.id, 12)
-			_button(toolbar, "↑", _move_behavior.bind(entry, list_name, index, -1))
-			_button(toolbar, "↓", _move_behavior.bind(entry, list_name, index, 1))
-			_button(toolbar, "Remove", _remove_behavior.bind(entry, list_name, index))
-			_line(content, "Name", behavior.name, func(value): _edit_value(behavior, "name", value))
-			if list_name == "reactions":
-				_trigger_form(content, behavior.trigger)
-			_effects_form(content, behavior.effects, "reaction" if list_name == "reactions" else "intent")
+	var options: Array = []
+	for stance in entry.stances:
+		options.append({"value": stance.id, "label": stance.name})
+	_dropdown(form, "Starting stance", options, entry.starting_stance, func(value): _edit_value(entry, "starting_stance", value), "starting_stance")
+	if Catalog.index_by_id(entry.stances, editing_stance) < 0:
+		editing_stance = entry.starting_stance
+	_dropdown(form, "Editing stance", options, editing_stance, func(value): editing_stance = value; _rebuild_form.call_deferred(), "editing_stance")
+	var tools := _box(form, false)
+	_button(tools, "New Stance", _new_stance.bind(entry))
+	_button(tools, "Duplicate", _duplicate_stance.bind(entry))
+	_button(tools, "Delete", _delete_stance.bind(entry))
+	var stance: Dictionary = entry.stances[Catalog.index_by_id(entry.stances, editing_stance)]
+	_line(form, "Stance name", stance.name, func(value): _edit_value(stance, "name", value), "stance_name")
+	_label(form, "REACTIONS / first match fires, then changes stance", 13)
+	_button(form, "Add Reaction", _add_behavior.bind(stance, "reactions"))
+	for index in stance.reactions.size():
+		var rule: Dictionary = stance.reactions[index]
+		var panel := PanelContainer.new()
+		form.add_child(panel)
+		var content := _box(panel)
+		var row := _box(content, false)
+		_label(row, rule.id, 12)
+		_button(row, "↑", _move_behavior.bind(stance, "reactions", index, -1))
+		_button(row, "↓", _move_behavior.bind(stance, "reactions", index, 1))
+		_button(row, "Remove", _remove_behavior.bind(stance, "reactions", index))
+		_line(content, "Name", rule.name, func(value): _edit_value(rule, "name", value))
+		_trigger_form(content, rule.trigger)
+		_effects_form(content, rule.effects, "reaction")
+	_label(form, "ENEMY-PHASE ACTIVITY / then changes stance", 13)
+	_effects_form(form, stance.effects, "intent")
 
 
 func _refresh_behavior_names() -> void:
 	if _kind() != "leviathans":
 		return
 	var entry := selected_entry()
-	for key in ["starting_reaction", "starting_intent"]:
-		if not fields.has(key):
-			continue
-		var control: OptionButton = fields[key]
-		var items: Array = entry.reactions if key == "starting_reaction" else entry.intents
-		for index in control.item_count:
-			var id: String = control.get_item_metadata(index)
-			var position := Catalog.index_by_id(items, id)
-			if position >= 0:
-				control.set_item_text(index, items[position].name)
+	for key in ["starting_stance", "editing_stance"]:
+		if fields.has(key):
+			var control: OptionButton = fields[key]
+			for index in control.item_count:
+				var found := Catalog.index_by_id(entry.stances, control.get_item_metadata(index))
+				if found >= 0:
+					control.set_item_text(index, entry.stances[found].name)
 
 
 func _trigger_form(parent: Node, trigger: Dictionary) -> void:
 	var options: Array = []
 	for kind in Catalog.TRIGGERS:
 		options.append({"value": kind, "label": {"tag": "Action has tag", "damage": "Leviathan damage threshold",
-			"tag_rank": "Action tag + final actor rank", "healed": "Hull restored threshold", "cost": "Printed cost threshold"}[kind]})
+			"tag_position": "Action tag + final actor position", "healed": "Hull restored threshold", "cost": "Printed cost threshold"}[kind]})
 	_dropdown(parent, "Trigger", options, trigger.kind, func(value):
 		trigger.clear()
 		trigger["kind"] = value
-		if value in ["tag", "tag_rank"]:
+		if value in ["tag", "tag_position"]:
 			trigger["tag"] = "Attack"
-		if value == "tag_rank":
-			trigger["rank"] = 1
+		if value == "tag_position":
+			trigger["positions"] = ["front"]
 		if value in ["damage", "healed", "cost"]:
 			trigger["threshold"] = 1
 		_dirty_changed()
 		_rebuild_form.call_deferred())
-	if trigger.kind in ["tag", "tag_rank"]:
+	if trigger.kind in ["tag", "tag_position"]:
 		var tags: Array = []
 		for tag in Catalog.TAGS:
 			tags.append({"value": tag, "label": tag})
 		_dropdown(parent, "Required tag", tags, trigger.tag, func(value): _edit_value(trigger, "tag", value))
-	if trigger.kind == "tag_rank":
-		var rank_input := _number(parent, "Actor rank", int(trigger.rank), func(value): _edit_value(trigger, "rank", value))
-		rank_input.min_value = 1
-		rank_input.max_value = 3
-		rank_input.allow_greater = false
+	if trigger.kind == "tag_position":
+		for point in Geometry.POSITIONS:
+			_check(parent, point, trigger.positions.has(point), func(value): _toggle_value(trigger.positions, point, value))
 	if trigger.kind in ["damage", "healed", "cost"]:
 		_number(parent, "Threshold", int(trigger.threshold), func(value): _edit_value(trigger, "threshold", value))
 	var preview := _label(parent, Catalog.trigger_text(trigger), 12)
@@ -525,7 +559,7 @@ func _trigger_form(parent: Node, trigger: Dictionary) -> void:
 func _effects_form(parent: Node, effects: Array, context: String) -> void:
 	var title := _box(parent, false)
 	_label(title, "ORDERED EFFECTS", 13)
-	var kinds: Array = Catalog.CARD_EFFECTS if context == "card" else Catalog.MONSTER_EFFECTS
+	var kinds: Array = Catalog.TRIGGER_EFFECTS if context == "trigger" else (Catalog.CARD_EFFECTS if context == "card" else Catalog.MONSTER_EFFECTS)
 	_button(title, "Add Effect", func():
 		effects.append(Catalog.new_effect(kinds[0]))
 		_dirty_changed()
@@ -552,21 +586,21 @@ func _effects_form(parent: Node, effects: Array, context: String) -> void:
 			_dirty_changed()
 			_rebuild_form())
 		var controls := {"kind": kind_input, "up": up, "down": down, "remove": remove}
-		if effect.kind in ["guard", "damage_ship"]:
-			var targets: Array = ["actor", "ally"] if effect.kind == "guard" else ["front", "rear", "ends", "all"]
+		if effect.kind in ["guard", "damage_ship"] or (context == "trigger" and effect.kind == "repair"):
+			var targets: Array = ["actor", "event_actor"] if context == "trigger" else (["actor", "ally"] if effect.kind == "guard" else ["front", "rear", "upper", "lower", "sides", "ends", "all"])
 			if context == "reaction":
 				targets.append_array(["actor", "repaired"])
 			var target_options: Array = []
 			for target in targets:
 				target_options.append({"value": target, "label": Catalog.TARGET_NAMES[target]})
-			controls["target"] = _dropdown(content, "Target", target_options, effect.target, func(value):
+			controls["target"] = _dropdown(content, "Target", target_options, effect.get("target", "actor"), func(value):
 				_edit_value(effect, "target", value)
 				_rebuild_form.call_deferred())
 		if effect.has("amount"):
 			controls["amount"] = _number(content, "Amount" if effect.kind != "swap_ends" else "Lone-ship damage", int(effect.amount), func(value): _edit_value(effect, "amount", value))
 		if effect.kind == "draw_discard":
 			controls["discard"] = _number(content, "Then discard", int(effect.discard), func(value): _edit_value(effect, "discard", value))
-		if effect.kind == "guard" and effect.target == "ally":
+		if effect.kind == "guard" and effect.get("target") == "ally":
 			_check(content, "Exclude the acting ship", effect.get("exclude_actor", false), func(value): _edit_value(effect, "exclude_actor", value))
 		effect_controls.append(controls)
 		var preview := _label(content, Catalog.effects_text([effect]), 12)
@@ -608,13 +642,6 @@ func _add_behavior(entry: Dictionary, list_name: String) -> void:
 
 
 func _remove_behavior(entry: Dictionary, list_name: String, index: int) -> void:
-	var starting := "starting_reaction" if list_name == "reactions" else "starting_intent"
-	if entry[list_name].size() == 1:
-		_message("A leviathan needs at least one " + list_name + " entry.", true)
-		return
-	if entry[starting] == entry[list_name][index].id:
-		_message("Choose a different starting behaviour before deleting this one.", true)
-		return
 	entry[list_name].remove_at(index)
 	_dirty_changed()
 	_rebuild_form()
@@ -626,6 +653,7 @@ func _update_preview() -> void:
 			preview.label.text = Catalog.trigger_text(preview.value) if preview.kind == "trigger" else Catalog.effects_text(preview.value)
 	if fields.has("preview") and is_instance_valid(fields.preview):
 		fields.preview.text = Catalog.effects_text(selected_entry().effects)
+	_live_preview()
 
 
 func _build_setup() -> void:
@@ -637,10 +665,16 @@ func _build_setup() -> void:
 	while draft.setup.ships.size() < 3:
 		draft.setup.ships.append("")
 	for rank in 3:
-		setup_controls["ship_" + str(rank)] = _dropdown(setup_form, ["Front", "Centre", "Rear"][rank], _options("ships"), draft.setup.ships[rank], func(value):
+		setup_controls["ship_" + str(rank)] = _dropdown(setup_form, "Ship " + str(rank + 1), _options("ships"), draft.setup.ships[rank], func(value):
 			draft.setup.ships[rank] = value
 			_dirty_changed()
 			_build_setup.call_deferred())
+	var point_options: Array = []
+	for point in Geometry.POSITIONS:
+		point_options.append({"value": point, "label": point})
+	for index in 3:
+		setup_controls["point_" + str(index)] = _dropdown(setup_form, "Ship %d position" % (index + 1), point_options, draft.setup.positions[index], func(value): draft.setup.positions[index] = value; _dirty_changed())
+	setup_controls["enemy_point"] = _dropdown(setup_form, "Enemy position", point_options, draft.setup.enemy_position, func(value): draft.setup.enemy_position = value; _dirty_changed())
 	setup_controls["fixed_hand"] = _check(setup_form, "Use fixed opening hand", draft.setup.fixed_hand, func(value):
 		draft.setup.fixed_hand = value
 		_dirty_changed()
@@ -683,12 +717,11 @@ func _new_entry(kind: String) -> void:
 			entry = {"id": id, "name": "New Ship", "role": "SUPPORT", "hull": 20, "color": "#91c8ad", "loadout": []}
 		"cards":
 			entry = {"id": id, "name": "New Card", "owner": "" if draft.ships.is_empty() else draft.ships[0].id,
-				"cost": 1, "pays": 1, "ranks": [1, 2, 3], "tags": ["Attack"], "effects": [{"kind": "damage_monster", "amount": 4}]}
+				"cost": 1, "pays": 1, "positions": Geometry.POSITIONS.duplicate(), "tags": ["Attack"], "effects": [{"kind": "damage_monster", "amount": 4}], "on_play": [], "modifiers": [], "triggers": []}
 		_:
-			entry = {"id": id, "name": "New Leviathan", "hull": 70, "starting_reaction": "reaction_1", "starting_intent": "intent_1",
-				"reactions": [{"id": "reaction_1", "name": "Wing Beat", "trigger": {"kind": "tag", "tag": "Movement"},
-					"effects": [{"kind": "damage_ship", "target": "actor", "amount": 3}]}],
-				"intents": [{"id": "intent_1", "name": "Bite", "effects": [{"kind": "damage_ship", "target": "front", "amount": 7}]}]}
+			entry = {"id": id, "name": "New Leviathan", "hull": 70, "starting_stance": "stance_1",
+				"stances": [{"id": "stance_1", "name": "Hunting", "reactions": [],
+				"effects": [{"kind": "damage_ship", "target": "front", "amount": 7}]}]}
 	draft[kind].append(entry)
 	selected_ids[kind] = id
 	searches[kind].text = ""
@@ -736,7 +769,7 @@ func _remember_ui() -> void:
 	var search_values: Dictionary = {}
 	for kind in KINDS:
 		search_values[kind] = searches[kind].text
-	ContentStore.editor_state = {"tab": tabs.current_tab, "selected": selected_ids.duplicate(), "searches": search_values}
+	ContentStore.editor_state = {"tab": tabs.current_tab, "selected": selected_ids.duplicate(), "searches": search_values, "editing_stance": editing_stance, "preview_slot": preview_slot, "preview_expanded": preview_expanded, "preview_position": preview_position, "preview_tags": preview_tags.duplicate()}
 
 
 func _save() -> bool:
@@ -749,7 +782,7 @@ func _save() -> bool:
 
 
 func _revert() -> void:
-	draft = Catalog.normalized(ContentStore.snapshot()) if not ContentStore.saved.is_empty() else Catalog.empty_document()
+	draft = Catalog.migrate(ContentStore.snapshot()) if not ContentStore.saved.is_empty() else Catalog.empty_document()
 	_refresh_all()
 	_message("Unsaved changes reverted.")
 
@@ -787,3 +820,173 @@ func _go_menu() -> void:
 func _message(text: String, error: bool = false) -> void:
 	status.text = text
 	status.modulate = Color("#ff927f") if error else Color("#9ce6b7")
+
+func _new_stance(entry: Dictionary) -> void:
+	var id := _new_id(entry.stances, "stance")
+	entry.stances.append({"id": id, "name": "New Stance", "reactions": [], "effects": [{"kind": "damage_ship", "target": "front", "amount": 4}]})
+	editing_stance = id
+	_dirty_changed()
+	_rebuild_form()
+
+
+func _duplicate_stance(entry: Dictionary) -> void:
+	var copy: Dictionary = entry.stances[Catalog.index_by_id(entry.stances, editing_stance)].duplicate(true)
+	copy.id = _new_id(entry.stances, copy.id + "_copy")
+	copy.name += " Copy"
+	entry.stances.append(copy)
+	editing_stance = copy.id
+	_dirty_changed()
+	_rebuild_form()
+
+
+func _delete_stance(entry: Dictionary) -> void:
+	if entry.stances.size() == 1 or entry.starting_stance == editing_stance:
+		_message("Keep one stance and choose another starting stance before deleting this one.", true)
+		return
+	entry.stances.remove_at(Catalog.index_by_id(entry.stances, editing_stance))
+	editing_stance = entry.starting_stance
+	_dirty_changed()
+	_rebuild_form()
+
+
+func _condition_form(parent: Node, condition: Dictionary) -> void:
+	var tags: Array = [{"value": "", "label": "Any card"}]
+	for tag in Catalog.TAGS:
+		tags.append({"value": tag, "label": tag})
+	_dropdown(parent, "Adjacent tag", tags, condition.get("tag", ""), func(value): _edit_value(condition, "tag", value))
+	_number(parent, "Minimum neighbours", condition.get("min", 0), func(value): _edit_value(condition, "min", value))
+
+
+func _circle_rules_form(parent: Node, entry: Dictionary) -> void:
+	for section in ["on_play", "modifiers", "triggers"]:
+		var row := _box(parent, false)
+		_label(row, {"on_play": "CONDITIONAL ON PLAY", "modifiers": "ONGOING BONUSES", "triggers": "CHAINED TRIGGERS / ONCE PER TURN"}[section], 13)
+		_button(row, "Add Rule", func():
+			var rule := {"condition": {"tag": "", "min": 0}}
+			if section == "modifiers":
+				rule.merge({"stat": "damage", "amount": 1, "tag": ""})
+			else:
+				rule["effects"] = [{"kind": "damage_monster", "amount": 1}]
+				if section == "triggers":
+					rule.merge({"id": _new_id(entry.triggers, "trigger"), "name": "New Trigger", "event": "played", "tag": "", "threshold": 1})
+			entry[section].append(rule)
+			_dirty_changed()
+			_rebuild_form())
+		for index in entry[section].size():
+			var rule: Dictionary = entry[section][index]
+			var panel := PanelContainer.new()
+			parent.add_child(panel)
+			var column := _box(panel)
+			var tools := _box(column, false)
+			_button(tools, "↑", _move_effect.bind(entry[section], index, -1))
+			_button(tools, "↓", _move_effect.bind(entry[section], index, 1))
+			_button(tools, "Remove rule", func(): entry[section].remove_at(index); _dirty_changed(); _rebuild_form())
+			if section == "triggers":
+				_line(column, "Name", rule.name, func(value): _edit_value(rule, "name", value))
+				var events: Array = []
+				for event in Catalog.CARD_EVENTS:
+					events.append({"value": event, "label": event})
+				_dropdown(column, "Neighbour event", events, rule.event, func(value): _edit_value(rule, "event", value))
+				_number(column, "Event threshold", rule.threshold, func(value): _edit_value(rule, "threshold", value))
+			if section in ["modifiers", "triggers"]:
+				var tags: Array = [{"value": "", "label": "Any tag"}]
+				for tag in Catalog.TAGS:
+					tags.append({"value": tag, "label": tag})
+				_dropdown(column, "Affected/event tag", tags, rule.tag, func(value): _edit_value(rule, "tag", value))
+			if section == "modifiers":
+				var stats: Array = []
+				for stat in Catalog.STATS:
+					stats.append({"value": stat, "label": stat})
+				_dropdown(column, "Bonus stat", stats, rule.stat, func(value): _edit_value(rule, "stat", value))
+				_number(column, "Bonus / cost reduction", rule.amount, func(value): _edit_value(rule, "amount", value))
+			_condition_form(column, rule.condition)
+			if section != "modifiers":
+				_effects_form(column, rule.effects, "trigger" if section == "triggers" else "card")
+
+
+func _live_preview() -> void:
+	if not is_instance_valid(preview_form):
+		return
+	_clear(preview_form)
+	var entry := selected_entry()
+	if entry.is_empty():
+		_label(preview_form, "Select content to preview.")
+		return
+	_label(preview_form, "LIVE / UNSAVED DRAFT", 13).modulate = Color("#d6adee")
+	var points: Array = []
+	for point in Geometry.POSITIONS:
+		points.append({"value": point, "label": point})
+	if _kind() == "cards":
+		var owner_index := Catalog.index_by_id(draft.ships, entry.get("owner", ""))
+		var owner: Dictionary = {} if owner_index < 0 else draft.ships[owner_index]
+		var info := Catalog.present_card(entry)
+		var face := CardFace.new()
+		face.custom_minimum_size = Vector2(286, 340)
+		face.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		preview_form.add_child(face)
+		face.configure(info, owner)
+		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		preview_widget = face
+		_check(preview_form, "Expanded context", preview_expanded, func(value): preview_expanded = value; preview_slot = mini(preview_slot, 3); _live_preview())
+		var slots: Array = []
+		for slot in (9 if preview_expanded else 4):
+			slots.append({"value": str(slot), "label": Geometry.SLOT_NAMES[slot]})
+		_dropdown(preview_form, "Preview slot", slots, str(preview_slot), func(value): preview_slot = int(value); _live_preview())
+		var contents: Array = [-1, -1, -1, -1, -1, -1, -1, -1, -1]
+		var data: Dictionary = {0: info}
+		contents[preview_slot] = 0
+		var neighbours: Array = []
+		for slot in Geometry.neighbours(preview_slot, preview_expanded):
+			var tag: String = preview_tags.get(slot, "")
+			if tag != "":
+				contents[slot] = slot + 1
+				data[slot + 1] = {"name": tag, "tag_ids": [tag], "effect": ""}
+				neighbours.append(data[slot + 1])
+		var mini := CircleView.new()
+		mini.custom_minimum_size = Vector2(0, 200)
+		preview_form.add_child(mini)
+		mini.configure(contents, preview_expanded, data, {}, preview_slot)
+		var active: Array = []
+		for rule in entry.get("on_play", []):
+			if Geometry.condition_matches(rule.condition, neighbours):
+				active.append(Catalog.effects_text(rule.effects))
+		_label(preview_form, "Active conditional bonuses: " + ("None" if active.is_empty() else " ".join(active)), 13).modulate = Color("#9ce6b7")
+		for modifier in entry.get("modifiers", []):
+			var count := 0
+			if Geometry.condition_matches(modifier.condition, neighbours):
+				for neighbour in neighbours:
+					if modifier.get("tag", "") == "" or neighbour.tag_ids.has(modifier.tag):
+						count += 1
+			_label(preview_form, "%s %s%d: affects %d neighbour(s)." % [modifier.stat, "−" if modifier.stat == "cost" else "+", modifier.amount, count], 13)
+		for slot in Geometry.neighbours(preview_slot, preview_expanded):
+			var tags: Array = [{"value": "", "label": "Empty"}]
+			for tag in Catalog.TAGS:
+				tags.append({"value": tag, "label": tag})
+			_dropdown(preview_form, Geometry.SLOT_NAMES[slot], tags, preview_tags.get(slot, ""), func(value): preview_tags[slot] = value; _live_preview())
+		if not Catalog.validate(draft).is_empty():
+			_label(preview_form, "Draft needs validation; preview only.", 12).modulate = Color("#ff927f")
+	else:
+		_dropdown(preview_form, "Preview position", points, preview_position, func(value): preview_position = value; _live_preview())
+		var board := {"ships": [], "formation": [-1, -1, -1, -1], "enemy_position": Geometry.POSITIONS.find(preview_position), "monster_hull": int(entry.get("hull", 1))}
+		var view := FormationView.new()
+		view.custom_minimum_size = Vector2(0, 250)
+		preview_form.add_child(view)
+		if _kind() == "ships":
+			var unit := entry.duplicate(true)
+			unit["max_hull"] = maxi(1, int(entry.get("hull", 1)))
+			unit["guard"] = 0
+			board.ships = [unit]
+			board.formation[Geometry.POSITIONS.find(preview_position)] = 0
+			view.configure(board)
+		else:
+			view.configure(board, true, entry)
+			var options: Array = []
+			for stance in entry.stances:
+				options.append({"value": stance.id, "label": stance.name})
+			if Catalog.index_by_id(entry.stances, editing_stance) < 0:
+				editing_stance = entry.starting_stance
+			_dropdown(preview_form, "Preview stance", options, editing_stance, func(value): editing_stance = value; _rebuild_form())
+			var stance_view := StanceView.new()
+			preview_form.add_child(stance_view)
+			stance_view.configure(entry.stances[Catalog.index_by_id(entry.stances, editing_stance)])
+		preview_widget = view

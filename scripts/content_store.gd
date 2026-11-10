@@ -6,6 +6,7 @@ var path: String = "res://data/content.json"
 var saved: Dictionary = {}
 var last_error: String = ""
 var editor_state: Dictionary = {}
+var migration_pending := false
 
 
 func _ready() -> void:
@@ -18,6 +19,7 @@ func reload_content() -> bool:
 		last_error = result.error
 		return false
 	saved = result.document.duplicate(true)
+	migration_pending = result.get("migrated", false)
 	last_error = ""
 	return true
 
@@ -27,8 +29,14 @@ func snapshot() -> Dictionary:
 
 
 func save_content(draft: Dictionary) -> bool:
+	var errors := Catalog.validate(draft)
+	if not errors.is_empty():
+		last_error = "\n".join(errors)
+		return false
+	draft = Catalog.migrate(draft)
 	last_error = Catalog.save_document(path, draft)
 	if not last_error.is_empty():
 		return false
 	saved = draft.duplicate(true)
+	migration_pending = false
 	return true

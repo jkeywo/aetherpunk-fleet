@@ -1,31 +1,38 @@
 extends RefCounted
-## Detached content-driven combat state. No card or leviathan identity controls rules.
-
+## Four persistent unit positions, resident circle cards, finite event chains, and stance decks.
 const Catalog = preload("res://scripts/content_catalog.gd")
+const Geometry = preload("res://scripts/battle_geometry.gd")
 var document: Dictionary = {}
 var definitions: Dictionary = {}
-var init_error: String = ""
+var init_error := ""
 var ships: Array = []
-var formation: Array = [0, 1, 2]
+var formation: Array = [-1, -1, -1, -1]
+var enemy_position := 0
 var card_keys: Array = []
 var hand: Array = []
 var deck: Array = []
 var discard: Array = []
 var held: Array = []
-var monster_hull: int = 0
-var reaction_index: int = 0
-var reaction_deck: Array = []
-var reaction_discard: Array = []
-var intent_index: int = 0
-var intent_deck: Array = []
-var intent_discard: Array = []
-var round_number: int = 1
-var phase: String = "fleet"
-var outcome: String = ""
+var circle: Array = [-1, -1, -1, -1, -1, -1, -1, -1, -1]
+var expanded := false
+var play_order: Array = []
+var used_triggers: Dictionary = {}
+var tasks: Array = []
+var root_context: Dictionary = {}
 var pending: Dictionary = {}
+var monster_hull := 0
+var stance_index := 0
+var stance_deck: Array = []
+var stance_discard: Array = []
+var round_number := 1
+var phase := "fleet"
+var outcome := ""
 var history: Array = []
 var feedback_events: Array = []
 var rng := RandomNumberGenerator.new()
+var _preview_only := false
+var _preview_available := 0
+var _preview_hand := 0
 
 
 func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
@@ -33,29 +40,32 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 		rng.randomize()
 	else:
 		rng.seed = seed_value
-	document = content.duplicate(true)
-	if document.is_empty():
-		var loaded := Catalog.read_document("res://data/content.json")
-		if not loaded.ok:
-			init_error = loaded.error
+	if content.is_empty():
+		var read := Catalog.read_document("res://data/content.json")
+		if not read.ok:
+			init_error = read.error
 			phase = "invalid"
 			return
-		document = loaded.document
-	var errors := Catalog.validate(document)
+		content = read.document
+	var errors := Catalog.validate(content)
 	if not errors.is_empty():
 		init_error = "\n".join(errors)
 		phase = "invalid"
 		return
+	document = Catalog.migrate(content)
 	definitions = Catalog.compile(document)
 	ships = definitions.ships.duplicate(true)
-	for ship in ships:
+	for id in ships.size():
+		var ship: Dictionary = ships[id]
 		ship["max_hull"] = int(ship.hull)
 		ship.hull = int(ship.hull)
 		ship["guard"] = 0
+		formation[Geometry.POSITIONS.find(definitions.positions[id])] = id
 		for slot in ship.loadout:
 			for copy in int(slot.count):
 				card_keys.append(slot.card)
 				deck.append(card_keys.size() - 1)
+	enemy_position = Geometry.POSITIONS.find(definitions.enemy_position)
 	monster_hull = definitions.monster.hull
 	if definitions.fixed_hand:
 		for key in definitions.opening_hand:
@@ -67,30 +77,91 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 	_shuffle(deck)
 	if not definitions.fixed_hand:
 		_draw(7)
-		feedback_events.clear()
-	reaction_index = definitions.starting_reaction
-	intent_index = definitions.starting_intent
-	for index in definitions.reactions.size():
-		if index != reaction_index:
-			reaction_deck.append(index)
-	for index in definitions.intents.size():
-		if index != intent_index:
-			intent_deck.append(index)
-	_shuffle(reaction_deck)
-	_shuffle(intent_deck)
-	history.append("Round 1: fleet phase. %s is active." % definitions.reactions[reaction_index].name)
+	stance_index = definitions.starting_stance
+	for index in definitions.stances.size():
+		if index != stance_index:
+			stance_deck.append(index)
+	_shuffle(stance_deck)
+	feedback_events.clear()
+	history.append("Round 1. Stance: " + stance().name)
+
+
+func stance() -> Dictionary:
+	return definitions.stances[stance_index]
+
+
+func alive_ids() -> Array:
+	var ids: Array = []
+	for id in formation:
+		if id >= 0:
+			ids.append(id)
+	return ids
 
 
 func card(uid: int) -> Dictionary:
 	return definitions.cards[card_keys[uid]]
 
 
-func choice_flags(uid: int) -> Dictionary:
-	var flags := {"ally": false, "movement": false, "adjacent": false, "pair": false, "other_only": false}
-	if uid == -1:
-		flags.movement = true
-		return flags
-	for effect in card(uid).effects:
+func first_slot() -> int:
+	for slot in (9 if expanded else 4):
+		if circle[slot] < 0:
+			return slot
+	return -1
+
+
+func adjacent_cards(slot: int, proposed_uid: int = -1, proposed_slot: int = -1) -> Array:
+	var result: Array = []
+	for adjacent in Geometry.neighbours(slot, expanded):
+		var uid: int = circle[adjacent]
+		if adjacent == proposed_slot and uid < 0:
+			uid = proposed_uid
+		if uid >= 0:
+			result.append(card(uid))
+	return result
+
+
+func condition_matches(condition: Dictionary, slot: int, proposed_uid: int = -1, proposed_slot: int = -1) -> bool:
+	return Geometry.condition_matches(condition, adjacent_cards(slot, proposed_uid, proposed_slot))
+
+
+func bonus(stat: String, uid: int, slot: int) -> int:
+	if uid < 0 or slot < 0:
+		return 0
+	var total := 0
+	for adjacent in Geometry.neighbours(slot, expanded):
+		var source: int = circle[adjacent]
+		if source < 0:
+			continue
+		for modifier in card(source).get("modifiers", []):
+			if modifier.stat == stat and (modifier.get("tag", "") == "" or card(uid).tag_ids.has(modifier.tag)):
+				if condition_matches(modifier.condition, adjacent, uid, slot):
+					total += int(modifier.amount)
+	return total
+
+
+func effective_cost(uid: int, slot: int = -1) -> int:
+	if uid < 0:
+		return 1
+	if slot < 0:
+		slot = first_slot()
+	return maxi(0, int(card(uid).cost) - bonus("cost", uid, slot))
+
+
+func active_effects(uid: int, slot: int) -> Array:
+	if uid < 0:
+		return [{"kind": "swap_adjacent"}]
+	var effects: Array = card(uid).effects.duplicate(true)
+	for rule in card(uid).get("on_play", []):
+		if condition_matches(rule.condition, slot):
+			effects.append_array(rule.effects.duplicate(true))
+	return effects
+
+
+func choice_flags(uid: int, slot: int = -1) -> Dictionary:
+	if slot < 0:
+		slot = first_slot()
+	var flags := {"ally": false, "movement": uid == -1, "adjacent": uid == -1, "pair": false, "other_only": false}
+	for effect in active_effects(uid, slot):
 		if effect.kind == "repair" or (effect.kind == "guard" and effect.target == "ally"):
 			flags.ally = true
 		if effect.kind == "guard" and effect.get("exclude_actor", false) and effect.target == "ally":
@@ -104,319 +175,427 @@ func choice_flags(uid: int) -> Dictionary:
 	return flags
 
 
-func choices(uid: int, group: String = "primary") -> Array:
-	var flags := choice_flags(uid)
+func choices(uid: int, group: String = "primary", slot: int = -1) -> Array:
+	var flags := choice_flags(uid, slot)
 	var result: Array = []
-	var owner: int = 0 if uid == -1 else card(uid).owner
+	var owner: int = -1 if uid < 0 else card(uid).owner
 	if group == "primary" and flags.ally:
-		for ship_id in formation:
-			if not flags.other_only or ship_id != owner:
-				result.append({"value": ship_id, "label": ships[ship_id].name})
+		for id in alive_ids():
+			if not flags.other_only or id != owner:
+				result.append({"value": id, "label": ships[id].name})
 		return result
 	if group == "movement" and not (flags.ally and flags.movement):
 		return []
 	if not flags.movement:
 		return []
-	if uid == -1:
-		for rank in maxi(0, formation.size() - 1):
-			var a: int = formation[rank]
-			var b: int = formation[rank + 1]
-			result.append({"value": 10 + a * 3 + b, "label": "%s → swap with %s" % [ships[a].name, ships[b].name]})
-			result.append({"value": 10 + b * 3 + a, "label": "%s → swap with %s" % [ships[b].name, ships[a].name]})
+	if uid < 0:
+		for id in alive_ids():
+			for point in Geometry.unit_neighbours(formation.find(id)):
+				result.append({"value": 10 + id * 4 + point, "label": "%s → %s" % [ships[id].name, Geometry.POSITION_NAMES[point]]})
 	elif flags.adjacent:
-		var rank: int = formation.find(owner)
-		if rank >= 0:
-			for neighbour in [rank - 1, rank + 1]:
-				if neighbour >= 0 and neighbour < formation.size():
-					var other: int = formation[neighbour]
-					result.append({"value": other, "label": "Swap with " + ships[other].name})
+		var origin: int = formation.find(owner)
+		if origin >= 0:
+			for point in Geometry.unit_neighbours(origin):
+				if not flags.pair or formation[point] >= 0:
+					result.append({"value": point, "label": "Move / swap → " + Geometry.POSITION_NAMES[point]})
 	else:
-		for rank in maxi(0, formation.size() - 1):
-			var a: int = formation[rank]
-			var b: int = formation[rank + 1]
-			result.append({"value": a, "label": "%s ↔ %s" % [ships[a].name, ships[b].name]})
+		for link in Geometry.UNIT_LINKS:
+			if formation[link[0]] >= 0 and formation[link[1]] >= 0:
+				result.append({"value": 100 + link[0] * 4 + link[1], "label": "%s ↔ %s" % [ships[formation[link[0]]].name, ships[formation[link[1]]].name]})
 	return result
 
 
 func _choice_exists(options: Array, value: int) -> bool:
-	for option in options:
-		if option.value == value:
-			return true
-	return false
+	return options.any(func(option): return option.value == value)
 
 
-func _context(uid: int, target: int, movement: int) -> Dictionary:
-	var flags := choice_flags(uid)
-	var actor: int = int((target - 10) / 3) if uid == -1 else card(uid).owner
+func _context(uid: int, target: int, movement: int, slot: int) -> Dictionary:
+	var flags := choice_flags(uid, slot)
+	var actor: int = int((target - 10) / 4) if uid < 0 else int(card(uid).owner)
 	var move: int = movement if flags.ally else target
-	var pair: Array = []
-	if uid == -1:
-		pair = [actor, (target - 10) % 3]
+	var points: Array = []
+	if uid < 0:
+		points = [formation.find(actor), (target - 10) % 4]
 	elif flags.adjacent:
-		pair = [actor, move]
-	elif flags.pair and formation.has(move):
-		var rank: int = formation.find(move)
-		if rank + 1 < formation.size():
-			pair = [move, formation[rank + 1]]
-	var effects: Array = [{"kind": "swap_adjacent"}] if uid == -1 else card(uid).effects.duplicate(true)
-	return {"actor": actor, "target": target if flags.ally else -1, "pair": pair, "damage": 0, "healed": 0,
-		"cost": 1 if uid == -1 else int(card(uid).cost),
-		"tags": ["Movement"] if uid == -1 else card(uid).tag_ids.duplicate(),
-		"effects": effects, "next_step": 0, "discard_remaining": 0,
-		"title": "Basic manoeuvre" if uid == -1 else card(uid).name}
+		points = [formation.find(actor), move]
+	elif flags.pair:
+		points = [int((move - 100) / 4), (move - 100) % 4]
+	return {"uid": uid, "slot": slot, "actor": actor, "event_actor": actor, "target": target if flags.ally else -1,
+		"points": points, "cost": 1 if uid < 0 else int(card(uid).cost), "damage": 0, "healed": 0,
+		"tags": ["Movement"] if uid < 0 else card(uid).tag_ids.duplicate(), "next_step": 0, "discard_remaining": 0,
+		"title": "Basic manoeuvre" if uid < 0 else card(uid).name, "effects": active_effects(uid, slot), "announced": true}
 
 
-func validate(uid: int, payment: Array, target: int = -1, movement: int = -1) -> String:
+func validate(uid: int, payment: Array, target: int = -1, movement: int = -1, slot: int = -1) -> String:
 	if outcome != "" or phase != "fleet":
-		return "Finish the current step before playing another action."
-	if uid != -1 and not hand.has(uid):
+		return "Finish the current resolution before playing."
+	if uid >= 0 and not hand.has(uid):
 		return "That card is no longer in hand."
-	var cost: int = 1 if uid == -1 else int(card(uid).cost)
-	if uid != -1:
-		var info := card(uid)
-		var rank: int = formation.find(info.owner) + 1
-		if rank == 0:
-			return "Its ship is destroyed; this card can still pay for other actions."
-		if not info.allowed_ranks.has(rank):
-			return "%s requires ranks %s." % [info.name, info.ranks]
+	if uid >= 0:
+		if slot < 0:
+			slot = first_slot()
+		if slot < 0:
+			return "The circle is full. End the phase or use a basic manoeuvre."
+		if slot >= (9 if expanded else 4) or circle[slot] >= 0:
+			return "Choose an empty unlocked circle slot."
+		var point: int = formation.find(card(uid).owner)
+		if point < 0:
+			return "Its ship is destroyed; the card can still be payment."
+		if not card(uid).allowed_positions.has(Geometry.POSITIONS[point]):
+			return "Acting ship must occupy: " + card(uid).ranks
 	var seen: Array = []
 	for payer in payment:
 		if payer == uid or not hand.has(payer) or seen.has(payer):
-			return "Payment must use distinct other cards from your hand."
+			return "Pay with distinct other cards from hand."
 		seen.append(payer)
+	var cost := effective_cost(uid, slot)
 	if cost == 0 and not payment.is_empty():
-		return "This action is free. Remove the payment cards."
+		return "This action is free; remove payment cards."
 	if payment_total(payment) < cost:
-		return "Choose payment: %d / %d resources." % [payment_total(payment), cost]
-	var flags := choice_flags(uid)
-	if (flags.ally or flags.movement) and not _choice_exists(choices(uid), target):
-		return "Choose a valid ship or neighbouring pair."
-	if flags.ally and flags.movement and not _choice_exists(choices(uid, "movement"), movement):
+		return "Payment %d / %d. Select other cards to pay." % [payment_total(payment), cost]
+	var flags := choice_flags(uid, slot)
+	if (flags.ally or flags.movement) and not _choice_exists(choices(uid, "primary", slot), target):
+		return "Choose a valid ship or adjacent destination."
+	if flags.ally and flags.movement and not _choice_exists(choices(uid, "movement", slot), movement):
 		return "Choose a valid movement."
-	# Validate against the formation produced by every preceding movement effect.
-	var context := _context(uid, target, movement)
-	var order: Array = formation.duplicate()
-	for effect in context.effects:
-		if effect.kind in ["swap_adjacent", "swap_pair_guard"]:
-			if context.pair.size() != 2:
-				return "Choose a neighbouring pair."
-			var a: int = order.find(context.pair[0])
-			var b: int = order.find(context.pair[1])
-			if a < 0 or b < 0 or absi(a - b) != 1:
-				return "Movement requires ships that are adjacent at that step."
-			order[a] = context.pair[1]
-			order[b] = context.pair[0]
 	return ""
 
 
-func play(uid: int, payment: Array, target: int = -1, movement: int = -1) -> String:
-	var error := validate(uid, payment, target, movement)
+func play(uid: int, payment: Array, target: int = -1, movement: int = -1, slot: int = -1) -> String:
+	if uid >= 0 and slot < 0:
+		slot = first_slot()
+	var error := validate(uid, payment, target, movement, slot)
 	if error != "":
 		return error
+	var cost := effective_cost(uid, slot)
+	var context := _context(uid, target, movement, slot)
+	root_context = context.duplicate(true)
 	feedback_events.clear()
 	held = payment.duplicate()
-	if uid != -1:
-		held.append(uid)
-	for spent in held:
-		hand.erase(spent)
-	var context := _context(uid, target, movement)
-	history.append("%s — paid %d for cost %d; excess %d lost." % [
-		context.title, _held_payment(payment), context.cost, _held_payment(payment) - int(context.cost)])
-	_record("card_played", {"uid": uid, "payment": payment.duplicate(), "title": context.title})
-	_run_action(context)
+	for payer in held:
+		hand.erase(payer)
+	if uid >= 0:
+		hand.erase(uid)
+		circle[slot] = uid
+		play_order.append(uid)
+	tasks = [context]
+	_preview_available = deck.size() + discard.size()
+	_preview_hand = hand.size()
+	history.append("%s: paid %d / %d." % [context.title, _held_payment(payment), cost])
+	_record("card_played", {"uid": uid, "slot": slot, "payment": payment.duplicate(), "title": context.title})
+	if uid >= 0:
+		_event("played", uid, context.actor, 1)
+	_drain()
 	return ""
 
 
-func _run_action(context: Dictionary, preview_only: bool = false) -> void:
-	while context.next_step < context.effects.size():
-		var effect: Dictionary = context.effects[context.next_step]
-		context.next_step += 1
-		match effect.kind:
-			"damage_monster":
-				var actual: int = mini(int(effect.amount), monster_hull)
-				monster_hull -= actual
-				context.damage += actual
-				history.append("%s takes %d damage." % [definitions.monster.name, actual])
-				_record("damage", {"target": -1, "amount": actual, "blocked": 0})
-			"guard":
-				_gain_guard(context.actor if effect.target == "actor" else context.target, int(effect.amount))
-			"repair":
-				var healed: int = mini(int(effect.amount), int(ships[context.target].max_hull) - int(ships[context.target].hull))
-				ships[context.target].hull += healed
-				context.healed += healed
-				_record("repair", {"target": context.target, "amount": healed})
-				history.append("%s restores %d hull." % [ships[context.target].name, healed])
-			"swap_adjacent", "swap_pair_guard":
-				_swap(context.pair[0], context.pair[1])
-				if effect.kind == "swap_pair_guard":
-					for ship_id in context.pair:
-						_gain_guard(ship_id, int(effect.amount))
-			"draw_discard":
-				if not preview_only:
-					_draw(int(effect.amount))
-					context.discard_remaining = mini(int(effect.discard), hand.size())
-					if context.discard_remaining > 0:
-						pending = context
-						phase = "discard"
-						history.append("%s: choose %d card(s) to discard." % [context.title, context.discard_remaining])
-						return
-	_finish(context, preview_only)
+func _event(kind: String, source: int, actor: int, amount: int) -> void:
+	if source < 0 or not circle.has(source):
+		return
+	var source_slot: int = circle.find(source)
+	for host in play_order:
+		if host == source or not Geometry.neighbours(source_slot, expanded).has(circle.find(host)):
+			continue
+		for rule in card(host).get("triggers", []):
+			var key := "%d/%s" % [host, rule.id]
+			if used_triggers.has(key) or rule.event != kind or amount < int(rule.threshold):
+				continue
+			if rule.get("tag", "") != "" and not card(source).tag_ids.has(rule.tag):
+				continue
+			if not condition_matches(rule.condition, circle.find(host)):
+				continue
+			used_triggers[key] = "queued"
+			tasks.append({"uid": host, "slot": circle.find(host), "actor": int(card(host).owner), "event_actor": actor,
+				"target": actor, "points": [], "effects": rule.effects.duplicate(true), "next_step": 0, "discard_remaining": 0,
+				"title": card(host).name + " / " + rule.get("name", rule.id), "trigger_key": key, "announced": false})
+
+
+func _drain() -> void:
+	while not tasks.is_empty():
+		var context: Dictionary = tasks.pop_front()
+		if not context.announced:
+			context.announced = true
+			used_triggers[context.trigger_key] = "fired"
+			history.append("Card trigger: " + context.title)
+			_record("card_triggered", {"uid": context.uid, "title": context.title})
+		while context.next_step < context.effects.size():
+			var effect: Dictionary = context.effects[context.next_step]
+			context.next_step += 1
+			if _apply_effect(effect, context):
+				pending = context
+				phase = "discard"
+				return
+	_finish_root()
+
+
+func _apply_effect(effect: Dictionary, context: Dictionary) -> bool:
+	var uid: int = context.uid
+	var slot: int = context.slot
+	var amount: int = int(effect.get("amount", 0))
+	match effect.kind:
+		"damage_monster":
+			var actual: int = mini(monster_hull, amount + bonus("damage", uid, slot))
+			monster_hull -= actual
+			root_context.damage += actual
+			history.append("%s takes %d damage." % [definitions.monster.name, actual])
+			_record("damage", {"target": -1, "amount": actual, "blocked": 0})
+			_event("damage", uid, context.actor, actual)
+		"guard", "repair":
+			var target: int = context.actor
+			if effect.get("target") == "event_actor":
+				target = context.event_actor
+			elif effect.kind == "guard" and effect.target == "ally":
+				target = context.target
+			elif effect.kind == "repair" and not context.has("trigger_key"):
+				target = context.target
+			if target < 0 or ships[target].hull <= 0:
+				return false
+			if effect.kind == "guard":
+				amount += bonus("guard", uid, slot)
+				_gain_guard(target, amount)
+				_event("guard", uid, context.actor, amount)
+			else:
+				var healed: int = mini(int(ships[target].max_hull) - int(ships[target].hull), amount + bonus("healing", uid, slot))
+				ships[target].hull += healed
+				root_context.healed += healed
+				if healed > 0:
+					root_context.target = target
+				_record("repair", {"target": target, "amount": healed})
+				_event("repair", uid, context.actor, healed)
+		"swap_adjacent", "swap_pair_guard":
+			var points: Array = context.points
+			_swap_points(points[0], points[1])
+			_event("movement", uid, context.actor, 1)
+			if effect.kind == "swap_pair_guard":
+				for point in points:
+					if formation[point] >= 0:
+						_gain_guard(formation[point], amount + bonus("guard", uid, slot))
+						_event("guard", uid, context.actor, amount + bonus("guard", uid, slot))
+		"draw_discard":
+			if _preview_only:
+				var drawn: int = mini(amount, _preview_available)
+				_preview_available -= drawn
+				_preview_hand += drawn
+				_event("draw", uid, context.actor, drawn)
+				var dropped: int = mini(int(effect.discard), _preview_hand)
+				_preview_hand -= dropped
+				_preview_available += dropped
+				for index in dropped:
+					_event("discard", uid, context.actor, 1)
+			else:
+				var before: int = hand.size()
+				_draw(amount)
+				_event("draw", uid, context.actor, hand.size() - before)
+				context.discard_remaining = mini(int(effect.discard), hand.size())
+				if context.discard_remaining > 0:
+					return true
+	return false
 
 
 func discard_for_relay(uid: int) -> String:
-	# Retained API name for existing callers; supports any draw/discard effect.
 	if phase != "discard" or not hand.has(uid):
-		return "Choose a card from hand to finish the action."
+		return "Choose a hand card to finish the effect."
 	feedback_events.clear()
 	hand.erase(uid)
 	discard.append(uid)
 	_record("cards_discarded", {"uids": [uid], "reason": "Effect discard"})
-	history.append("Discarded " + card(uid).name + ".")
+	_event("discard", pending.uid, pending.actor, 1)
 	pending.discard_remaining -= 1
 	if pending.discard_remaining <= 0:
 		var context := pending.duplicate(true)
 		pending.clear()
 		phase = "fleet"
-		_run_action(context)
+		tasks.push_front(context)
+		_drain()
 	return ""
 
 
-func _finish(event: Dictionary, preview_only: bool = false) -> void:
+func _finish_root() -> void:
 	var spent: Array = held.duplicate()
 	discard.append_array(held)
 	held.clear()
 	if not spent.is_empty():
-		_record("cards_discarded", {"uids": spent, "reason": "Action resolved"})
+		_record("cards_discarded", {"uids": spent, "reason": "Payment"})
+	if not expanded and circle.slice(0, 4).all(func(uid): return uid >= 0):
+		expanded = true
+		_record("circle_expanded", {"title": "Magic circle expanded / five new slots"})
 	_cleanup()
 	if outcome != "":
 		return
-	if _triggers(event):
-		var name_text: String = definitions.reactions[reaction_index].name
-		history.append("Reaction: " + name_text + ".")
-		_record("reaction_triggered", {"index": reaction_index, "title": name_text})
-		_monster_effects(definitions.reactions[reaction_index].effects, event)
-		_cleanup()
-		if not preview_only:
-			reaction_discard.append(reaction_index)
-			if reaction_deck.is_empty():
-				reaction_deck = reaction_discard.duplicate()
-				reaction_discard.clear()
-				_shuffle(reaction_deck)
-			reaction_index = reaction_deck.pop_front()
-			name_text = definitions.reactions[reaction_index].name
-			history.append("New reaction: " + name_text + ".")
-			_record("reaction_revealed", {"index": reaction_index, "title": name_text})
+	for rule in stance().reactions:
+		if _reaction_matches(rule.trigger, root_context):
+			history.append("Reaction: " + rule.name)
+			_record("reaction_triggered", {"title": rule.name})
+			_monster_effects(rule.effects, root_context)
+			if not _preview_only and outcome == "":
+				_advance_stance()
+			break
 
 
-func _triggers(event: Dictionary) -> bool:
-	var trigger: Dictionary = definitions.reactions[reaction_index].trigger_definition
+func _reaction_matches(trigger: Dictionary, event: Dictionary) -> bool:
 	match trigger.kind:
 		"tag": return event.tags.has(trigger.tag)
-		"damage": return event.damage >= trigger.threshold
-		"tag_rank": return event.tags.has(trigger.tag) and formation.find(event.actor) + 1 == int(trigger.rank)
-		"healed": return event.healed >= trigger.threshold
-		"cost": return event.cost >= trigger.threshold
+		"damage": return event.damage >= int(trigger.threshold)
+		"healed": return event.healed >= int(trigger.threshold)
+		"cost": return event.cost >= int(trigger.threshold)
+		"tag_position":
+			var point: int = formation.find(event.actor)
+			return point >= 0 and event.tags.has(trigger.tag) and trigger.positions.has(Geometry.POSITIONS[point])
 	return false
 
 
+func _advance_stance() -> void:
+	stance_discard.append(stance_index)
+	if stance_deck.is_empty():
+		stance_deck = stance_discard.duplicate()
+		stance_discard.clear()
+		_shuffle(stance_deck)
+	stance_index = stance_deck.pop_front()
+	history.append("New stance: " + stance().name)
+	_record("stance_changed", {"title": stance().name})
+
+
+func _target_ids(target: String, context: Dictionary) -> Array:
+	var alive := alive_ids()
+	if alive.is_empty():
+		return []
+	match target:
+		"actor": return [context.actor] if alive.has(context.get("actor", -1)) else []
+		"repaired": return [context.target] if context.get("healed", 0) > 0 and alive.has(context.get("target", -1)) else []
+		"front": return [alive.front()]
+		"rear": return [alive.back()]
+		"upper": return [formation[1]] if formation[1] >= 0 else []
+		"lower": return [formation[2]] if formation[2] >= 0 else []
+		"sides":
+			return [formation[1], formation[2]].filter(func(id): return id >= 0)
+		"ends": return [alive.front(), alive.back()] if alive.size() > 1 else [alive.front()]
+		"all": return alive
+	return []
+
+
 func _monster_effects(effects: Array, context: Dictionary, escalation: int = 0) -> void:
-	var rear_target: int = -1
+	var rear_target := -1
 	for effect in effects:
+		var alive := alive_ids()
+		if alive.is_empty():
+			break
 		match effect.kind:
 			"damage_ship":
-				var targets: Array = []
-				match effect.target:
-					"actor":
-						if formation.has(context.get("actor", -1)):
-							targets = [context.actor]
-					"repaired":
-						if context.get("healed", 0) > 0 and formation.has(context.get("target", -1)):
-							targets = [context.target]
-					"front": targets = [formation.front()]
-					"rear":
-						rear_target = formation.back()
-						targets = [rear_target]
-					"ends":
-						targets = [formation.front()]
-						if formation.size() > 1:
-							targets.append(formation.back())
-					"all": targets = formation.duplicate()
-				for ship_id in targets:
-					_damage(ship_id, int(effect.amount) + escalation)
+				var targets := _target_ids(effect.target, context)
+				if effect.target == "rear" and not targets.is_empty():
+					rear_target = targets[0]
+				for id in targets:
+					_damage(id, int(effect.amount) + escalation)
 			"swap_ends":
-				if formation.size() > 1:
-					_swap(formation.front(), formation.back())
+				if alive.size() > 1:
+					_swap_points(formation.find(alive.front()), formation.find(alive.back()))
 				elif int(effect.amount) > 0:
-					_damage(formation.front(), int(effect.amount) + escalation)
+					_damage(alive.front(), int(effect.amount) + escalation)
 			"rear_to_front":
-				var target: int = rear_target if rear_target >= 0 else int(formation.back())
-				if formation.has(target):
-					formation.erase(target)
-					formation.push_front(target)
-					_record("movement", {"first": target})
+				var id: int = rear_target if rear_target >= 0 else int(alive.back())
+				if formation.has(id):
+					_swap_points(formation.find(id), 0)
 		_cleanup()
 		if outcome != "":
 			break
+
+
+func _swap_points(a: int, b: int) -> void:
+	var id: int = formation[a]
+	formation[a] = formation[b]
+	formation[b] = id
+	_record("movement", {"first": id})
+
+
+func _cleanup() -> void:
+	for point in formation.size():
+		var id: int = formation[point]
+		if id >= 0 and ships[id].hull <= 0:
+			formation[point] = -1
+			history.append(ships[id].name + " destroyed.")
+			_record("destroyed", {"target": id, "title": ships[id].name})
+	if alive_ids().is_empty():
+		outcome = "defeat"
+	elif monster_hull <= 0:
+		outcome = "victory"
+	if outcome != "":
+		phase = "finished"
 
 
 func end_phase() -> String:
 	if phase != "fleet" or outcome != "":
 		return "Finish the current action first."
 	feedback_events.clear()
-	var name_text: String = definitions.intents[intent_index].name
-	history.append("Enemy intent: " + name_text + ".")
-	_record("intent_triggered", {"index": intent_index, "title": name_text})
-	_monster_effects(definitions.intents[intent_index].effects, {}, maxi(0, round_number - 3))
-	for ship_id in ships.size():
-		var expired: int = ships[ship_id].guard
-		ships[ship_id].guard = 0
+	_record("intent_triggered", {"title": stance().name})
+	_monster_effects(stance().effects, {}, maxi(0, round_number - 3))
+	for id in ships.size():
+		var expired: int = ships[id].guard
+		ships[id].guard = 0
 		if expired > 0:
-			_record("guard", {"target": ship_id, "amount": -expired, "reason": "Guard expired"})
+			_record("guard", {"target": id, "amount": -expired, "reason": "Guard expired"})
 	if outcome == "":
+		_advance_stance()
+		var old: Array = play_order.duplicate()
+		discard.append_array(old)
+		circle.fill(-1)
+		play_order.clear()
+		used_triggers.clear()
+		expanded = false
+		if not old.is_empty():
+			_record("cards_discarded", {"uids": old, "reason": "Circle cleanup"})
 		round_number += 1
 		phase = "refresh"
-		history.append("Choose optional discards, then refill to seven.")
+		_record("circle_reset", {"title": "New turn / circle cleared"})
 	return ""
 
 
-func preview(uid: int, payment: Array, target: int = -1, movement: int = -1) -> Dictionary:
-	var error := validate(uid, payment, target, movement)
+func refresh(optional_discards: Array) -> String:
+	if phase != "refresh":
+		return "Refresh is available between rounds."
+	var seen: Array = []
+	for uid in optional_discards:
+		if not hand.has(uid) or seen.has(uid):
+			return "Choose distinct hand cards."
+		seen.append(uid)
+	feedback_events.clear()
+	for uid in optional_discards:
+		hand.erase(uid)
+		discard.append(uid)
+	if not optional_discards.is_empty():
+		_record("cards_discarded", {"uids": optional_discards.duplicate(), "reason": "Refresh discard"})
+	_draw(maxi(0, 7 - hand.size()))
+	phase = "fleet"
+	return ""
+
+
+func preview(uid: int, payment: Array, target: int = -1, movement: int = -1, slot: int = -1) -> Dictionary:
+	var error := validate(uid, payment, target, movement, slot)
 	if error != "":
 		return {"ok": false, "text": error}
-	var simulation = get_script().new(0, document)
-	simulation.ships = ships.duplicate(true)
-	simulation.formation = formation.duplicate()
-	simulation.card_keys = card_keys.duplicate()
-	simulation.monster_hull = monster_hull
-	simulation.reaction_index = reaction_index
-	simulation.history.clear()
-	var context := _context(uid, target, movement)
-	var initial_reaction: int = reaction_index
-	simulation._run_action(context, true)
-	var triggers: bool = simulation.history.any(func(line): return line.begins_with("Reaction: "))
-	var lines: Array = []
-	var cost: int = context.cost
-	lines.append("%s — pay %d / %d; excess %d lost." % [context.title, payment_total(payment), cost, payment_total(payment) - cost])
-	lines.append("%s %d → %d hull." % [definitions.monster.name, monster_hull, simulation.monster_hull])
-	var order_names: Array = []
-	for ship_id in simulation.formation:
-		order_names.append(simulation.ships[ship_id].name)
-	lines.append("Formation: " + " → ".join(order_names) + ".")
-	for ship_id in ships.size():
-		var before: Dictionary = ships[ship_id]
-		var after: Dictionary = simulation.ships[ship_id]
-		if before.hull != after.hull or before.guard != after.guard:
-			lines.append("%s: hull %d → %d, guard %d → %d." % [before.name, before.hull, after.hull, before.guard, after.guard])
-	if simulation.outcome != "":
-		lines.append(simulation.outcome.to_upper() + ".")
-	elif triggers:
-		lines.append(definitions.reactions[initial_reaction].name + " triggers; replacement is unknown.")
-	else:
-		lines.append("Current reaction does not trigger.")
-	for effect in context.effects:
-		if effect.kind == "draw_discard":
-			lines.append("Draw up to %d unknown cards, then choose %d discard(s) if able. Draws can reshuffle the discard pile." % [effect.amount, effect.discard])
-	return {"ok": true, "text": "  ".join(lines)}
+	var sim = get_script().new(0, document)
+	for key in ["ships", "formation", "card_keys", "hand", "deck", "discard", "held", "circle", "play_order", "used_triggers"]:
+		sim.set(key, get(key).duplicate(true))
+	sim.monster_hull = monster_hull
+	sim.stance_index = stance_index
+	sim.expanded = expanded
+	sim._preview_only = true
+	sim.history.clear()
+	sim.play(uid, payment, target, movement, slot)
+	var lines: Array = ["Cost %d / paid %d. %s hull %d → %d." % [effective_cost(uid, slot), payment_total(payment), definitions.monster.name, monster_hull, sim.monster_hull]]
+	for id in ships.size():
+		if ships[id].hull != sim.ships[id].hull or ships[id].guard != sim.ships[id].guard:
+			lines.append("%s: hull %d → %d, guard %d → %d." % [ships[id].name, ships[id].hull, sim.ships[id].hull, ships[id].guard, sim.ships[id].guard])
+	var triggers: Array = sim.history.filter(func(line): return line.begins_with("Card trigger:"))
+	lines.append("%d card trigger(s)." % triggers.size())
+	for event in sim.feedback_events:
+		if event.kind == "reaction_triggered":
+			lines.append(event.title + " triggers; next stance is hidden.")
+	if sim.expanded and not expanded:
+		lines.append("Unlocks five circle slots after the allied chain.")
+	if sim.outcome != "":
+		lines.append(sim.outcome.to_upper())
+	lines.append("Drawn cards and replacement stances remain unknown.")
+	return {"ok": true, "text": " ".join(lines)}
 
 
 func payment_total(payment: Array) -> int:
@@ -443,55 +622,6 @@ func _damage(ship_id: int, amount: int) -> void:
 	_record("damage", {"target": ship_id, "amount": lost, "blocked": blocked})
 
 
-func _swap(first: int, second: int) -> void:
-	var a: int = formation.find(first)
-	var b: int = formation.find(second)
-	formation[a] = second
-	formation[b] = first
-	history.append("%s swaps with %s." % [ships[first].name, ships[second].name])
-	_record("movement", {"first": first, "second": second})
-
-
-func _cleanup() -> void:
-	for ship_id in formation.duplicate():
-		if ships[ship_id].hull <= 0:
-			formation.erase(ship_id)
-			history.append(ships[ship_id].name + " is destroyed.")
-			_record("destroyed", {"target": ship_id, "title": ships[ship_id].name})
-	if formation.is_empty():
-		outcome = "defeat"
-	elif monster_hull <= 0:
-		outcome = "victory"
-	if outcome != "":
-		phase = "finished"
-
-
-func refresh(optional_discards: Array) -> String:
-	if phase != "refresh":
-		return "The hand can only refresh between rounds."
-	var seen: Array = []
-	for uid in optional_discards:
-		if not hand.has(uid) or seen.has(uid):
-			return "Choose distinct cards from hand to discard."
-		seen.append(uid)
-	feedback_events.clear()
-	for uid in optional_discards:
-		hand.erase(uid)
-		discard.append(uid)
-	if not optional_discards.is_empty():
-		_record("cards_discarded", {"uids": optional_discards.duplicate(), "reason": "Refresh discard"})
-	_draw(maxi(0, 7 - hand.size()))
-	intent_discard.append(intent_index)
-	if intent_deck.is_empty():
-		intent_deck = intent_discard.duplicate()
-		intent_discard.clear()
-		_shuffle(intent_deck)
-	intent_index = intent_deck.pop_front()
-	phase = "fleet"
-	history.append("Round %d: fleet phase." % round_number)
-	return ""
-
-
 func _draw(amount: int) -> void:
 	var drawn: Array = []
 	for index in amount:
@@ -514,12 +644,6 @@ func _shuffle(items: Array) -> void:
 		var value: Variant = items[index]
 		items[index] = items[other]
 		items[other] = value
-
-
-func board_snapshot() -> Dictionary:
-	return {"ships": ships.duplicate(true), "formation": formation.duplicate(),
-		"monster_hull": monster_hull, "reaction_index": reaction_index,
-		"hand_size": hand.size(), "deck_size": deck.size(), "discard_size": discard.size()}
 
 
 func _record(kind: String, details: Dictionary = {}) -> void:
@@ -554,3 +678,39 @@ func result_summary(reported_outcome: String = "") -> Dictionary:
 		"remaining_hull": remaining, "starting_hull": maximum,
 		"hull_percent": roundi(100.0 * remaining / maxi(1, maximum)),
 		"rounds": round_number, "is_test": result != outcome}
+
+
+func board_snapshot() -> Dictionary:
+	return {"ships": ships.duplicate(true), "formation": formation.duplicate(), "enemy_position": enemy_position,
+		"monster_hull": monster_hull, "stance_index": stance_index, "circle": circle.duplicate(), "expanded": expanded,
+		"play_order": play_order.duplicate(), "used_triggers": used_triggers.duplicate(true),
+		"hand_size": hand.size(), "deck_size": deck.size(), "discard_size": discard.size()}
+
+
+func contributing_cards(uid: int, slot: int, simulated_used: Dictionary = {}) -> Array:
+	if uid < 0:
+		return []
+	if slot < 0:
+		slot = first_slot()
+	if slot < 0:
+		return []
+	var result: Array = []
+	for adjacent in Geometry.neighbours(slot, expanded):
+		var source: int = circle[adjacent]
+		if source < 0:
+			continue
+		var contributes := false
+		for modifier in card(source).get("modifiers", []):
+			if (modifier.get("tag", "") == "" or card(uid).tag_ids.has(modifier.tag)) and condition_matches(modifier.condition, adjacent, uid, slot):
+				contributes = true
+		for rule in card(uid).get("on_play", []):
+			if int(rule.condition.get("min", 0)) > 0 and condition_matches(rule.condition, slot):
+				if rule.condition.get("tag", "") == "" or card(source).tag_ids.has(rule.condition.tag):
+					contributes = true
+		for rule in card(source).get("triggers", []):
+			var key := "%d/%s" % [source, rule.id]
+			if simulated_used.has(key) and not used_triggers.has(key):
+				contributes = true
+		if contributes:
+			result.append(source)
+	return result

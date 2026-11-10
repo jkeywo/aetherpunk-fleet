@@ -1,0 +1,514 @@
+{
+	"version": 2,
+	"ships": [
+		{
+			"id": "bastion",
+			"name": "Bastion",
+			"role": "BULWARK",
+			"hull": 28,
+			"color": "#d8b477",
+			"loadout": [
+				{
+					"card": "brace",
+					"count": 2
+				},
+				{
+					"card": "advance",
+					"count": 2
+				},
+				{
+					"card": "escort",
+					"count": 2
+				}
+			]
+		},
+		{
+			"id": "kestrel",
+			"name": "Kestrel",
+			"role": "GUNSHIP",
+			"hull": 20,
+			"color": "#79b9d0",
+			"loadout": [
+				{
+					"card": "broadside",
+					"count": 2
+				},
+				{
+					"card": "salvo",
+					"count": 2
+				},
+				{
+					"card": "strafe",
+					"count": 2
+				}
+			]
+		},
+		{
+			"id": "lamplighter",
+			"name": "Lamplighter",
+			"role": "TENDER",
+			"hull": 18,
+			"color": "#91c8ad",
+			"loadout": [
+				{
+					"card": "patch",
+					"count": 2
+				},
+				{
+					"card": "relay",
+					"count": 2
+				},
+				{
+					"card": "tow",
+					"count": 2
+				}
+			]
+		}
+	],
+	"cards": [
+		{
+			"id": "brace",
+			"name": "Brace for Impact",
+			"owner": "bastion",
+			"cost": 1,
+			"pays": 2,
+			"tags": [
+				"Guard"
+			],
+			"effects": [
+				{
+					"kind": "guard",
+					"target": "actor",
+					"amount": 8
+				}
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "advance",
+			"name": "Shield Advance",
+			"owner": "bastion",
+			"cost": 1,
+			"pays": 1,
+			"tags": [
+				"Attack",
+				"Movement"
+			],
+			"effects": [
+				{
+					"kind": "damage_monster",
+					"amount": 4
+				},
+				{
+					"kind": "swap_adjacent"
+				}
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "escort",
+			"name": "Escort Screen",
+			"owner": "bastion",
+			"cost": 1,
+			"pays": 1,
+			"tags": [
+				"Guard"
+			],
+			"effects": [
+				{
+					"kind": "guard",
+					"target": "ally",
+					"amount": 6,
+					"exclude_actor": true
+				}
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "broadside",
+			"name": "Broadside",
+			"owner": "kestrel",
+			"cost": 2,
+			"pays": 1,
+			"tags": [
+				"Attack"
+			],
+			"effects": [
+				{
+					"kind": "damage_monster",
+					"amount": 9
+				}
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "salvo",
+			"name": "Piercing Salvo",
+			"owner": "kestrel",
+			"cost": 3,
+			"pays": 2,
+			"tags": [
+				"Attack"
+			],
+			"effects": [
+				{
+					"kind": "damage_monster",
+					"amount": 14
+				}
+			],
+			"positions": [
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "strafe",
+			"name": "Strafing Pass",
+			"owner": "kestrel",
+			"cost": 0,
+			"pays": 1,
+			"tags": [
+				"Attack",
+				"Movement"
+			],
+			"effects": [
+				{
+					"kind": "damage_monster",
+					"amount": 3
+				},
+				{
+					"kind": "swap_adjacent"
+				}
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "patch",
+			"name": "Emergency Patch",
+			"owner": "lamplighter",
+			"cost": 1,
+			"pays": 2,
+			"tags": [
+				"Repair"
+			],
+			"effects": [
+				{
+					"kind": "repair",
+					"amount": 4
+				}
+			],
+			"positions": [
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "relay",
+			"name": "Signal Relay",
+			"owner": "lamplighter",
+			"cost": 0,
+			"pays": 1,
+			"tags": [
+				"Tactic"
+			],
+			"effects": [
+				{
+					"kind": "draw_discard",
+					"amount": 2,
+					"discard": 1
+				}
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "tow",
+			"name": "Towline Manoeuvre",
+			"owner": "lamplighter",
+			"cost": 1,
+			"pays": 1,
+			"tags": [
+				"Movement",
+				"Guard"
+			],
+			"effects": [
+				{
+					"kind": "swap_pair_guard",
+					"amount": 2
+				}
+			],
+			"positions": [
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		}
+	],
+	"leviathans": [
+		{
+			"id": "stormmaw",
+			"name": "Stormmaw",
+			"hull": 70,
+			"stances": [
+				{
+					"id": "stance_1",
+					"name": "Buffeting Wings / Rending Bite",
+					"reactions": [
+						{
+							"id": "wings",
+							"name": "Buffeting Wings",
+							"trigger": {
+								"kind": "tag",
+								"tag": "Movement"
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "actor",
+									"amount": 3
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "front",
+							"amount": 7
+						}
+					]
+				},
+				{
+					"id": "stance_2",
+					"name": "Violent Recoil / Forked Lightning",
+					"reactions": [
+						{
+							"id": "recoil",
+							"name": "Violent Recoil",
+							"trigger": {
+								"kind": "damage",
+								"threshold": 8
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "actor",
+									"amount": 4
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "ends",
+							"amount": 4
+						}
+					]
+				},
+				{
+					"id": "stance_3",
+					"name": "Predator’s Lunge / Storm Front",
+					"reactions": [
+						{
+							"id": "lunge",
+							"name": "Predator’s Lunge",
+							"trigger": {
+								"kind": "tag_position",
+								"tag": "Attack",
+								"positions": [
+									"front"
+								]
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "actor",
+									"amount": 4
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "all",
+							"amount": 3
+						},
+						{
+							"kind": "swap_ends",
+							"amount": 0
+						}
+					]
+				},
+				{
+					"id": "stance_4",
+					"name": "Aether Scent / Hunting Dive",
+					"reactions": [
+						{
+							"id": "scent",
+							"name": "Aether Scent",
+							"trigger": {
+								"kind": "healed",
+								"threshold": 1
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "repaired",
+									"amount": 3
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "rear",
+							"amount": 6
+						},
+						{
+							"kind": "rear_to_front"
+						}
+					]
+				},
+				{
+					"id": "stance_5",
+					"name": "Gathering Static / Rending Bite",
+					"reactions": [
+						{
+							"id": "static",
+							"name": "Gathering Static",
+							"trigger": {
+								"kind": "cost",
+								"threshold": 2
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "all",
+									"amount": 2
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "front",
+							"amount": 7
+						}
+					]
+				},
+				{
+					"id": "stance_6",
+					"name": "Tail Sweep / Forked Lightning",
+					"reactions": [
+						{
+							"id": "tail",
+							"name": "Tail Sweep",
+							"trigger": {
+								"kind": "tag",
+								"tag": "Guard"
+							},
+							"effects": [
+								{
+									"kind": "swap_ends",
+									"amount": 3
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "ends",
+							"amount": 4
+						}
+					]
+				}
+			],
+			"starting_stance": "stance_1"
+		}
+	],
+	"setup": {
+		"leviathan": "stormmaw",
+		"ships": [
+			"bastion",
+			"kestrel",
+			"lamplighter"
+		],
+		"fixed_hand": true,
+		"opening_hand": [
+			"advance",
+			"tow",
+			"escort",
+			"salvo",
+			"brace",
+			"broadside",
+			"patch"
+		],
+		"positions": [
+			"front",
+			"upper",
+			"rear"
+		],
+		"enemy_position": "front"
+	}
+}

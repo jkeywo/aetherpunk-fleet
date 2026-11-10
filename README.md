@@ -2,67 +2,81 @@
 
 Godot 4.7 / GDScript / Compatibility renderer. Open `project.godot` and press **F5**.
 
-## Content editor
+## Diamond battle
 
-Choose **Editor** from the main menu.
+The battle follows the supplied layout: allied diamond left, enemy diamond right, a magic circle above the fanned shared hand, and deck/discard piles in the lower corners. Front faces the opponent. Each side has **Front, Upper Middle, Lower Middle, Rear** positions. Three allied ships and one leviathan are supported; empty slots persist after movement and destruction.
 
-- **Leviathans:** edit maximum hull, named reactions and intents, starting behaviours, trigger conditions, and ordered effects.
-- **Ships:** edit name, role, hull, colour, and the number of each owned card contributed to the shared deck.
-- **Cards:** edit owner, cost, payment value, ranks, tags, and ordered effects.
-- Search each list; **New**, **Duplicate**, and **Delete** manage entries. Duplicating a ship also duplicates its cards and remaps its loadout.
-- The **Battle Setup** panel selects a leviathan and three distinct ordered ships. Choose a random seven-card opening or configure a fixed seven-card hand.
-- **Save All** validates the whole draft and replaces `data/content.json`. It does **not** create a Git commit. **Revert Unsaved Changes** restores the last successful save.
-- **Save & Test Battle** saves and launches the configured encounter. **Return to Editor** is available during that battle and on its result screens. Retry keeps the playtest return route.
-- Leaving the editor or closing the window with unsaved changes offers Save, Discard, and Cancel. Failed validation or file writes preserve the previous save.
+Select a card, choose an empty unlocked circle slot, click other hand cards as payment, and **Play Card**. Target and movement selectors appear where needed. Hover cards or occupied circle slots for complete rules. **Cancel** clears the draft. **Manoeuvre** costs one resource to move into an adjacent empty position or swap with its occupant.
 
-IDs are assigned automatically and survive renaming. Deleting referenced content is blocked with a list of loadouts, owners, or setup fields to change first. Moving a card to another owner requires updating its old loadout.
+The gear opens a pausing battle menu with Resume, Main Menu, and Return to Editor during playtests. History shows recent resolution messages. Input locks during animations; menu navigation safely cancels playback.
 
-The editor composes existing combat primitives rather than scripts. Card effects include monster damage, actor/chosen-ship guard, repair, adjacent swaps, pair swaps with guard, and draw/discard. Monster effects include ship damage with target rules, end swaps with a lone-ship fallback, and moving the rear survivor forward. A card shares one chosen ship and one movement choice across its effects. Rules text is generated from these definitions.
+### Magic circle
 
-The default saved content reproduces the GDD matchup: Bastion (28 hull), Kestrel (20), and Lamplighter (18) versus Stormmaw (70), an 18-card deck, and the original fixed opening. Newly edited loadouts can have different sizes, with at least seven cards across the fleet.
+The first four slots are North, East, South, and West, connected in a diamond. Filling them unlocks Centre and four outer corners. The fourth card and its complete allied chain resolve using the original graph; expansion happens afterward, before the monster reaction.
 
-## Battle
+Expansion keeps the original links. Centre touches all four original slots. Each corner touches its two neighbouring original points. Original slots consequently have five neighbours after expansion. Any empty unlocked slot can receive a card, with a maximum of nine plays resident at once. A full circle still permits manoeuvres and ending the phase.
 
-1. Select an action card, then click other cards to mark or unmark payment.
-2. Choose any required ship and movement targets.
-3. Read the preview and press **Play Card**. **Cancel** clears the draft without spending cards.
-4. Effects resolve in order, then the current qualifying reaction resolves once and is replaced.
-5. Draw/discard effects pause for the requested discards, then continue remaining effects before checking the reaction.
-6. **Basic Manoeuvre** costs one resource to swap its chosen actor with a neighbour.
-7. **End Fleet Phase** resolves the visible intent and expires guard. Optionally mark hand discards, then **Refill Hand** to draw back to seven.
+Played cards stay in the circle through the enemy phase. They are discarded at the next player-turn start, when the circle contracts and trigger usage resets. Payment cards are discarded after action resolution. Circle cleanup and payment never fire card triggers. All physical card instances remain conserved across hand, deck, discard, circle, and held payment.
 
-Payment cards never trigger reactions; excess payment is lost. Guard absorbs damage before hull. Destroyed ships leave the formation, but their cards remain usable as payment. A lethal attack wins before the monster reacts. Intent damage escalates by one per round beyond round three.
+### Conditions, modifiers, and chains
 
-Cards animate into play and discard. Floating hull/guard changes, animated hull bars, formation movement, and reaction announcements follow ordered public feedback events. Combat inputs lock during playback; navigation can safely cancel it. Previews never draw cards, consume RNG, or reveal replacements early.
+Cards can have:
 
-Victory and defeat reports show each ship's status, surviving hull against the selected fleet's starting hull, hull percentage, and rounds taken. **Retry Battle** creates a fresh battle from saved content. Debug outcomes are marked as test results.
+- **Conditional on-play effects** enabled by counts of adjacent card tags.
+- **Ongoing neighbour modifiers** adding damage, guard, or healing, or reducing the cost of a neighbouring incoming card. Reductions floor cost at zero; monster reactions that check printed cost use the original value.
+- **Triggered effects** watching neighbouring card plays or card-caused damage, guard, healing, draws, mandatory discards, and movement.
 
-## Layout
+Resolve the played card first, then process triggered effects in FIFO order, with ties broken by card play order and rule order. Effects can trigger other eligible cards. Each rule on each physical card instance can fire **once per turn**, marked used when queued to prevent loops. Continuous modifiers remain active after triggers are used and do not emit events.
 
-- `data/content.json`: authoritative version-1 content and selected battle setup.
-- `scripts/content_catalog.gd`: schema validation, IO, generated text, and battle compilation.
-- `scripts/content_store.gd`: saved content and editor navigation context.
-- `scripts/content_editor.gd`: native Godot editor widgets and draft management.
-- `scripts/battle_state.gd`: content-driven rules and detached battle snapshots.
-- `scripts/battle.gd` and `scripts/combat_feedback.gd`: battle UI and animations.
-- `tests/fixtures/gdd_content.json`: immutable GDD fixture for regression checks.
+Triggered effects have automatic source/event-actor targets and no new movement prompts. Draw/discard effects pause the queue for player choices, then resume without resetting usage. Destroyed ships cannot receive guard or repairs; stored in-circle magic remains until cleanup. Previews simulate public effects without consuming real RNG, drawing hidden card identities, or revealing the next stance.
 
-The UI targets 1280 × 800, with scrolling for smaller windows. No external assets or libraries are required.
+### Enemy stances
 
-## Validate
+Each leviathan has a small shuffled stance deck. Only the current stance is visible. It specifies ordered reaction rules and an enemy-phase effect sequence.
 
-With a Godot console executable on PATH:
+After the full allied action and trigger chain, the first qualifying reaction resolves and immediately changes stance. The new stance cannot react to that same action. Ending the phase executes the current stance's activity, then changes stance again. Draw stances without replacement and reshuffle on exhaustion; a single-stance deck can repeat.
+
+Guard absorbs damage before hull and expires after enemy activity. Intent damage still gains one per round beyond round three. A lethal allied action wins before enemy retaliation.
+
+## Live content editor
+
+Use **Editor** on the main menu. Its tabs create, duplicate, edit, and delete leviathans, ships, and cards. Stable IDs survive renaming, and referenced entries cannot be deleted until their references are changed.
+
+The right inspector switches between:
+
+- **Preview:** shared in-game card/unit/stance widgets, updated directly from unsaved fields. Card previews offer a mini-circle, expanded layout, destination slot, and neighbouring tag controls. Invalid drafts remain visible with validation messages.
+- **Battle Setup:** choose the leviathan, three ships and their distinct positions, the enemy position, and a random or fixed seven-card opening hand.
+
+Leviathans edit named stances, their starting stance, reaction priority and conditions, and enemy-phase activity. Cards edit permitted acting positions, ordered base effects, conditional effects, modifiers, and once-per-turn trigger rules. Ships edit hull, colour, role, and variable card loadouts.
+
+**Save All** validates and writes `data/content.json`; it never creates a Git commit. **Revert Unsaved Changes** restores saved definitions. **Save & Test Battle** launches the saved setup, with Return to Editor in the gear menu and result screen. Editor selection and preview context are remembered in memory.
+
+Leaving the editor or closing the window with a dirty draft offers Save, Discard, and Cancel. Invalid content and failed writes preserve the previous save.
+
+## Content versions
+
+Version 2 defines explicit positions, stances, adjacency conditions, modifiers, and trigger rules. Existing version-1 content is migrated **in memory** and remains unchanged on disk until an explicit Save.
+
+Ranks map as 1 → Front, 2 → both middle positions, 3 → Rear. Existing reaction and intent lists are cycled from their selected starting entries into enough stances to preserve every behaviour. Root ship, card, and leviathan IDs are retained.
+
+`tests/fixtures/gdd_content.json` remains the immutable version-1 fixture. `tests/fixtures/diamond_content.json` freezes the migrated version-2 baseline. Runtime designers can edit project content without changing regression expectations.
+
+Main modules: `content_catalog.gd` (migration/validation/text), `battle_state.gd` (rules), `battle_geometry.gd` (graphs), `battle.gd` (layout/input), `combat_feedback.gd` (animation), and shared `card_face.gd`, `unit_view.gd`, `formation_view.gd`, `circle_view.gd`, and `stance_view.gd`.
+
+## Verification
+
+With the Godot console executable on PATH:
 
 ```powershell
 godot --headless --path . --editor --import --quit
 godot --headless --path . --script res://tests/battle_rules.gd
+godot --headless --path . --script res://tests/content_rules.gd
 godot --headless --path . --script res://tests/smoke_flow.gd
 godot --headless --path . --script res://tests/combat_feedback.gd
 godot --headless --path . --script res://tests/results_flow.gd
-godot --headless --path . --script res://tests/content_rules.gd
 godot --headless --path . --script res://tests/editor_flow.gd
 ```
 
-Regressions explicitly load the immutable GDD fixture rather than depending on designer edits. Persistence and editor tests write isolated temporary user-data files, never the project content. They cover invalid data, failed saves, reference checks, new entities, compound effects, paused discards, single-entry behaviour decks, fixed/random hands, real edited playtests, return routes, dirty dialogs, and clean retries.
+Suites cover unchanged payment, guard, repair, conservation, lethal-hit and results rules plus new positions, expansion timing, modifier costs, finite chains, paused discards, independent copies, stance transitions, migration, safe saving, live previews, real playtests, navigation, and animation cancellation. Editor/persistence tests use temporary user-data files and never save project content.
 
-Campaign progression, persistent expeditions, custom effect scripting, and artwork authoring remain future work. No remote or export target is configured. Godot's generated `.godot/` cache and export `build/` directory are ignored by Git.
+The UI targets 1280 × 800; smaller windows scroll. Multiple enemies, variable fleet sizes, custom scripts, facing/cover bonuses, and campaign progression remain outside this version. No remote or export target is configured.

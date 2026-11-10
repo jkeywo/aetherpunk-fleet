@@ -1,134 +1,230 @@
 extends Control
-
 signal resolution_finished
-## Presentation and action drafting; battle_state.gd owns validation and resolution.
-
-const Catalog = preload("res://scripts/content_catalog.gd")
 const State = preload("res://scripts/battle_state.gd")
+const Catalog = preload("res://scripts/content_catalog.gd")
+const Geometry = preload("res://scripts/battle_geometry.gd")
+const CardFace = preload("res://scripts/card_face.gd")
+const Formation = preload("res://scripts/formation_view.gd")
+const Circle = preload("res://scripts/circle_view.gd")
+const Fan = preload("res://scripts/hand_fan.gd")
+const StancePanel = preload("res://scripts/stance_view.gd")
 const Feedback = preload("res://scripts/combat_feedback.gd")
-const ShipScene = preload("res://scenes/components/ship_panel.tscn")
-const CardScene = preload("res://scenes/components/hand_card.tscn")
-
 var state
-var movement_target: int = -1
-var selected_uid: int = -2
+var busy := false
+var selected_uid := -2
+var selected_slot := -1
 var payment: Array = []
-var target: int = -1
 var refresh_discards: Array = []
-var busy: bool = false
+var target := -1
+var movement_target := -1
+var canvas: Control
+var allies: Control
+var enemies: Control
+var circle_view: Control
+var hand_view: Control
+var stance_panel: Control
 var feedback: CanvasLayer
+var menu: PopupMenu
+var history_dialog: AcceptDialog
+var header: HBoxContainer
+var actions: HBoxContainer
 
 
 func _ready() -> void:
 	state = State.new(-1, ContentStore.snapshot())
 	BattleSession.clear_result()
 	theme = _make_theme()
+	_build_ui()
 	feedback = Feedback.new()
 	add_child(feedback)
-	%MenuButton.pressed.connect(_navigate.bind("res://scenes/main_menu.tscn"))
-	%WinButton.pressed.connect(_navigate.bind("res://scenes/victory.tscn"))
-	%LossButton.pressed.connect(_navigate.bind("res://scenes/defeat.tscn"))
-	%PlayButton.pressed.connect(_commit)
-	%CancelButton.pressed.connect(_cancel)
-	%ManoeuvreButton.pressed.connect(_select.bind(-1))
-	%EndPhaseButton.pressed.connect(_end_phase)
-	%TargetChoice.item_selected.connect(_target_changed)
-	%MovementChoice.item_selected.connect(_movement_changed)
-	%ReturnToEditor.visible = BattleSession.editor_playtest
-	%ReturnToEditor.pressed.connect(_navigate.bind("res://scenes/editor.tscn"))
-	if not state.init_error.is_empty():
-		%Inspection.text = "Cannot start battle: " + state.init_error
-		%Status.text = "Open the Editor to repair the saved content."
-		for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %WinButton, %LossButton]:
-			button.disabled = true
+	if state.init_error != "":
+		%Inspection.text = state.init_error
 		return
 	_render()
 
 
-func _clear_children(container: Node) -> void:
-	for child in container.get_children():
-		container.remove_child(child)
-		child.queue_free()
+func _named(node: Node, id: String, parent: Node) -> Node:
+	node.name = id
+	parent.add_child(node)
+	node.owner = self
+	node.unique_name_in_owner = true
+	return node
+
+
+func _button(parent: Node, id: String, text: String, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	_named(button, id, parent)
+	button.pressed.connect(callback)
+	return button
+
+
+func _label(parent: Node, id: String, text: String, font: int = 15) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", font)
+	_named(label, id, parent)
+	return label
+
+
+func _build_ui() -> void:
+	var background := ColorRect.new()
+	background.color = Color("#07121b")
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(background)
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(scroll)
+	canvas = Control.new()
+	canvas.custom_minimum_size = Vector2(1100, 800)
+	canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(canvas)
+	header = HBoxContainer.new()
+	header.add_theme_constant_override("separation", 14)
+	canvas.add_child(header)
+	_button(header, "GearButton", "⚙", func(): menu.popup(Rect2i(Vector2i(%GearButton.global_position + Vector2(0, 40)), Vector2i(220, 0))))
+	var title := _label(header, "Title", "AETHERPUNK / FLEET COMMAND", 20)
+	title.modulate = Color("#e8bd77")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_label(header, "Round", "")
+	_label(canvas, "AlliedTitle", "ALLIED FLEET", 13).modulate = Color("#91c8ad")
+	_label(canvas, "CircleTitle", "MAGIC CIRCLE", 13).modulate = Color("#d6adee")
+	_label(canvas, "EnemyTitle", "ENEMY FORMATION", 13).modulate = Color("#ffb0a0")
+	allies = _named(Formation.new(), "Allies", canvas)
+	enemies = _named(Formation.new(), "Enemies", canvas)
+	circle_view = _named(Circle.new(), "Circle", canvas)
+	circle_view.slot_selected.connect(_circle_selected)
+	stance_panel = _named(StancePanel.new(), "Stance", canvas)
+	hand_view = _named(Fan.new(), "Hand", canvas)
+	_button(canvas, "DeckPile", "Deck", func(): %Inspection.text = "Remaining draw pile: %d cards. Order is hidden." % state.deck.size())
+	_button(canvas, "DiscardPile", "Discard", func(): %Inspection.text = "Discard: %d cards. Played cards stay in the circle until next turn." % state.discard.size())
+	actions = HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 7)
+	canvas.add_child(actions)
+	var choice := OptionButton.new()
+	choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choice.fit_to_longest_item = false
+	_named(choice, "TargetChoice", actions)
+	choice.item_selected.connect(func(index): target = choice.get_item_id(index); _update_controls())
+	var movement := OptionButton.new()
+	movement.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	movement.fit_to_longest_item = false
+	_named(movement, "MovementChoice", actions)
+	movement.item_selected.connect(func(index): movement_target = movement.get_item_id(index); _update_controls())
+	_button(actions, "PlayButton", "Play Card", _commit)
+	_button(actions, "CancelButton", "Cancel", _cancel)
+	_button(actions, "ManoeuvreButton", "Manoeuvre", _select.bind(-1))
+	_button(actions, "EndPhaseButton", "End Fleet Phase", _end_phase)
+	_button(actions, "HistoryButton", "History", _show_history)
+	_button(actions, "WinButton", "Test Win", _navigate.bind("res://scenes/victory.tscn"))
+	_button(actions, "LossButton", "Test Loss", _navigate.bind("res://scenes/defeat.tscn"))
+	var inspection := _label(canvas, "Inspection", "", 14)
+	inspection.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inspection.modulate = Color("#e8bd77")
+	_label(canvas, "Status", "", 12).modulate = Color("#80a7b7")
+	menu = PopupMenu.new()
+	menu.process_mode = Node.PROCESS_MODE_ALWAYS
+	menu.add_item("Resume", 0)
+	if BattleSession.editor_playtest:
+		menu.add_item("Return to Editor", 1)
+	menu.add_item("Main Menu", 2)
+	add_child(menu)
+	menu.about_to_popup.connect(func(): get_tree().paused = true)
+	menu.popup_hide.connect(func(): get_tree().paused = false)
+	menu.id_pressed.connect(func(id):
+		get_tree().paused = false
+		if id == 1:
+			_navigate("res://scenes/editor.tscn")
+		elif id == 2:
+			_navigate("res://scenes/main_menu.tscn"))
+	history_dialog = AcceptDialog.new()
+	history_dialog.title = "Action history"
+	history_dialog.min_size = Vector2i(780, 460)
+	add_child(history_dialog)
+	canvas.resized.connect(_layout)
+	_layout()
+
+
+func _layout() -> void:
+	var w: float = canvas.size.x
+	header.position = Vector2(16, 10)
+	header.size = Vector2(w - 32, 38)
+	%AlliedTitle.position = Vector2(20, 65)
+	%EnemyTitle.position = Vector2(w - 355, 65)
+	%CircleTitle.position = Vector2(w / 2 - 75, 58)
+	allies.position = Vector2(8, 110)
+	allies.size = Vector2(360, 255)
+	enemies.position = Vector2(w - 368, 110)
+	enemies.size = Vector2(360, 255)
+	circle_view.position = Vector2(w / 2 - 152, 83)
+	circle_view.size = Vector2(304, 286)
+	stance_panel.position = Vector2(w - 378, 386)
+	stance_panel.size = Vector2(360, 82)
+	hand_view.position = Vector2(118, 477)
+	hand_view.size = Vector2(w - 236, 220)
+	%DeckPile.position = Vector2(16, 514)
+	%DeckPile.size = Vector2(92, 158)
+	%DiscardPile.position = Vector2(w - 108, 514)
+	%DiscardPile.size = Vector2(92, 158)
+	actions.position = Vector2(16, 710)
+	actions.size = Vector2(w - 32, 38)
+	%Inspection.position = Vector2(18, 752)
+	%Inspection.size = Vector2(w - 36, 42)
+	%Status.position = Vector2(20, 402)
+	%Status.size = Vector2(w - 430, 62)
 
 
 func _render() -> void:
 	_show_board(state.board_snapshot())
-	_clear_children(%Hand)
-	var intent: Dictionary = state.definitions.intents[state.intent_index]
-	%IntentName.text = intent.name
-	%IntentTrigger.text = intent.trigger
-	%IntentEffect.text = intent.effect
-	var escalation: int = maxi(0, state.round_number - 3)
-	if escalation > 0:
-		%IntentEffect.text += "\nEscalation: +%d to each damage instance." % escalation
-	%Round.text = "ROUND %02d  /  %s" % [state.round_number, state.phase.to_upper()]
-	%Escalation.text = "Escalation +%d\nBegins in round 4" % maxi(0, state.round_number - 3)
-	_show_piles(state.board_snapshot())
+	for child in hand_view.get_children():
+		hand_view.remove_child(child)
+		child.queue_free()
 	for uid in state.hand:
-		_add_card(uid)
-	%History.text = "\n".join(state.history)
-	%History.scroll_to_line(maxi(0, state.history.size() - 1))
+		var face := CardFace.new()
+		face.name = "Card%d" % uid
+		face.set_meta("uid", uid)
+		hand_view.add_child(face)
+		face.configure(state.card(uid), state.ships[state.card(uid).owner])
+		face.pressed.connect(_choose_card.bind(uid))
+		face.mouse_entered.connect(func(): hand_view.hover(face, true))
+		face.mouse_exited.connect(func(): hand_view.hover(face, false))
+	hand_view.arrange()
+	%Round.text = "ROUND %02d / %s" % [state.round_number, state.phase.to_upper()]
 	_update_controls()
 	if state.outcome != "":
 		_navigate.call_deferred("res://scenes/%s.tscn" % state.outcome)
 
 
 func _show_piles(snapshot: Dictionary) -> void:
-	%HandCount.text = "SHARED HAND  ·  %d CARDS" % snapshot.hand_size
-	%PileCounts.text = "DECK  %d    /    DISCARD  %d" % [snapshot.deck_size, snapshot.discard_size]
+	%DeckPile.text = "DECK\n%d" % snapshot.deck_size
+	%DiscardPile.text = "DISCARD\n%d" % snapshot.discard_size
 
 
 func _show_board(snapshot: Dictionary) -> void:
-	_clear_children(%Formation)
-	%MonsterName.text = state.definitions.monster.name.to_upper()
-	%MonsterHull.text = "HULL  %d / %d" % [snapshot.monster_hull, state.definitions.monster.hull]
-	%MonsterBar.max_value = state.definitions.monster.hull
-	%MonsterBar.value = snapshot.monster_hull
-	var reaction: Dictionary = state.definitions.reactions[snapshot.reaction_index]
-	%ReactionName.text = reaction.name
-	%ReactionTrigger.text = reaction.trigger
-	%ReactionEffect.text = reaction.effect
-	for index in snapshot.formation.size():
-		var ship_id: int = snapshot.formation[index]
-		_add_ship(ship_id, index, snapshot.ships[ship_id])
+	allies.configure(snapshot, false)
+	enemies.configure(snapshot, true, state.definitions.monster)
+	var cards: Dictionary = {}
+	for uid in snapshot.circle:
+		if uid >= 0:
+			cards[uid] = state.card(uid)
+	circle_view.configure(snapshot.circle, snapshot.expanded, cards, snapshot.used_triggers, selected_slot)
+	stance_panel.configure(state.definitions.stances[snapshot.stance_index])
+	%CircleTitle.text = "MAGIC CIRCLE / %d" % (9 if snapshot.expanded else 4)
+	_show_piles(snapshot)
 
 
-func _add_ship(ship_id: int, rank: int, ship: Dictionary) -> void:
-	var panel := ShipScene.instantiate()
-	panel.name = ship.name.validate_node_name()
-	panel.set_meta("ship_index", ship_id)
-	%Formation.add_child(panel)
-	panel.get_node("%Rank").text = ["01  /  FRONT", "02  /  CENTRE", "03  /  REAR"][rank]
-	panel.get_node("%ShipName").text = ship.name
-	panel.get_node("%Role").text = ship.role
-	panel.get_node("%Role").modulate = Color(ship.color)
-	panel.get_node("%Hull").text = "HULL  %d / %d" % [ship.hull, ship.max_hull]
-	panel.get_node("%HullBar").max_value = ship.max_hull
-	panel.get_node("%HullBar").value = ship.hull
-	panel.get_node("Row/Stats/HullRow/Guard").text = "GUARD %d" % ship.guard
-	panel.get_node("%ShipArt").accent = Color(ship.color)
-
-
-func _add_card(uid: int) -> void:
-	var info: Dictionary = state.card(uid)
-	var ship: Dictionary = state.ships[info.owner]
-	var button := CardScene.instantiate() as Button
-	button.name = "Card%d" % uid
-	button.set_meta("uid", uid)
-	%Hand.add_child(button)
-	button.get_node("%Owner").text = ship.name.to_upper()
-	button.get_node("%Owner").modulate = Color(ship.color)
-	button.get_node("%CardName").text = info.name
-	button.get_node("%Cost").text = "COST %d" % info.cost
-	button.get_node("%Payment").text = "PAYS %d" % info.pays
-	button.get_node("%Ranks").text = "RANKS  " + info.ranks
-	button.get_node("%Tags").text = info.tags
-	button.get_node("%Effect").text = info.effect
-	button.tooltip_text = "%s — %s\nCost %d | Pays %d | Ranks %s\n%s\n%s" % [
-		info.name, ship.name, info.cost, info.pays, info.ranks, info.tags, info.effect]
-	if ship.hull <= 0:
-		button.get_node("%Owner").text += " / LOST"
-	button.pressed.connect(_choose_card.bind(uid))
+func _circle_selected(slot: int) -> void:
+	if busy or state.phase != "fleet":
+		return
+	if state.circle[slot] >= 0:
+		var info: Dictionary = state.card(state.circle[slot])
+		%Inspection.text = info.name + ": " + info.effect
+		return
+	if selected_uid >= 0 and (slot < 4 or state.expanded):
+		selected_slot = slot
+		_fill_choices()
+		_update_controls()
 
 
 func _choose_card(uid: int) -> void:
@@ -136,10 +232,8 @@ func _choose_card(uid: int) -> void:
 		return
 	if state.phase == "discard":
 		var error: String = state.discard_for_relay(uid)
-		if error != "":
-			%Inspection.text = error
-			return
-		await _present_resolution()
+		if error == "":
+			await _present_resolution()
 		return
 	if state.phase == "refresh":
 		_toggle(refresh_discards, uid)
@@ -165,46 +259,26 @@ func _select(uid: int) -> void:
 	if busy or state.phase != "fleet":
 		return
 	selected_uid = uid
+	selected_slot = state.first_slot() if uid >= 0 else -1
 	payment.clear()
+	_fill_choices()
+	_update_controls()
+
+
+func _fill_choices() -> void:
 	target = -1
 	movement_target = -1
-	%TargetChoice.clear()
-	%MovementChoice.clear()
-	for option in state.choices(uid):
-		%TargetChoice.add_item(option.label, option.value)
-	if %TargetChoice.item_count > 0:
-		%TargetChoice.select(0)
-		target = %TargetChoice.get_item_id(0)
-	for option in state.choices(uid, "movement"):
-		%MovementChoice.add_item(option.label, option.value)
-	if %MovementChoice.item_count > 0:
-		%MovementChoice.select(0)
-		movement_target = %MovementChoice.get_item_id(0)
-	_update_controls()
-
-
-func _movement_changed(index: int) -> void:
-	if busy:
-		return
-	movement_target = %MovementChoice.get_item_id(index)
-	_update_controls()
-
-
-func _target_changed(index: int) -> void:
-	if busy:
-		return
-	target = %TargetChoice.get_item_id(index)
-	_update_controls()
-
-
-func _clear_draft() -> void:
-	selected_uid = -2
-	payment.clear()
-	target = -1
-	refresh_discards.clear()
-	movement_target = -1
-	%TargetChoice.clear()
-	%MovementChoice.clear()
+	for pair in [[%TargetChoice, "primary"], [%MovementChoice, "movement"]]:
+		var control: OptionButton = pair[0]
+		control.clear()
+		for option in state.choices(selected_uid, pair[1], selected_slot):
+			control.add_item(option.label, option.value)
+		if control.item_count > 0:
+			control.select(0)
+			if pair[1] == "primary":
+				target = control.get_item_id(0)
+			else:
+				movement_target = control.get_item_id(0)
 
 
 func _cancel() -> void:
@@ -214,14 +288,27 @@ func _cancel() -> void:
 	_update_controls()
 
 
+func _clear_draft() -> void:
+	selected_uid = -2
+	selected_slot = -1
+	payment.clear()
+	refresh_discards.clear()
+	target = -1
+	movement_target = -1
+	%TargetChoice.clear()
+	%MovementChoice.clear()
+
+
 func _commit() -> void:
-	if busy or (state.phase != "refresh" and selected_uid == -2):
+	if busy:
 		return
 	var error := ""
 	if state.phase == "refresh":
 		error = state.refresh(refresh_discards)
 	elif selected_uid != -2:
-		error = state.play(selected_uid, payment, target, movement_target)
+		error = state.play(selected_uid, payment, target, movement_target, selected_slot)
+	else:
+		return
 	if error != "":
 		%Inspection.text = error
 		return
@@ -241,77 +328,70 @@ func _end_phase() -> void:
 func _present_resolution() -> void:
 	busy = true
 	_update_controls()
-	%Inspection.text = "Resolving combat…"
-	%Status.text = "Combat feedback — actions locked until resolution finishes."
 	await feedback.play(state.feedback_events.duplicate(true), self)
-	_clear_draft()
 	busy = false
+	_clear_draft()
 	_render()
 	resolution_finished.emit()
 
 
 func _update_controls() -> void:
-	if busy:
-		for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
-			button.disabled = true
-		for button in %Hand.get_children():
-			button.disabled = true
-		return
-	%TargetChoice.disabled = false
-	%MovementChoice.disabled = false
-	%WinButton.disabled = false
-	%LossButton.disabled = false
-	for button in %Hand.get_children():
+	var contributing: Array = []
+	for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
+		button.disabled = busy
+	for button in hand_view.get_children():
 		var uid: int = button.get_meta("uid")
-		var is_action := uid == selected_uid
-		var marked := payment.has(uid) or refresh_discards.has(uid)
-		button.set_pressed_no_signal(is_action or marked)
-		button.modulate = Color("#a9e3cb") if marked else Color.WHITE
-		button.get_node("%Cost").text = ("PLAY %d" if is_action else "COST %d") % state.card(uid).cost
-		button.get_node("%Payment").text = ("PAY %d" if payment.has(uid) else "PAYS %d") % state.card(uid).pays
-		if state.phase == "refresh" and marked:
-			button.get_node("%Payment").text = "DROP"
+		button.disabled = busy
+		button.set_pressed_no_signal(uid == selected_uid or payment.has(uid) or refresh_discards.has(uid))
+		button.modulate = Color("#a9e3cb") if payment.has(uid) or refresh_discards.has(uid) else Color.WHITE
+	hand_view.selected_uid = selected_uid
+	hand_view.arrange()
 	%TargetChoice.visible = selected_uid != -2 and %TargetChoice.item_count > 0
 	%MovementChoice.visible = selected_uid != -2 and %MovementChoice.item_count > 0
-	%CancelButton.disabled = selected_uid == -2 and refresh_discards.is_empty()
-	%ManoeuvreButton.disabled = state.phase != "fleet" or state.formation.size() < 2
-	%EndPhaseButton.disabled = state.phase != "fleet"
+	if busy:
+		%Inspection.text = "Resolving action and chained effects…"
+		return
 	%PlayButton.disabled = true
 	%PlayButton.text = "Play Card"
+	%CancelButton.disabled = selected_uid == -2 and refresh_discards.is_empty()
+	%EndPhaseButton.disabled = state.phase != "fleet"
+	%ManoeuvreButton.disabled = state.phase != "fleet"
 	if state.phase == "discard":
-		%Inspection.text = "%s: choose %d more card(s) to discard before continuing." % [state.pending.title, state.pending.discard_remaining]
-		%Status.text = "Action in progress: choose one discard."
+		%Inspection.text = "%s: discard %d more card(s)." % [state.pending.title, state.pending.discard_remaining]
 	elif state.phase == "refresh":
 		%PlayButton.disabled = false
 		%PlayButton.text = "Refill Hand"
-		%Inspection.text = "NEW ROUND: optionally click cards to discard, then Refill Hand. Keeping %d; discarding %d." % [
-			state.hand.size() - refresh_discards.size(), refresh_discards.size()]
-		%Status.text = "Keep cards you want; refill to seven."
+		%Inspection.text = "New player turn: circle cleared. Select optional hand discards, then refill to seven."
 	elif selected_uid != -2:
-		var result: Dictionary = state.preview(selected_uid, payment, target, movement_target)
+		var result: Dictionary = state.preview(selected_uid, payment, target, movement_target, selected_slot)
 		%PlayButton.disabled = not result.ok
-		%PlayButton.text = "Manoeuvre" if selected_uid == -1 else "Play Card"
 		%Inspection.text = result.text
-		var title: String = "Basic manoeuvre" if selected_uid == -1 else state.card(selected_uid).name
-		var cost: int = 1 if selected_uid == -1 else state.card(selected_uid).cost
-		%Status.text = "%s  /  Payment %d of %d" % [title, state.payment_total(payment), cost]
+		contributing = result.get("contributors", [])
+		%PlayButton.text = "Manoeuvre" if selected_uid < 0 else "Play Card"
 	else:
-		%Inspection.text = "Select an action card, then click other cards to pay. Choose a target if needed, then Play Card. Cancel to change action."
-		%Status.text = "Fleet phase — choose an action or end the phase."
+		%Inspection.text = "Select an action card, choose its circle slot, and select other cards as payment."
+	%Status.text = "Hand %d / In circle %d\nNext stance hidden. Triggers fire once per card instance per turn." % [state.hand.size(), state.play_order.size()]
+	var cards: Dictionary = {}
+	for uid in state.circle:
+		if uid >= 0:
+			cards[uid] = state.card(uid)
+	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, selected_slot, contributing)
+
+
+func _show_history() -> void:
+	history_dialog.dialog_text = "\n".join(state.history.slice(maxi(0, state.history.size() - 30)))
+	history_dialog.popup_centered()
 
 
 func _navigate(destination: String) -> void:
-	# Menu remains an immediate escape while feedback is playing.
 	if busy and destination not in ["res://scenes/main_menu.tscn", "res://scenes/editor.tscn"]:
 		return
+	get_tree().paused = false
 	if destination in ["res://scenes/victory.tscn", "res://scenes/defeat.tscn"]:
-		var result: String = destination.get_file().get_basename()
-		BattleSession.record_result(state.result_summary(result))
+		BattleSession.record_result(state.result_summary(destination.get_file().get_basename()))
 	if destination in ["res://scenes/main_menu.tscn", "res://scenes/editor.tscn"]:
 		BattleSession.editor_playtest = false
-	var error := get_tree().change_scene_to_file(destination)
-	if error != OK:
-		push_error("Unable to open %s: %s" % [destination, error_string(error)])
+	get_tree().change_scene_to_file(destination)
 
 
 func _make_theme() -> Theme:
