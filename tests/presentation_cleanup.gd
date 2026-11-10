@@ -30,7 +30,7 @@ func _run() -> void:
 	var prep=current_scene
 	expect(prep.controls.size()==3 and prep.controls.has("level_0") and not prep.controls.has("ship_0") and not prep.controls.has("captain_0") and not prep.controls.has("position_0"),"Redundant assignment menus remain.")
 	expect(not prep.inspector.is_visible_in_tree() and not prep.deck_preview.is_visible_in_tree(),"Details or card row still visible on main preparation screen.")
-	expect(prep.ship_bank.get_children().any(func(child):return child.text=="Compare Airships") and prep.captain_bank.get_children().any(func(child):return child.text=="Compare Captains"),"Comparison buttons are not beside drag sources.")
+	expect(prep.ship_bank.get_parent().find_children("*","Button",true,false).any(func(child):return child.text=="Compare Airships") and prep.captain_bank.get_parent().find_children("*","Button",true,false).any(func(child):return child.text=="Compare Captains"),"Comparison buttons are not beside drag sources.")
 	var info=prep.formation.target_widget(1).get_children().filter(func(child):return child.get_meta("ship_info",-1)==1)[0]
 	var info_point: Vector2=info.get_global_transform_with_canvas()*(info.size/2)
 	await mouse(info_point,true);await mouse(info_point,false);await flush()

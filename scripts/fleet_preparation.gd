@@ -5,6 +5,7 @@ const State = preload("res://scripts/battle_state.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const CardFace = preload("res://scripts/card_face.gd")
 const Formation = preload("res://scripts/formation_view.gd")
+const Slot = preload("res://scripts/preparation_slot.gd")
 const Ui = preload("res://scripts/ui_theme.gd")
 var source: Dictionary = {}
 var draft: Dictionary = {}
@@ -19,11 +20,8 @@ var inspector: VBoxContainer
 var ship_bank: HFlowContainer
 var captain_bank: HFlowContainer
 var status: Label
-var opening: CheckBox
-var opening_note: Label
 var launch_button: Button
 var formation: Control
-var encounter: Label
 var fleet_scroll: ScrollContainer
 var deck_preview: VBoxContainer
 var deck_cards: HBoxContainer
@@ -38,6 +36,9 @@ var deck_summary: Label
 var preparation_tabs: TabContainer
 var fleet_deck_body: VBoxContainer
 var fleet_deck_summary: Label
+var captain_info_dialog: AcceptDialog
+var unassign_ship_slot: Control
+var unassign_captain_slot: Control
 var ship_info_dialog: AcceptDialog
 var content_scroll: ScrollContainer
 
@@ -91,7 +92,11 @@ func _build() -> void:
 	outer.add_child(header)
 	_label(header,"FLEET PREPARATION",26).modulate = Color("#e8bd77")
 	_button(header,"Reset to Saved Fleet",_reset)
-	_button(header,"Main Menu",_back)
+	var back := _button(header,"Back",_back)
+	back.name = "BackButton"
+	var arrow_image := Image.new()
+	arrow_image.load_svg_from_string('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M16 6L8 14l8 8M8 14h14" fill="none" stroke="#fff2d5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+	back.icon = ImageTexture.create_from_image(arrow_image)
 	_label(outer,"Drag ships between positions and captains onto ships. Click a ship’s i button for its details, levels and cards.",14).modulate = Color("#91b9c6")
 	preparation_tabs = TabContainer.new()
 	preparation_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -113,16 +118,28 @@ func _build() -> void:
 	formation = Formation.new()
 	formation.large_cards = true
 	formation.custom_minimum_size = Vector2(550,420)
+	formation.large_unit_height = 210.0
 	left.add_child(formation)
 	formation.position_selected.connect(_select_position)
+	var roster_rows:=HBoxContainer.new()
+	roster_rows.add_theme_constant_override("separation",18)
+	left.add_child(roster_rows)
+	var ship_group:=VBoxContainer.new()
+	ship_group.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	roster_rows.add_child(ship_group)
+	var captain_group:=VBoxContainer.new()
+	captain_group.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	roster_rows.add_child(captain_group)
 	var ships_header:=HBoxContainer.new()
-	left.add_child(ships_header)
-	_label(ships_header,"SHIPS / drag to move or replace",12).modulate=Color("#e8bd77")
+	ship_group.add_child(ships_header)
+	_label(ships_header,"AVAILABLE AIRSHIPS",12).modulate=Color("#e8bd77")
+	_button(ships_header,"Compare Airships",_show_ships)
 	ship_bank = HFlowContainer.new()
-	left.add_child(ship_bank)
+	ship_group.add_child(ship_bank)
 	var captains_header:=HBoxContainer.new()
-	left.add_child(captains_header)
-	_label(captains_header,"CAPTAINS / drag onto a ship",12).modulate=Color("#e8bd77")
+	captain_group.add_child(captains_header)
+	_label(captains_header,"AVAILABLE CAPTAINS",12).modulate=Color("#e8bd77")
+	_button(captains_header,"Compare Captains",_show_captains)
 	ship_info_dialog=AcceptDialog.new()
 	ship_info_dialog.name="ShipDetails"
 	ship_info_dialog.get_ok_button().text="Close"
@@ -139,7 +156,7 @@ func _build() -> void:
 	info_columns.add_theme_constant_override("separation",18)
 	info_scroll.add_child(info_columns)
 	captain_bank = HFlowContainer.new()
-	left.add_child(captain_bank)
+	captain_group.add_child(captain_bank)
 	deck_preview = VBoxContainer.new()
 	deck_preview.add_theme_constant_override("separation", 8)
 	info_columns.add_child(deck_preview)
@@ -156,12 +173,6 @@ func _build() -> void:
 	deck_cards = HBoxContainer.new()
 	deck_cards.add_theme_constant_override("separation", 12)
 	card_scroll.add_child(deck_cards)
-	encounter = _label(left,"",13)
-	opening = CheckBox.new()
-	opening.text = "Use saved opening when compatible"
-	left.add_child(opening)
-	opening.toggled.connect(func(value): prefer_fixed=value; _update())
-	opening_note = _label(left,"",12)
 	content_scroll = ScrollContainer.new()
 	content_scroll.custom_minimum_size.x = 330
 	content_scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
@@ -222,12 +233,21 @@ func _render() -> void:
 		launch_button.disabled=true
 		return
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
+	_render_banks()
+	if slot.ship.is_empty():
+		_label(inspector,"Drag an available airship into this position.",18)
+		_clear(deck_cards)
+		deck_summary.text = "No ship assigned"
+		_update()
+		return
 	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships,slot.ship)]
 	_label(inspector,ship.name,24).set_meta("plain_text",true)
 	var captain_header := HBoxContainer.new()
 	inspector.add_child(captain_header)
-	captain_header.add_child(preload("res://scripts/art_assets.gd").portrait_view(slot.captain,Vector2(64,85)))
-	_label(captain_header,draft.captains[Catalog.index_by_id(draft.captains,slot.captain)].name,17)
+	if not slot.captain.is_empty():
+		captain_header.add_child(preload("res://scripts/art_assets.gd").portrait_view(slot.captain,Vector2(64,85)))
+		_label(captain_header,draft.captains[Catalog.index_by_id(draft.captains,slot.captain)].name,17)
+	else: _label(captain_header,"Captain unassigned",17)
 	var options: Array = []
 	_menu(inspector,"Level",[{"label":"1 · Starter + captain pairs","value":1},{"label":"2 · Add one upgrade pair","value":2},{"label":"3 · Add both upgrade pairs","value":3}],slot.level,_change.bind(selected_ship,"level"),"level_"+str(selected_ship))
 	options=[]
@@ -249,20 +269,6 @@ func _render() -> void:
 	var rewards := _label(inspector,"",12)
 	rewards.modulate=Color("#91c8ad")
 	details.append(rewards)
-	for entry in draft.ships:
-		var button := _button(ship_bank,entry.name,_select_roster.bind(entry.id))
-		button.set_meta("plain_text",true)
-		button.tooltip_text="Drag to move this ship, or replace a ship in the fleet."
-		button.set_drag_forwarding(_drag_from.bind({"kind":"ship","ship":entry.id},button),Callable(),Callable())
-	_button(ship_bank,"Compare Airships",_show_ships)
-	for entry in draft.captains:
-		var button := _button(captain_bank,entry.name+" · "+str(entry.tier),func(): pass)
-		button.tooltip_text=Rules.rule_text(entry.passive, ship.name)
-		button.set_meta("plain_text",true)
-		button.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":entry.id},button),Callable(),Callable())
-	_button(captain_bank,"Compare Captains",_show_captains)
-	opening.set_pressed_no_signal(prefer_fixed)
-	opening.disabled=not source.setup.fixed_hand
 	_update()
 
 func _select_position(point: int) -> void:
@@ -292,6 +298,7 @@ func _package_text(package: Dictionary) -> String:
 	return "2 × "+draft.cards[Catalog.index_by_id(draft.cards,package.card)].name+"\n"+Rules.rule_text(package.rule, ship.name)+"\n"+Rules.rule_text(package.passive, ship.name)
 
 func _repair_branch(slot: Dictionary) -> void:
+	if slot.ship.is_empty(): return
 	Catalog.repair_fleet_branch(slot,draft.ships[Catalog.index_by_id(draft.ships,slot.ship)])
 
 func _wire_formation(board: Dictionary) -> void:
@@ -300,30 +307,27 @@ func _wire_formation(board: Dictionary) -> void:
 		var id: int = board.formation[point]
 		widget.set_drag_forwarding(_drag_from.bind({"kind":"ship","ship":draft.setup.fleet[id].ship},widget) if id>=0 else Callable(),_can_drop_at.bind(point),_drop_at.bind(point))
 		if id<0: continue
-		var captain: Dictionary = draft.captains[Catalog.index_by_id(draft.captains,draft.setup.fleet[id].captain)]
-		var badge := Button.new()
-		badge.set_meta("plain_text",true)
-		badge.text=captain.name+" · Tier "+str(captain.tier)
-		badge.add_theme_font_size_override("font_size",12)
-		widget.set_meta("footer_space",32)
+		widget.set_meta("footer_space",76)
 		widget._art_layout()
-		badge.position=Vector2(7,widget.size.y-32)
-		badge.size=Vector2(widget.size.x-14,30)
-		badge.icon=preload("res://scripts/art_assets.gd").portrait(captain.id)
-		badge.expand_icon=true
-		badge.add_theme_constant_override("icon_max_width",24)
-		badge.tooltip_text="Drag to assign/swap this captain.\n"+Rules.rule_text(captain.passive, board.ships[id].name)
+		var badge = Slot.new()
 		widget.add_child(badge)
-		badge.pressed.connect(func(): selected_ship=id; _render())
-		badge.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":captain.id},badge),_can_drop_at.bind(point),_drop_at.bind(point))
+		if not draft.setup.fleet[id].captain.is_empty():
+			var captain: Dictionary = draft.captains[Catalog.index_by_id(draft.captains,draft.setup.fleet[id].captain)]
+			badge.configure(captain.name,"Tier " + str(captain.tier),captain.id,Color("#a88b62"))
+			badge.info_requested.connect(_show_captain_info.bind(captain.id,id))
+			badge.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":captain.id},badge),_can_drop_at.bind(point),_drop_at.bind(point))
+		else:
+			badge.configure("No captain","Drop captain here","",Color("#627f8a"),false)
+			badge.set_drag_forwarding(Callable(),_can_drop_at.bind(point),_drop_at.bind(point))
+		badge.custom_minimum_size=Vector2(214,72)
+		badge.position=Vector2(7,widget.size.y-76)
+		badge.size=Vector2(widget.size.x-14,72)
 		widget.set_meta("captain_badge",badge)
-		var info_button:=Button.new()
-		info_button.text="i"
-		info_button.set_meta("plain_text",true)
+		var info_button: Button=Slot.info_button()
 		info_button.set_meta("ship_info",id)
 		info_button.tooltip_text="Ship details, levels, upgrade branches and cards"
-		info_button.position=Vector2(widget.size.x-29,0)
-		info_button.size=Vector2(28,26)
+		info_button.position=Vector2(widget.size.x-35,0)
+		info_button.size=Vector2(32,32)
 		widget.add_child(info_button)
 		info_button.pressed.connect(_show_ship_info.bind(id))
 
@@ -334,7 +338,8 @@ func _drag_from(_point: Vector2, payload: Dictionary, origin: Control) -> Dictio
 	preview.custom_minimum_size=Vector2(190,42)
 	preview.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	var label := Label.new()
-	label.text=origin.text if origin.text!="" else draft.ships[Catalog.index_by_id(draft.ships,payload.ship)].name
+	label.text=str(origin.get_meta("drag_label", ""))
+	if label.text.is_empty(): label.text=draft.ships[Catalog.index_by_id(draft.ships,payload.ship)].name if payload.kind=="ship" else draft.captains[Catalog.index_by_id(draft.captains,payload.captain)].name
 	label.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	preview.add_child(label)
 	origin.set_drag_preview(preview)
@@ -345,10 +350,10 @@ func _valid_drop(data: Variant, point: int) -> bool:
 	if not data is Dictionary or data.get("preparation",-1)!=get_instance_id() or point not in range(4): return false
 	var occupied := false
 	for slot in draft.setup.fleet:
-		if slot.position==Geometry.POSITIONS[point]: occupied=true
+		if slot.position==Geometry.POSITIONS[point] and not slot.ship.is_empty(): occupied=true
 	if data.get("kind")=="captain": return occupied and Catalog.index_by_id(draft.captains,data.get("captain",""))>=0
 	if data.get("kind")!="ship" or Catalog.index_by_id(draft.ships,data.get("ship",""))<0: return false
-	return occupied or draft.setup.fleet.any(func(slot): return slot.ship==data.ship)
+	return occupied or draft.setup.fleet.any(func(slot): return slot.ship==data.ship or slot.ship.is_empty())
 
 func _show_drag_targets(data: Dictionary) -> void:
 	var notes: Dictionary={}
@@ -357,6 +362,8 @@ func _show_drag_targets(data: Dictionary) -> void:
 		var id: int=formation.snapshot.formation[point]
 		notes[id if id>=0 else 100+point]="Assign captain" if data.kind=="captain" else "Move / swap ship"
 	formation.show_rule_preview(notes)
+	unassign_ship_slot.set_highlight(_can_unassign(data,"ship"))
+	unassign_captain_slot.set_highlight(_can_unassign(data,"captain"))
 
 func _can_drop_at(_local: Vector2, data: Variant, point: int) -> bool:
 	return _valid_drop(data,point)
@@ -372,12 +379,20 @@ func _drop_at(_local: Vector2, data: Variant, point: int) -> void:
 		for i in draft.setup.fleet.size():
 			if draft.setup.fleet[i].ship==data.ship: assigned=i
 		if assigned>=0: _change(Geometry.POSITIONS[point],assigned,"position")
-		else: _change(data.ship,target,"ship")
+		else:
+			if target < 0:
+				for i in draft.setup.fleet.size():
+					if draft.setup.fleet[i].ship.is_empty(): target=i; break
+			if target >= 0:
+				draft.setup.fleet[target].position=Geometry.POSITIONS[point]
+				_change(data.ship,target,"ship")
 
 func _notification(what: int) -> void:
 	if what==NOTIFICATION_DRAG_END:
 		drag_payload.clear()
 		if is_instance_valid(formation): formation.show_rule_preview({},selected_ship)
+		if is_instance_valid(unassign_ship_slot): unassign_ship_slot.set_highlight(false)
+		if is_instance_valid(unassign_captain_slot): unassign_captain_slot.set_highlight(false)
 
 
 
@@ -401,7 +416,8 @@ func _update() -> void:
 	launch_button.disabled = not errors.is_empty()
 	if not errors.is_empty():
 		status.text = "Cannot launch: " + str(errors[0])
-		fleet_deck_summary.text = "Deck preview unavailable until fleet setup is valid."
+		_render_incomplete_formation()
+		fleet_deck_summary.text = "Assign three airships and a captain to each before launching."
 		_clear(fleet_deck_body)
 		return
 	var compiled := Catalog.compile(candidate)
@@ -428,13 +444,7 @@ func _update() -> void:
 		rewards.append(Rules.rule_text(package.rule, ship.name))
 	details[1].text = "\n".join(rewards)
 	if ship.has("legacy_loadout"): details[1].text += "\nImported card loadout retained."
-	var enemies: Array = []
-	for enemy in compiled.enemies: enemies.append(enemy.name)
-	encounter.text = "Encounter: " + " · ".join(enemies)
-	opening_note.text = "Saved fixed opening: " + ", ".join(source.setup.opening_hand.map(func(id): return compiled.cards[id].name)) if candidate.setup.fixed_hand else ("Shuffled opening: saved hand contains unavailable cards." if prefer_fixed and source.setup.fixed_hand else "Shuffled seven-card opening.")
-	var total := 0
-	for unit in board.ships: total += int(unit.max_hull)
-	status.text = "%d ships · %d cards · %d hull / %s" % [compiled.ships.size(),compiled.deck_keys.size(),total,"Saved opening" if candidate.setup.fixed_hand else "Shuffled opening"]
+	status.text = "%d ships / %d cards" % [compiled.ships.size(),compiled.deck_keys.size()]
 	status.modulate = Color("#91c8ad")
 
 
@@ -466,6 +476,7 @@ func _launch() -> void:
 
 
 func _show_ship_info(index: int) -> void:
+	if draft.setup.fleet[index].ship.is_empty(): return
 	selected_ship=index
 	_render()
 	ship_info_dialog.title=draft.ships[Catalog.index_by_id(draft.ships,draft.setup.fleet[index].ship)].name+" / Preparation"
@@ -588,6 +599,9 @@ func _choose_upgrade(tier: String, id: String) -> void:
 
 
 func _show_captains() -> void:
+	if draft.setup.fleet[selected_ship].ship.is_empty():
+		status.text = "Choose an airship before assigning a captain."
+		return
 	if is_instance_valid(captain_dialog):
 		captain_dialog.hide()
 		captain_dialog.queue_free()
@@ -808,3 +822,111 @@ func _render_fleet_deck(compiled: Dictionary, candidate: Dictionary) -> void:
 				face.set_meta("origins", origins.get(id, []).duplicate())
 				cell.add_child(face)
 	fleet_deck_summary.text = "Fleet deck / %d cards / %d designs / %d ships" % [fleet_total, design_total, compiled.ships.size()]
+
+
+func _render_banks() -> void:
+	unassign_ship_slot = Slot.new()
+	unassign_ship_slot.configure("Unassign airship","Drop a fleet ship here","",Color("#94785a"),false)
+	ship_bank.add_child(unassign_ship_slot)
+	unassign_ship_slot.set_drag_forwarding(Callable(),func(_pos,data): return _can_unassign(data,"ship"),func(_pos,data): _unassign(data,"ship"))
+	for ship in draft.ships:
+		if draft.setup.fleet.any(func(slot): return slot.ship == ship.id): continue
+		var frame = Slot.new()
+		frame.configure(ship.name,ship.role,"",Color(ship.color))
+		frame.set_meta("ship_id",ship.id)
+		ship_bank.add_child(frame)
+		frame.info_requested.connect(_show_ships)
+		frame.set_drag_forwarding(_drag_from.bind({"kind":"ship","ship":ship.id},frame),Callable(),Callable())
+	unassign_captain_slot = Slot.new()
+	unassign_captain_slot.configure("Unassign captain","Drop an assigned captain here","",Color("#94785a"),false)
+	captain_bank.add_child(unassign_captain_slot)
+	unassign_captain_slot.set_drag_forwarding(Callable(),func(_pos,data): return _can_unassign(data,"captain"),func(_pos,data): _unassign(data,"captain"))
+	for captain in draft.captains:
+		if draft.setup.fleet.any(func(slot): return slot.captain == captain.id): continue
+		var frame = Slot.new()
+		frame.configure(captain.name,"Tier " + str(captain.tier),captain.id,Color("#a88b62"))
+		frame.set_meta("captain_id",captain.id)
+		captain_bank.add_child(frame)
+		frame.info_requested.connect(_show_captain_info.bind(captain.id,-1))
+		frame.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":captain.id},frame),Callable(),Callable())
+
+
+func _can_unassign(data: Variant, kind: String) -> bool:
+	if not data is Dictionary or data.get("preparation",-1) != get_instance_id() or data.get("kind","") != kind: return false
+	return draft.setup.fleet.any(func(slot): return slot.get(kind,"") == data.get(kind,"?") and not str(slot.get("ship","")).is_empty())
+
+
+func _unassign(data: Dictionary, kind: String) -> void:
+	if not _can_unassign(data,kind): return
+	for slot in draft.setup.fleet:
+		if slot[kind] != data[kind]: continue
+		slot[kind] = ""
+		if kind == "ship": slot.captain = ""
+		break
+	ship_info_dialog.hide()
+	_render()
+
+
+func _render_incomplete_formation() -> void:
+	var preview := draft.duplicate(true)
+	preview.setup.fixed_hand = false
+	var ships_used: Array = preview.setup.fleet.map(func(slot): return slot.ship)
+	var captains_used: Array = preview.setup.fleet.map(func(slot): return slot.captain)
+	for slot in preview.setup.fleet:
+		if slot.ship.is_empty():
+			for ship in preview.ships:
+				if not ships_used.has(ship.id): slot.ship=ship.id; ships_used.append(ship.id); break
+			Catalog.repair_fleet_branch(slot,preview.ships[Catalog.index_by_id(preview.ships,slot.ship)])
+		if slot.captain.is_empty():
+			for captain in preview.captains:
+				if captains_used.has(captain.id): continue
+				slot.captain=captain.id
+				captains_used.append(captain.id)
+				captain.passive=Rules.rule("passive",[],"captain")
+				captain.passive.modifiers=[{"kind":"armour","target":"owner","amount":0}]
+				break
+	if not Catalog.validate(preview).is_empty(): return
+	var sim = State.new(0,preview)
+	var board: Dictionary = sim.board_snapshot()
+	for i in draft.setup.fleet.size():
+		var slot: Dictionary = draft.setup.fleet[i]
+		if slot.ship.is_empty(): board.formation[Geometry.POSITIONS.find(slot.position)] = -1
+		if slot.captain.is_empty(): board.ships[i].captain.name = "Unassigned"
+	formation.configure(board,false)
+	_wire_formation(board)
+	formation.show_rule_preview({},selected_ship)
+	_clear(deck_cards)
+	deck_summary.text = "Complete fleet assignments to preview the deck."
+	if not details.is_empty():
+		details[0].text = board.ships[selected_ship].name + " / Captain " + str(board.ships[selected_ship].captain.name)
+		details[1].text = "Drag an available captain onto each airship."
+	status.text = "Fleet incomplete: fill the empty airship and captain slots."
+	status.modulate = Color("#e8bd77")
+
+
+func _show_captain_info(id: String, ship_index: int = -1) -> void:
+	var index := Catalog.index_by_id(draft.captains,id)
+	if index < 0: return
+	if is_instance_valid(captain_info_dialog): captain_info_dialog.hide(); captain_info_dialog.queue_free()
+	captain_info_dialog=AcceptDialog.new()
+	captain_info_dialog.title="Captain details"
+	captain_info_dialog.get_ok_button().text="Close"
+	(ship_info_dialog if ship_info_dialog.visible else self).add_child(captain_info_dialog)
+	var captain: Dictionary=draft.captains[index]
+	var owner: Dictionary={"name":"Unassigned","color":"#a88b62"}
+	if ship_index >= 0 and not draft.setup.fleet[ship_index].ship.is_empty(): owner=draft.ships[Catalog.index_by_id(draft.ships,draft.setup.fleet[ship_index].ship)]
+	var scroll:=ScrollContainer.new()
+	captain_info_dialog.add_child(scroll)
+	var column:=VBoxContainer.new()
+	column.custom_minimum_size.x=390
+	scroll.add_child(column)
+	var header:=HBoxContainer.new()
+	column.add_child(header)
+	header.add_child(preload("res://scripts/art_assets.gd").portrait_view(id,Vector2(64,85)))
+	_label(header,captain.name + "\nTier " + str(captain.tier),21).set_meta("plain_text",true)
+	_label(column,Rules.rule_text(captain.passive, owner.name if ship_index>=0 else ""),14)
+	var face:=CardFace.new()
+	face.custom_minimum_size=Vector2(390,330)
+	face.configure(Catalog.present_card(draft.cards[Catalog.index_by_id(draft.cards,captain.card)],maxi(0,ship_index)),owner)
+	column.add_child(face)
+	captain_info_dialog.popup_centered(Vector2i(440,600))

@@ -11,6 +11,7 @@ const Unit = preload("res://scripts/unit_view.gd")
 var widgets: Dictionary = {}
 var wreck_widgets: Dictionary = {}
 var large_cards := false
+var large_unit_height := 166.0
 var drop_check: Callable
 var enemy := false
 var snapshot: Dictionary = {}
@@ -103,7 +104,7 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 
 func _arrange() -> void:
 	var w := minf(228 if large_cards else 140, size.x * 0.43)
-	var h := 166.0 if large_cards else 128.0
+	var h := large_unit_height if large_cards else 128.0
 	var coordinates := [Vector2(0.86 if not enemy else 0.14, 0.50), Vector2(0.5, 0.12), Vector2(0.5, 0.88), Vector2(0.14 if not enemy else 0.86, 0.5)]
 	for point in widgets:
 		widgets[point].size = Vector2(w, h)

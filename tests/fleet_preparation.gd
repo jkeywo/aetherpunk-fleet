@@ -71,7 +71,7 @@ func _run() -> void:
 	expect(prep.draft.setup.fleet[0].level_3 != "artillery","Branch switch left an illegal level-3 choice.")
 	await select_value(prep,"level_0",1)
 	expect(prep.draft.setup.fleet[0].level_2 == "" and prep.draft.setup.fleet[0].level_3 == "" and prep.controls.level_2_0.disabled and prep.controls.level_3_0.disabled,"Lowering level kept active upgrade branches.")
-	expect(not prep._candidate().setup.fixed_hand and "unavailable" in prep.opening_note.text,"Incompatible saved opening did not fall back to shuffled.")
+	expect(not prep._candidate().setup.fixed_hand and "opening" not in prep.status.text.to_lower(),"Incompatible saved opening did not fall back to shuffled.")
 	expect(preview_faces(prep).size() == 2 and "4 cards" in prep.deck_summary.text, "Lowering level left upgrade cards in preview.")
 	prep._show_deck()
 	await flush()
