@@ -27,6 +27,8 @@ var encounter: Label
 var fleet_scroll: ScrollContainer
 var deck_preview: VBoxContainer
 var deck_cards: HBoxContainer
+var captain_dialog: AcceptDialog
+var captain_comparison: HBoxContainer
 var upgrade_dialog: AcceptDialog
 var upgrade_comparison: HBoxContainer
 var comparison_tier := "two"
@@ -181,6 +183,7 @@ func _render() -> void:
 	options=[]
 	for entry in draft.captains: options.append({"label":entry.name+" · Tier "+str(entry.tier),"value":entry.id,"tooltip":Rules.rule_text(entry.passive, ship.name)})
 	_menu(inspector,"Captain",options,slot.captain,_change.bind(selected_ship,"captain"),"captain_"+str(selected_ship))
+	_button(inspector, "Compare captains", _show_captains)
 	options=[]
 	for point in 4: options.append({"label":Geometry.POSITION_NAMES[point],"value":Geometry.POSITIONS[point]})
 	_menu(inspector,"Starting position",options,slot.position,_change.bind(selected_ship,"position"),"position_"+str(selected_ship))
@@ -525,3 +528,74 @@ func _choose_upgrade(tier: String, id: String) -> void:
 	_repair_branch(slot)
 	_render()
 	_show_upgrades(tier)
+
+
+func _show_captains() -> void:
+	if is_instance_valid(captain_dialog):
+		captain_dialog.hide()
+		captain_dialog.queue_free()
+	captain_dialog = AcceptDialog.new()
+	captain_dialog.name = "CaptainComparison"
+	captain_dialog.get_ok_button().text = "Close"
+	add_child(captain_dialog)
+	var slot: Dictionary = draft.setup.fleet[selected_ship]
+	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, slot.ship)]
+	captain_dialog.title = ship.name + " / Compare captains"
+	var viewer_size := Vector2i(minf(1180, get_viewport_rect().size.x * 0.94), minf(700, get_viewport_rect().size.y * 0.88))
+	var body := VBoxContainer.new()
+	body.custom_minimum_size.x = viewer_size.x - 40
+	captain_dialog.add_child(body)
+	var caption := Label.new()
+	caption.text = "Two copies of the shown card and its passive replace the current captain.\nA captain assigned elsewhere swaps places with this ship's current captain."
+	caption.add_theme_font_size_override("font_size", 13)
+	if ship.has("legacy_loadout"): caption.text = "Imported loadout: captain passives change; the imported deck stays fixed.\nAssigned captains swap places with this ship's current captain."
+	body.add_child(caption)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(scroll)
+	captain_comparison = HBoxContainer.new()
+	captain_comparison.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	captain_comparison.alignment = BoxContainer.ALIGNMENT_CENTER
+	captain_comparison.add_theme_constant_override("separation", 14)
+	scroll.add_child(captain_comparison)
+	var visible_count := clampi(draft.captains.size(), 1, 3)
+	var width: float = minf(370, floor((viewer_size.x - 60 - 14 * (visible_count - 1)) / visible_count))
+	for captain in draft.captains:
+		var column := VBoxContainer.new()
+		column.custom_minimum_size.x = width
+		column.set_meta("captain_id", captain.id)
+		captain_comparison.add_child(column)
+		var assigned := -1
+		for i in draft.setup.fleet.size():
+			if draft.setup.fleet[i].captain == captain.id: assigned = i
+		var current: bool = assigned == selected_ship
+		var other_name := ""
+		if assigned >= 0: other_name = draft.ships[Catalog.index_by_id(draft.ships, draft.setup.fleet[assigned].ship)].name
+		var title := _label(column, captain.name + " / Tier " + str(captain.tier), 19)
+		title.set_meta("plain_text", true)
+		title.custom_minimum_size.y = 48
+		var assigned_label := _label(column, "ASSIGNED HERE" if current else ("Assigned to " + other_name if assigned >= 0 else "Available / 2 copies"), 13)
+		assigned_label.custom_minimum_size.y = 36
+		assigned_label.modulate = Color("#91c8ad") if current else Color("#e8bd77")
+		var face := CardFace.new()
+		face.custom_minimum_size = Vector2(width, 300)
+		face.toggle_mode = false
+		face.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		face.configure(Catalog.present_card(draft.cards[Catalog.index_by_id(draft.cards, captain.card)], selected_ship, ship.name), ship)
+		face.set_meta("card_id", captain.card)
+		face.set_meta("copies", 2)
+		column.add_child(face)
+		var assign := _button(column, "Assigned" if current else ("Swap with " + other_name if assigned >= 0 else "Assign to " + ship.name), _assign_captain.bind(captain.id))
+		assign.set_meta("assign_captain", captain.id)
+		assign.disabled = current
+		assign.tooltip_text = "Two copies of this card will act as " + ship.name + "."
+		_label(column, "PASSIVE BONUS / on " + ship.name, 12).modulate = Color("#91b9c6")
+		var passive := _label(column, Rules.rule_text(captain.passive, ship.name), 14)
+		passive.set_meta("captain_passive", captain.id)
+	captain_dialog.popup_centered(viewer_size)
+
+
+func _assign_captain(id: String) -> void:
+	if Catalog.index_by_id(draft.captains, id) < 0: return
+	_change(id, selected_ship, "captain")
+	_show_captains()
