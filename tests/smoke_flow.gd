@@ -34,7 +34,7 @@ func _run() -> void:
 	await scene_changed
 	if not _expect("Victory"):
 		return
-	await _press("PrimaryButton")
+	await _press("SecondaryButton")
 	await scene_changed
 	await _press("PrimaryButton")
 	await scene_changed
@@ -44,7 +44,7 @@ func _run() -> void:
 	await scene_changed
 	if not _expect("Defeat"):
 		return
-	await _press("PrimaryButton")
+	await _press("SecondaryButton")
 	await scene_changed
 	await _press("PrimaryButton")
 	await scene_changed
@@ -61,7 +61,7 @@ func _run() -> void:
 	await scene_changed
 	if not _expect("Victory"):
 		return
-	await _press("PrimaryButton")
+	await _press("SecondaryButton")
 	await scene_changed
 	await _press("PrimaryButton")
 	await scene_changed
@@ -73,7 +73,7 @@ func _run() -> void:
 	await scene_changed
 	if not _expect("Defeat"):
 		return
-	await _press("PrimaryButton")
+	await _press("SecondaryButton")
 	await scene_changed
 	await _press("PrimaryButton")
 	await scene_changed
@@ -185,7 +185,7 @@ func _press(button_name: String) -> void:
 	var origin = current_scene
 	if origin.name == "Game":
 		origin.feedback.duration_scale = 0.02
-	var path := "%" + button_name if current_scene.name == "Game" else MENU_BUTTONS + button_name
+	var path := "%" + button_name
 	var button := current_scene.get_node(path) as Button
 	button.pressed.emit()
 	if is_instance_valid(origin) and origin.name == "Game" and origin.busy:

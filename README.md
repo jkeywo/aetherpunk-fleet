@@ -25,6 +25,7 @@ Buttons support mouse and keyboard focus with Tab and Enter/Space. The battle ta
 - `data/battle_setup.gd`: ships, all nine card designs (two copies each), six reactions, four intents.
 - `scripts/battle_state.gd`: rules, instance IDs, piles, validation, effects, reactions, and previews.
 - `scripts/battle.gd`: UI selection, payment, targeting, state rendering, and navigation.
+- `scripts/result_screen.gd` and `scripts/battle_session.gd`: outcome reports and a detached in-memory summary handoff.
 - `scripts/combat_feedback.gd`: node-bound tween playback of ordered public combat events.
 - `scenes/game.tscn` and `scenes/components/`: editable native battle layout.
 - `scripts/battle_art.gd`: scalable vector silhouettes.
@@ -38,6 +39,7 @@ godot --headless --path . --editor --import --quit
 godot --headless --path . --script res://tests/battle_rules.gd
 godot --headless --path . --script res://tests/smoke_flow.gd
 godot --headless --path . --script res://tests/combat_feedback.gd
+godot --headless --path . --script res://tests/results_flow.gd
 ```
 
 Rules tests cover payment validation, preview purity, the worked GDD sequence, card effects, six reaction triggers, Relay reshuffling, destruction, round transitions, and card conservation. UI smoke checks use actual buttons and verify live state, navigation, and automatic outcomes.
@@ -46,4 +48,6 @@ Payment cards fly to the discard counter; played cards lift from the hand and mo
 
 Combat inputs are locked throughout feedback to prevent double spending. Main Menu remains available and safely cancels playback. Victory/defeat screens wait until the full sequence finishes. The rules resolve once and provide public snapshots for animation; previews and animations never change battle outcomes or reveal hidden draws early. The feedback test runs real asynchronous tweens with accelerated timing and checks sequencing, input locks, transient cleanup, and navigation cancellation.
 
- Campaign progression, fleet persistence, and result statistics remain future work. No external dependencies, remote, or export target are configured. Godot's generated `.godot/` and export `build/` directories are ignored by Git.
+ Victory and defeat reports show all three ships with survivor/destroyed status and remaining hull, total surviving hull against the original 66, hull percentage, and the terminal round number. **Retry Battle** creates a fresh battle; **Main Menu** returns to port. Debug outcomes are marked as test results and show the actual current fleet. Direct result-scene launches without a matching summary show no fabricated statistics. Result tests cover real wins and losses, snapshot independence, both navigation buttons, round counting, and full retry resets.
+
+Campaign progression and fleet persistence remain future work. No external dependencies, remote, or export target are configured. Godot's generated `.godot/` and export `build/` directories are ignored by Git.

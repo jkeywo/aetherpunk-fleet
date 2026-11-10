@@ -6,6 +6,9 @@ config/name="Aetherpunk Fleet"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
+[autoload]
+BattleSession="*res://scripts/battle_session.gd"
+
 [display]
 window/size/viewport_width=1280
 window/size/viewport_height=800

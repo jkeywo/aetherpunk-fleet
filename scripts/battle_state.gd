@@ -450,3 +450,25 @@ func _record(kind: String, details: Dictionary = {}) -> void:
 func _gain_guard(ship_id: int, amount: int) -> void:
 	ships[ship_id].guard += amount
 	_record("guard", {"target": ship_id, "amount": amount, "reason": "Guard gained"})
+
+
+func result_summary(reported_outcome: String = "") -> Dictionary:
+	var result: String = outcome if reported_outcome.is_empty() else reported_outcome
+	if result not in ["victory", "defeat"]:
+		return {}
+	var fleet: Array = []
+	var remaining := 0
+	var maximum := 0
+	var survivors := 0
+	for ship in ships:
+		var alive: bool = ship.hull > 0
+		remaining += int(ship.hull)
+		maximum += int(ship.max_hull)
+		if alive:
+			survivors += 1
+		fleet.append({"name": ship.name, "role": ship.role, "color": ship.color,
+			"hull": ship.hull, "max_hull": ship.max_hull, "alive": alive})
+	return {"outcome": result, "ships": fleet, "survivors": survivors,
+		"remaining_hull": remaining, "starting_hull": maximum,
+		"hull_percent": roundi(100.0 * remaining / maxi(1, maximum)),
+		"rounds": round_number, "is_test": result != outcome}

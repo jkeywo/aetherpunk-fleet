@@ -4,8 +4,8 @@ extends Control
 @export_file("*.tscn") var primary_scene: String
 @export_file("*.tscn") var secondary_scene: String
 
-@onready var primary_button: Button = $Center/Panel/Margin/Content/PrimaryButton
-@onready var secondary_button: Button = $Center/Panel/Margin/Content/SecondaryButton
+@onready var primary_button: Button = %PrimaryButton
+@onready var secondary_button: Button = %SecondaryButton
 
 
 func _ready() -> void:

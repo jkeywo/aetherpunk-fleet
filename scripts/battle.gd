@@ -19,6 +19,7 @@ var feedback: CanvasLayer
 
 
 func _ready() -> void:
+	BattleSession.clear_result()
 	theme = _make_theme()
 	feedback = Feedback.new()
 	add_child(feedback)
@@ -273,6 +274,9 @@ func _navigate(destination: String) -> void:
 	# Menu remains an immediate escape while feedback is playing.
 	if busy and destination != "res://scenes/main_menu.tscn":
 		return
+	if destination in ["res://scenes/victory.tscn", "res://scenes/defeat.tscn"]:
+		var result: String = destination.get_file().get_basename()
+		BattleSession.record_result(state.result_summary(result))
 	var error := get_tree().change_scene_to_file(destination)
 	if error != OK:
 		push_error("Unable to open %s: %s" % [destination, error_string(error)])
