@@ -61,7 +61,9 @@ func _add_ship_result(ship: Dictionary) -> void:
 	panel.get_node("%HullBar").value = ship.hull
 	panel.get_node("%ShipArt").custom_minimum_size = Vector2(95, 52)
 	panel.get_node("%ShipArt").accent = Color(ship.color)
-	panel.get_node("%ShipArt").set_art(str(ship.get("id",str(ship.name).to_lower())))
+	var visual_data: Dictionary = ship.duplicate(true)
+	visual_data["id"] = str(ship.get("id",str(ship.name).to_lower()))
+	panel.get_node("%ShipArt").set_visual(visual_data)
 	var status := panel.get_node("Row/Stats/HullRow/Guard") as Label
 	status.name = "SurvivalStatus"
 	status.text = "SURVIVED" if ship.alive else "DESTROYED"

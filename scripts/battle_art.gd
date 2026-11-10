@@ -54,10 +54,13 @@ func _draw() -> void:
 
 
 func set_art(id: String) -> void:
-	art_id = id
+	set_visual({"id":id})
+
+func set_visual(data: Dictionary) -> void:
+	art_id = str(data.get("id",""))
 	if rig_view != null: rig_view.queue_free()
 	rig_view = preload("res://scripts/rig_view.gd").new()
 	rig_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(rig_view)
-	rig_view.configure(id,subject==1)
+	rig_view.configure_data(data,subject==1)
 	queue_redraw()

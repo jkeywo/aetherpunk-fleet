@@ -58,3 +58,11 @@ static func skin_theme(value: Theme, margins: Vector4 = Vector4(10,6,10,6)) -> v
 		var skin := button_style("pressed" if state in ["pressed", "hover_pressed"] else ("hover" if state == "hover" else "normal"), margins)
 		if state == "disabled": skin.modulate_color = Color(.55,.6,.65,.65)
 		value.set_stylebox(state,"Button",skin)
+
+
+static func visual_rig(unit: Dictionary, enemy: bool = false) -> Dictionary:
+	if unit.has("visual_rig"):
+		var value: Variant = unit.visual_rig
+		if not preload("res://scripts/visuals/rig_schema.gd").validate(value).is_empty(): return {}
+		return value.duplicate(true) if not value.parts.is_empty() else {}
+	return rig(str(unit.get("id","")),enemy).duplicate(true)

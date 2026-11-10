@@ -55,7 +55,7 @@ func _init() -> void:
 
 func configure(data: Dictionary, enemy: bool = false) -> void:
 	name_label.text = data.get("name", "Unit")
-	art.configure(str(data.get("id", "")), enemy)
+	art.configure_data(data, enemy)
 	for state_name in ["normal", "hover", "pressed", "hover_pressed"]:
 		var style := StyleBoxFlat.new()
 		style.bg_color = Color(.035,.075,.11,.65 if state_name == "normal" else .85)

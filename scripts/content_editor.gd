@@ -399,7 +399,19 @@ func _card_form(form: Node, entry: Dictionary) -> void:
 	_rules_list(form, entry.rules, "RULE BLOCKS / 1–3 total, including On Play; starter 1, upgrades 2/3, captain = tier", "circle")
 
 
+func _open_rig_editor(entry: Dictionary) -> void:
+	var dialog = preload("res://scripts/visuals/rig_editor.gd").new()
+	add_child(dialog)
+	var visual: Dictionary = preload("res://scripts/art_assets.gd").visual_rig(entry, entry in draft.leviathans)
+	dialog.configure(visual, entry.id, entry.name)
+	dialog.applied.connect(func(value):
+		entry["visual_rig"] = value.duplicate(true)
+		_dirty(); _rebuild_form(); _live_preview())
+	dialog.popup_centered(Vector2i(mini(1180, int(get_viewport_rect().size.x*.96)), mini(740, int(get_viewport_rect().size.y*.94))))
+
+
 func _unit_form(form: Node, entry: Dictionary) -> void:
+	_button(form, "Sprites & animation…", func(): _open_rig_editor(entry))
 	_number(form, "Maximum hull", entry.hull, func(value): _edit(entry, "hull", value), "hull", 1)
 	_number(form, "Armour per hit", entry.armour, func(value): _edit(entry, "armour", value), "armour")
 	_number(form, "Weapon damage", entry.weapon.damage, func(value): _edit(entry.weapon, "damage", value), "weapon_damage")

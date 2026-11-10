@@ -308,6 +308,7 @@ static func _validate_effects(list: Variant, where: String, errors: Array) -> vo
 
 
 static func _validate_unit(unit: Dictionary, where: String, errors: Array) -> void:
+	if unit.has("visual_rig"): errors.append_array(preload("res://scripts/visuals/rig_schema.gd").validate(unit.visual_rig,where+" visual rig"))
 	if not _integer(unit.get("hull"), 1) or not _integer(unit.get("armour")):
 		errors.append(where + ": hull must be positive and armour nonnegative.")
 	if not unit.get("weapon") is Dictionary or not _integer(unit.get("weapon", {}).get("damage")) or unit.get("weapon", {}).get("range") not in ["Short", "Long"]:

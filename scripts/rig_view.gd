@@ -10,7 +10,13 @@ func _init() -> void:
 	resized.connect(_layout)
 
 func configure(id: String, enemy: bool = false) -> void:
-	definition = Art.rig(id,enemy)
+	configure_data({"id":id},enemy)
+
+func configure_data(unit: Dictionary, enemy: bool = false) -> void:
+	configure_definition(Art.visual_rig(unit,enemy))
+
+func configure_definition(value: Dictionary) -> void:
+	definition = value.duplicate(true)
 	if definition.is_empty():
 		if rig_node != null: rig_node.queue_free(); rig_node = null
 		queue_redraw()
