@@ -59,14 +59,15 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 				_wire_target(widget, id)
 		else:
 			widget = Button.new()
+			widget.set_meta("empty_slot",true)
 			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
 			widget.text = Geometry.POSITION_NAMES[point] + "\nEmpty" + (" / Cover " + str(cover_amount) if cover_amount > 0 else "")
 			widget.modulate = Color("#506977")
-			for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
+			for style_name in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
 				var empty := StyleBoxFlat.new()
-				empty.bg_color = Color(.025,.065,.10,.35)
+				empty.bg_color = Color.TRANSPARENT
 				empty.border_color = Color(.35,.55,.65,.4)
-				empty.set_border_width_all(1)
+				empty.set_border_width_all(0)
 				empty.set_corner_radius_all(5)
 				widget.add_theme_stylebox_override(style_name,empty)
 			add_child(widget)
@@ -175,7 +176,7 @@ func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship
 		if widget is Unit:
 			widget.guard_label.text = str(widget.get_meta("base_guard_text", ""))
 			widget.guard_label.visible=widget.get_meta("base_guard_visible",false)
-		if not hints.has(ship_id):
+		if not hints.has(ship_id) or (widget.get_meta("empty_slot",false) and not valid.has(ship_id)):
 			continue
 		widget.tooltip_text = str(hints[ship_id])
 		var tint := Color("#8a535b")

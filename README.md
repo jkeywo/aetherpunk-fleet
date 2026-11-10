@@ -6,6 +6,8 @@ The prototype includes a main menu, battle, victory/defeat summaries, and a live
 
 ## Playing
 
+Empty formation and magic-circle slots are frameless at rest. Relevant action selection or drag targeting reveals destination frames; cancelling clears them. Cover remains visible on vacant slots.
+
 Drag a card from the shared hand into an empty magic-circle slot. Click highlighted ships for targets, circle cards for circle targets, or a visible reaction/stance for control effects. Click other hand cards and/or temporary mana crystals to pay. The action resolves automatically as soon as all required targets and costs are complete. **Cancel Play** refunds the pending card, payment, crystals, and resource reservations while it is still incomplete. For optional boosts, select the hand card and use **Boosts** before placing/paying for it.
 
 The mana cost is locked on placement. Excess payment is lost. Main effects and allied chains finish before payment cards are discarded in click order and their discard abilities resolve. Newly exposed discard-top passives affect subsequent plays. After those chains finish, each represented enemy may react once, in formation order. Replacement stance cards cannot react to the action revealing them, including a one-card deck that replaces itself.

@@ -80,11 +80,12 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 		button.tooltip_text = Geometry.SLOT_NAMES[slot]
 		for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
 			button.remove_theme_stylebox_override(style_name)
-		for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
+		for style_name in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
 			var base := StyleBoxFlat.new()
-			base.bg_color = Color(.025,.065,.10,.88 if uid >= 0 else .28)
+			var framed: bool=uid>=0 or (not locked and (selected>=0 or drag_active))
+			base.bg_color = Color(.025,.065,.10,.88 if uid >= 0 else .28) if framed else Color.TRANSPARENT
 			base.border_color = Color(.45,.75,.82,.45)
-			base.set_border_width_all(1)
+			base.set_border_width_all(1 if framed else 0)
 			base.set_corner_radius_all(5)
 			button.add_theme_stylebox_override(style_name,base)
 		if uid >= 0 and cards.has(uid):
