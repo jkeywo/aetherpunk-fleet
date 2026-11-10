@@ -22,6 +22,8 @@ var outcome: String = ""
 var pending: Dictionary = {}
 var history: Array = []
 var rng := RandomNumberGenerator.new()
+## Ordered public presentation events from the last successful operation.
+var feedback_events: Array = []
 
 
 func _init(seed_value: int = -1) -> void:
@@ -129,6 +131,7 @@ func play(uid: int, payment: Array, target: int = -1) -> String:
 	var error := validate(uid, payment, target)
 	if error != "":
 		return error
+	feedback_events.clear()
 	held = payment.duplicate()
 	if uid != -1:
 		held.append(uid)
@@ -138,6 +141,7 @@ func play(uid: int, payment: Array, target: int = -1) -> String:
 	var cost: int = 1 if uid == -1 else card(uid).cost
 	history.append("%s — paid %d for cost %d; excess %d lost." % [
 		name_text, _held_payment(payment), cost, _held_payment(payment) - cost])
+	_record("card_played", {"uid": uid, "payment": payment.duplicate(), "title": name_text})
 	var event := _effect(uid, target, false)
 	if uid != -1 and card_keys[uid] == "relay" and not hand.is_empty():
 		pending = event
@@ -151,8 +155,10 @@ func play(uid: int, payment: Array, target: int = -1) -> String:
 func discard_for_relay(uid: int) -> String:
 	if phase != "discard" or not hand.has(uid):
 		return "Choose a card from hand to finish Signal Relay."
+	feedback_events.clear()
 	hand.erase(uid)
 	discard.append(uid)
+	_record("cards_discarded", {"uids": [uid], "reason": "Signal Relay discard"})
 	history.append("Signal Relay discarded " + card(uid).name + ".")
 	var event := pending.duplicate(true)
 	pending.clear()
@@ -180,17 +186,19 @@ func _effect(uid: int, target: int, preview_only: bool) -> Dictionary:
 			event.damage = mini(amount, monster_hull)
 			monster_hull -= int(event.damage)
 			history.append("Stormmaw takes %d damage." % event.damage)
+			_record("damage", {"target": -1, "amount": event.damage, "blocked": 0})
 			if key in ["advance", "strafe"]:
 				_swap(actor, target)
 		"brace":
-			ships[actor].guard += 8
+			_gain_guard(actor, 8)
 			history.append(ships[actor].name + " gains 8 guard.")
 		"escort":
-			ships[target].guard += 6
+			_gain_guard(target, 6)
 			history.append(ships[target].name + " gains 6 guard.")
 		"patch":
 			event.healed = mini(4, int(ships[target].max_hull) - int(ships[target].hull))
 			ships[target].hull += int(event.healed)
+			_record("repair", {"target": target, "amount": event.healed})
 			history.append("%s restores %d hull." % [ships[target].name, event.healed])
 		"manoeuvre":
 			_swap(actor, (target - 10) % 3)
@@ -198,8 +206,8 @@ func _effect(uid: int, target: int, preview_only: bool) -> Dictionary:
 			var next: int = formation[formation.find(target) + 1]
 			_swap(target, next)
 			if key == "tow":
-				ships[target].guard += 2
-				ships[next].guard += 2
+				_gain_guard(target, 2)
+				_gain_guard(next, 2)
 				history.append("Both swapped ships gain 2 guard.")
 		"relay":
 			if not preview_only:
@@ -209,13 +217,17 @@ func _effect(uid: int, target: int, preview_only: bool) -> Dictionary:
 
 
 func _finish(event: Dictionary, preview_only: bool = false) -> void:
+	var spent: Array = held.duplicate()
 	discard.append_array(held)
 	held.clear()
+	if not spent.is_empty():
+		_record("cards_discarded", {"uids": spent, "reason": "Action resolved"})
 	_cleanup()
 	if outcome != "":
 		return
 	if _triggers(event):
 		history.append("Reaction: " + Setup.REACTIONS[reaction_index].name + ".")
+		_record("reaction_triggered", {"index": reaction_index, "title": Setup.REACTIONS[reaction_index].name})
 		_react(event)
 		_cleanup()
 		if not preview_only:
@@ -226,6 +238,7 @@ func _finish(event: Dictionary, preview_only: bool = false) -> void:
 				_shuffle(reaction_deck)
 			reaction_index = reaction_deck.pop_front()
 			history.append("New reaction: " + Setup.REACTIONS[reaction_index].name + ".")
+			_record("reaction_revealed", {"index": reaction_index, "title": Setup.REACTIONS[reaction_index].name})
 
 
 func _triggers(event: Dictionary) -> bool:
@@ -260,6 +273,7 @@ func _damage(ship_id: int, amount: int) -> void:
 	var lost: int = mini(ships[ship_id].hull, amount - blocked)
 	ships[ship_id].hull -= lost
 	history.append("%s: %d hull damage, %d blocked." % [ships[ship_id].name, lost, blocked])
+	_record("damage", {"target": ship_id, "amount": lost, "blocked": blocked})
 
 
 func _swap(first: int, second: int) -> void:
@@ -268,6 +282,7 @@ func _swap(first: int, second: int) -> void:
 	formation[a] = second
 	formation[b] = first
 	history.append("%s swaps with %s." % [ships[first].name, ships[second].name])
+	_record("movement", {"first": first, "second": second})
 
 
 func _cleanup() -> void:
@@ -275,6 +290,7 @@ func _cleanup() -> void:
 		if ships[ship_id].hull <= 0:
 			formation.erase(ship_id)
 			history.append(ships[ship_id].name + " is destroyed.")
+			_record("destroyed", {"target": ship_id, "title": ships[ship_id].name})
 	if formation.is_empty():
 		outcome = "defeat"
 	elif monster_hull <= 0:
@@ -286,7 +302,9 @@ func _cleanup() -> void:
 func end_phase() -> String:
 	if phase != "fleet" or outcome != "":
 		return "Finish the current action first."
+	feedback_events.clear()
 	history.append("Enemy intent: " + Setup.INTENTS[intent_index].name + ".")
+	_record("intent_triggered", {"index": intent_index, "title": Setup.INTENTS[intent_index].name})
 	var extra: int = maxi(0, round_number - 3)
 	match intent_index:
 		0:
@@ -310,9 +328,13 @@ func end_phase() -> String:
 			if formation.has(target):
 				formation.erase(target)
 				formation.push_front(target)
+				_record("movement", {"first": target})
 	_cleanup()
-	for ship in ships:
-		ship.guard = 0
+	for ship_id in ships.size():
+		var expired: int = ships[ship_id].guard
+		ships[ship_id].guard = 0
+		if expired > 0:
+			_record("guard", {"target": ship_id, "amount": -expired, "reason": "Guard expired"})
 	if outcome == "":
 		round_number += 1
 		phase = "refresh"
@@ -328,9 +350,12 @@ func refresh(optional_discards: Array) -> String:
 		if not hand.has(uid) or seen.has(uid):
 			return "Choose distinct cards from hand to discard."
 		seen.append(uid)
+	feedback_events.clear()
 	for uid in optional_discards:
 		hand.erase(uid)
 		discard.append(uid)
+	if not optional_discards.is_empty():
+		_record("cards_discarded", {"uids": optional_discards.duplicate(), "reason": "Refresh discard"})
 	_draw(maxi(0, 7 - hand.size()))
 	intent_discard.append(intent_index)
 	if intent_deck.is_empty():
@@ -344,6 +369,7 @@ func refresh(optional_discards: Array) -> String:
 
 
 func _draw(amount: int) -> void:
+	var drawn: Array = []
 	for index in amount:
 		if deck.is_empty() and not discard.is_empty():
 			deck = discard.duplicate()
@@ -351,7 +377,11 @@ func _draw(amount: int) -> void:
 			_shuffle(deck)
 		if deck.is_empty():
 			break
-		hand.append(deck.pop_front())
+		var uid: int = deck.pop_front()
+		hand.append(uid)
+		drawn.append(uid)
+	if not drawn.is_empty():
+		_record("cards_drawn", {"uids": drawn})
 
 
 func _shuffle(items: Array) -> void:
@@ -401,3 +431,22 @@ func preview(uid: int, payment: Array, target: int = -1) -> Dictionary:
 	if uid != -1 and card_keys[uid] == "relay":
 		lines.append("Draw up to 2 unknown cards, then choose 1 discard. Draws can reshuffle the discard pile.")
 	return {"ok": true, "text": "  ".join(lines)}
+
+
+
+func board_snapshot() -> Dictionary:
+	return {"ships": ships.duplicate(true), "formation": formation.duplicate(),
+		"monster_hull": monster_hull, "reaction_index": reaction_index,
+		"hand_size": hand.size(), "deck_size": deck.size(), "discard_size": discard.size()}
+
+
+func _record(kind: String, details: Dictionary = {}) -> void:
+	var entry := details.duplicate(true)
+	entry["kind"] = kind
+	entry["board"] = board_snapshot()
+	feedback_events.append(entry)
+
+
+func _gain_guard(ship_id: int, amount: int) -> void:
+	ships[ship_id].guard += amount
+	_record("guard", {"target": ship_id, "amount": amount, "reason": "Guard gained"})

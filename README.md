@@ -25,6 +25,7 @@ Buttons support mouse and keyboard focus with Tab and Enter/Space. The battle ta
 - `data/battle_setup.gd`: ships, all nine card designs (two copies each), six reactions, four intents.
 - `scripts/battle_state.gd`: rules, instance IDs, piles, validation, effects, reactions, and previews.
 - `scripts/battle.gd`: UI selection, payment, targeting, state rendering, and navigation.
+- `scripts/combat_feedback.gd`: node-bound tween playback of ordered public combat events.
 - `scenes/game.tscn` and `scenes/components/`: editable native battle layout.
 - `scripts/battle_art.gd`: scalable vector silhouettes.
 
@@ -36,8 +37,13 @@ With the Godot console executable on your PATH:
 godot --headless --path . --editor --import --quit
 godot --headless --path . --script res://tests/battle_rules.gd
 godot --headless --path . --script res://tests/smoke_flow.gd
+godot --headless --path . --script res://tests/combat_feedback.gd
 ```
 
 Rules tests cover payment validation, preview purity, the worked GDD sequence, card effects, six reaction triggers, Relay reshuffling, destruction, round transitions, and card conservation. UI smoke checks use actual buttons and verify live state, navigation, and automatic outcomes.
 
-Combat has no animation yet. Campaign progression, fleet persistence, and result statistics remain future work. No external dependencies, remote, or export target are configured. Godot's generated `.godot/` and export `build/` directories are ignored by Git.
+Payment cards fly to the discard counter; played cards lift from the hand and move to discard after their effects. Draws and optional discards also animate. Damage, repair, guard gain, guard consumption, and guard expiry have distinct floating labels, flashes, and hull-bar tweens. Formation changes slide between ranks. A highlighted reaction panel and named banner precede reaction effects; the replacement is revealed afterward. Enemy intents are announced before their damage.
+
+Combat inputs are locked throughout feedback to prevent double spending. Main Menu remains available and safely cancels playback. Victory/defeat screens wait until the full sequence finishes. The rules resolve once and provide public snapshots for animation; previews and animations never change battle outcomes or reveal hidden draws early. The feedback test runs real asynchronous tweens with accelerated timing and checks sequencing, input locks, transient cleanup, and navigation cancellation.
+
+ Campaign progression, fleet persistence, and result statistics remain future work. No external dependencies, remote, or export target are configured. Godot's generated `.godot/` and export `build/` directories are ignored by Git.

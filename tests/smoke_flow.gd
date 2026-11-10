@@ -13,40 +13,40 @@ func _run() -> void:
 		_fail("Could not load main menu.")
 		return
 	await scene_changed
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
 	if not _expect("Game"):
 		return
 	await process_frame
-	if not _check_battle_and_play():
+	if not await _check_battle_and_play():
 		return
-	_press("EndPhaseButton")
+	await _press("EndPhaseButton")
 	if current_scene.state.phase != "refresh":
 		_fail("End Fleet Phase did not resolve intent.")
 		return
-	_press("PlayButton")
+	await _press("PlayButton")
 	if current_scene.state.phase != "fleet" or current_scene.state.hand.size() != 7:
 		_fail("Refill Hand did not begin another fleet phase.")
 		return
-	if not _check_relay_ui():
+	if not await _check_relay_ui():
 		return
-	_press("WinButton")
+	await _press("WinButton")
 	await scene_changed
 	if not _expect("Victory"):
 		return
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
 	if not _expect("Game"):
 		return
-	_press("LossButton")
+	await _press("LossButton")
 	await scene_changed
 	if not _expect("Defeat"):
 		return
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
 	if not _expect("Game"):
 		return
@@ -57,32 +57,32 @@ func _run() -> void:
 	current_scene.state.monster_hull = 4
 	_card_button("advance").pressed.emit()
 	_card_button("tow").pressed.emit()
-	_press("PlayButton")
+	await _press("PlayButton")
 	await scene_changed
 	if not _expect("Victory"):
 		return
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
 	# Real simultaneous enemy damage must navigate automatically on defeat.
 	for ship in current_scene.state.ships:
 		ship.hull = 1
 	current_scene.state.intent_index = 2
-	_press("EndPhaseButton")
+	await _press("EndPhaseButton")
 	await scene_changed
 	if not _expect("Defeat"):
 		return
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
-	_press("PrimaryButton")
+	await _press("PrimaryButton")
 	await scene_changed
-	_press("MenuButton")
+	await _press("MenuButton")
 	await scene_changed
 	if not _expect("MainMenu"):
 		return
 	print("PASS: battle content, selection, payment, preview, cancellation, movement, reaction, refresh, real and test outcomes, reset, menu. Pressing Exit.")
-	_press("SecondaryButton")
+	await _press("SecondaryButton")
 
 
 func _card_button(key: String) -> Button:
@@ -116,12 +116,12 @@ func _check_battle_and_play() -> bool:
 		return _fail("Paid movement lacked reaction preview.")
 	if battle.state.monster_hull != 70 or battle.state.hand.size() != 7:
 		return _fail("Drafting mutated battle state.")
-	_press("CancelButton")
+	await _press("CancelButton")
 	if battle.selected_uid != -2 or battle.state.hand.size() != 7:
 		return _fail("Cancel spent cards or retained selection.")
 	_card_button("advance").pressed.emit()
 	_card_button("tow").pressed.emit()
-	_press("PlayButton")
+	await _press("PlayButton")
 	if battle.state.monster_hull != 66 or battle.state.ships[0].hull != 25:
 		return _fail("Actual action or reaction damage incorrect.")
 	if battle.get_node("%Formation").get_child(0).name != "Kestrel":
@@ -139,7 +139,7 @@ func _check_battle_and_play() -> bool:
 	picker.select(1)
 	picker.item_selected.emit(1)
 	_card_button("broadside").pressed.emit()
-	_press("PlayButton")
+	await _press("PlayButton")
 	if battle.state.ships[2].guard != 6:
 		return _fail("Explicit target selection did not resolve on Lamplighter.")
 	return true
@@ -169,20 +169,27 @@ func _check_relay_ui() -> bool:
 	_card_button("relay").pressed.emit()
 	if battle.get_node("%PlayButton").disabled:
 		return _fail("Zero-cost Relay required payment.")
-	_press("PlayButton")
+	await _press("PlayButton")
 	if battle.state.phase != "discard" or not battle.get_node("%EndPhaseButton").disabled:
 		return _fail("Relay UI did not require its discard before continuing.")
 	var count_before: int = battle.state.hand.size()
 	battle.get_node("%Hand").get_child(0).pressed.emit()
+	if battle.busy:
+		await battle.resolution_finished
 	if battle.state.phase != "fleet" or battle.state.hand.size() != count_before - 1:
 		return _fail("Relay UI discard did not finish the action.")
 	return true
 
 
 func _press(button_name: String) -> void:
+	var origin = current_scene
+	if origin.name == "Game":
+		origin.feedback.duration_scale = 0.02
 	var path := "%" + button_name if current_scene.name == "Game" else MENU_BUTTONS + button_name
 	var button := current_scene.get_node(path) as Button
 	button.pressed.emit()
+	if is_instance_valid(origin) and origin.name == "Game" and origin.busy:
+		await origin.resolution_finished
 
 
 func _expect(expected: String) -> bool:

@@ -1,8 +1,11 @@
 extends Control
+
+signal resolution_finished
 ## Presentation and action drafting; battle_state.gd owns validation and resolution.
 
 const Setup = preload("res://data/battle_setup.gd")
 const State = preload("res://scripts/battle_state.gd")
+const Feedback = preload("res://scripts/combat_feedback.gd")
 const ShipScene = preload("res://scenes/components/ship_panel.tscn")
 const CardScene = preload("res://scenes/components/hand_card.tscn")
 
@@ -11,10 +14,14 @@ var selected_uid: int = -2
 var payment: Array = []
 var target: int = -1
 var refresh_discards: Array = []
+var busy: bool = false
+var feedback: CanvasLayer
 
 
 func _ready() -> void:
 	theme = _make_theme()
+	feedback = Feedback.new()
+	add_child(feedback)
 	%MenuButton.pressed.connect(_navigate.bind("res://scenes/main_menu.tscn"))
 	%WinButton.pressed.connect(_navigate.bind("res://scenes/victory.tscn"))
 	%LossButton.pressed.connect(_navigate.bind("res://scenes/defeat.tscn"))
@@ -33,16 +40,8 @@ func _clear_children(container: Node) -> void:
 
 
 func _render() -> void:
-	_clear_children(%Formation)
+	_show_board(state.board_snapshot())
 	_clear_children(%Hand)
-	%MonsterName.text = Setup.MONSTER.name.to_upper()
-	%MonsterHull.text = "HULL  %d / %d" % [state.monster_hull, Setup.MONSTER.hull]
-	%MonsterBar.max_value = Setup.MONSTER.hull
-	%MonsterBar.value = state.monster_hull
-	var reaction: Dictionary = Setup.REACTIONS[state.reaction_index]
-	%ReactionName.text = reaction.name
-	%ReactionTrigger.text = reaction.trigger
-	%ReactionEffect.text = reaction.effect
 	var intent: Dictionary = Setup.INTENTS[state.intent_index]
 	%IntentName.text = intent.name
 	%IntentTrigger.text = intent.trigger
@@ -52,10 +51,7 @@ func _render() -> void:
 		%IntentEffect.text += "\nEscalation: +%d to each damage instance." % escalation
 	%Round.text = "ROUND %02d  /  %s" % [state.round_number, state.phase.to_upper()]
 	%Escalation.text = "Escalation +%d\nBegins in round 4" % maxi(0, state.round_number - 3)
-	%HandCount.text = "SHARED HAND  ·  %d CARDS" % state.hand.size()
-	%PileCounts.text = "DECK  %d    /    DISCARD  %d" % [state.deck.size(), state.discard.size()]
-	for index in state.formation.size():
-		_add_ship(state.formation[index], index)
+	_show_piles(state.board_snapshot())
 	for uid in state.hand:
 		_add_card(uid)
 	%History.text = "\n".join(state.history)
@@ -65,8 +61,27 @@ func _render() -> void:
 		_navigate.call_deferred("res://scenes/%s.tscn" % state.outcome)
 
 
-func _add_ship(ship_id: int, rank: int) -> void:
-	var ship: Dictionary = state.ships[ship_id]
+func _show_piles(snapshot: Dictionary) -> void:
+	%HandCount.text = "SHARED HAND  ·  %d CARDS" % snapshot.hand_size
+	%PileCounts.text = "DECK  %d    /    DISCARD  %d" % [snapshot.deck_size, snapshot.discard_size]
+
+
+func _show_board(snapshot: Dictionary) -> void:
+	_clear_children(%Formation)
+	%MonsterName.text = Setup.MONSTER.name.to_upper()
+	%MonsterHull.text = "HULL  %d / %d" % [snapshot.monster_hull, Setup.MONSTER.hull]
+	%MonsterBar.max_value = Setup.MONSTER.hull
+	%MonsterBar.value = snapshot.monster_hull
+	var reaction: Dictionary = Setup.REACTIONS[snapshot.reaction_index]
+	%ReactionName.text = reaction.name
+	%ReactionTrigger.text = reaction.trigger
+	%ReactionEffect.text = reaction.effect
+	for index in snapshot.formation.size():
+		var ship_id: int = snapshot.formation[index]
+		_add_ship(index, snapshot.ships[ship_id])
+
+
+func _add_ship(rank: int, ship: Dictionary) -> void:
 	var panel := ShipScene.instantiate()
 	panel.name = ship.name
 	%Formation.add_child(panel)
@@ -104,10 +119,14 @@ func _add_card(uid: int) -> void:
 
 
 func _choose_card(uid: int) -> void:
+	if busy:
+		return
 	if state.phase == "discard":
-		state.discard_for_relay(uid)
-		_clear_draft()
-		_render()
+		var error: String = state.discard_for_relay(uid)
+		if error != "":
+			%Inspection.text = error
+			return
+		await _present_resolution()
 		return
 	if state.phase == "refresh":
 		_toggle(refresh_discards, uid)
@@ -130,7 +149,7 @@ func _toggle(items: Array, uid: int) -> void:
 
 
 func _select(uid: int) -> void:
-	if state.phase != "fleet":
+	if busy or state.phase != "fleet":
 		return
 	selected_uid = uid
 	payment.clear()
@@ -145,6 +164,8 @@ func _select(uid: int) -> void:
 
 
 func _target_changed(index: int) -> void:
+	if busy:
+		return
 	target = %TargetChoice.get_item_id(index)
 	_update_controls()
 
@@ -158,11 +179,15 @@ func _clear_draft() -> void:
 
 
 func _cancel() -> void:
+	if busy:
+		return
 	_clear_draft()
 	_update_controls()
 
 
 func _commit() -> void:
+	if busy or (state.phase != "refresh" and selected_uid == -2):
+		return
 	var error := ""
 	if state.phase == "refresh":
 		error = state.refresh(refresh_discards)
@@ -171,20 +196,41 @@ func _commit() -> void:
 	if error != "":
 		%Inspection.text = error
 		return
-	_clear_draft()
-	_render()
+	await _present_resolution()
 
 
 func _end_phase() -> void:
+	if busy:
+		return
 	var error: String = state.end_phase()
 	if error != "":
 		%Inspection.text = error
 		return
+	await _present_resolution()
+
+
+func _present_resolution() -> void:
+	busy = true
+	_update_controls()
+	%Inspection.text = "Resolving combat…"
+	%Status.text = "Combat feedback — actions locked until resolution finishes."
+	await feedback.play(state.feedback_events.duplicate(true), self)
 	_clear_draft()
+	busy = false
 	_render()
+	resolution_finished.emit()
 
 
 func _update_controls() -> void:
+	if busy:
+		for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %WinButton, %LossButton]:
+			button.disabled = true
+		for button in %Hand.get_children():
+			button.disabled = true
+		return
+	%TargetChoice.disabled = false
+	%WinButton.disabled = false
+	%LossButton.disabled = false
 	for button in %Hand.get_children():
 		var uid: int = button.get_meta("uid")
 		var is_action := uid == selected_uid
@@ -224,6 +270,9 @@ func _update_controls() -> void:
 
 
 func _navigate(destination: String) -> void:
+	# Menu remains an immediate escape while feedback is playing.
+	if busy and destination != "res://scenes/main_menu.tscn":
+		return
 	var error := get_tree().change_scene_to_file(destination)
 	if error != OK:
 		push_error("Unable to open %s: %s" % [destination, error_string(error)])
