@@ -1,5 +1,5 @@
 {
-	"version": 1,
+	"version": 2,
 	"ships": [
 		{
 			"id": "bastion",
@@ -18,7 +18,11 @@
 				},
 				{
 					"card": "escort",
-					"count": 2
+					"count": 1
+				},
+				{
+					"card": "resonant_bulwark",
+					"count": 1
 				}
 			]
 		},
@@ -35,11 +39,19 @@
 				},
 				{
 					"card": "salvo",
-					"count": 2
+					"count": 1
 				},
 				{
 					"card": "strafe",
-					"count": 2
+					"count": 1
+				},
+				{
+					"card": "arc_echo",
+					"count": 1
+				},
+				{
+					"card": "convergence_bolt",
+					"count": 1
 				}
 			]
 		},
@@ -60,7 +72,11 @@
 				},
 				{
 					"card": "tow",
-					"count": 2
+					"count": 1
+				},
+				{
+					"card": "aether_conduit",
+					"count": 1
 				}
 			]
 		}
@@ -72,10 +88,6 @@
 			"owner": "bastion",
 			"cost": 1,
 			"pays": 2,
-			"ranks": [
-				1,
-				2
-			],
 			"tags": [
 				"Guard"
 			],
@@ -85,7 +97,15 @@
 					"target": "actor",
 					"amount": 8
 				}
-			]
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "advance",
@@ -93,11 +113,6 @@
 			"owner": "bastion",
 			"cost": 1,
 			"pays": 1,
-			"ranks": [
-				1,
-				2,
-				3
-			],
 			"tags": [
 				"Attack",
 				"Movement"
@@ -110,7 +125,16 @@
 				{
 					"kind": "swap_adjacent"
 				}
-			]
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "escort",
@@ -118,11 +142,6 @@
 			"owner": "bastion",
 			"cost": 1,
 			"pays": 1,
-			"ranks": [
-				1,
-				2,
-				3
-			],
 			"tags": [
 				"Guard"
 			],
@@ -133,7 +152,16 @@
 					"amount": 6,
 					"exclude_actor": true
 				}
-			]
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "broadside",
@@ -141,10 +169,6 @@
 			"owner": "kestrel",
 			"cost": 2,
 			"pays": 1,
-			"ranks": [
-				1,
-				2
-			],
 			"tags": [
 				"Attack"
 			],
@@ -153,7 +177,15 @@
 					"kind": "damage_monster",
 					"amount": 9
 				}
-			]
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "salvo",
@@ -161,10 +193,6 @@
 			"owner": "kestrel",
 			"cost": 3,
 			"pays": 2,
-			"ranks": [
-				2,
-				3
-			],
 			"tags": [
 				"Attack"
 			],
@@ -173,7 +201,15 @@
 					"kind": "damage_monster",
 					"amount": 14
 				}
-			]
+			],
+			"positions": [
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "strafe",
@@ -181,11 +217,6 @@
 			"owner": "kestrel",
 			"cost": 0,
 			"pays": 1,
-			"ranks": [
-				1,
-				2,
-				3
-			],
 			"tags": [
 				"Attack",
 				"Movement"
@@ -198,7 +229,16 @@
 				{
 					"kind": "swap_adjacent"
 				}
-			]
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "patch",
@@ -206,10 +246,6 @@
 			"owner": "lamplighter",
 			"cost": 1,
 			"pays": 2,
-			"ranks": [
-				2,
-				3
-			],
 			"tags": [
 				"Repair"
 			],
@@ -218,7 +254,15 @@
 					"kind": "repair",
 					"amount": 4
 				}
-			]
+			],
+			"positions": [
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "relay",
@@ -226,11 +270,6 @@
 			"owner": "lamplighter",
 			"cost": 0,
 			"pays": 1,
-			"ranks": [
-				1,
-				2,
-				3
-			],
 			"tags": [
 				"Tactic"
 			],
@@ -240,7 +279,16 @@
 					"amount": 2,
 					"discard": 1
 				}
-			]
+			],
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
 		},
 		{
 			"id": "tow",
@@ -248,10 +296,6 @@
 			"owner": "lamplighter",
 			"cost": 1,
 			"pays": 1,
-			"ranks": [
-				2,
-				3
-			],
 			"tags": [
 				"Movement",
 				"Guard"
@@ -261,7 +305,186 @@
 					"kind": "swap_pair_guard",
 					"amount": 2
 				}
+			],
+			"positions": [
+				"upper",
+				"lower",
+				"rear"
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": []
+		},
+		{
+			"id": "aether_conduit",
+			"name": "Aether Conduit",
+			"owner": "lamplighter",
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"tags": [
+				"Tactic"
+			],
+			"effects": [
+				{
+					"kind": "guard",
+					"target": "actor",
+					"amount": 2
+				}
+			],
+			"on_play": [],
+			"modifiers": [
+				{
+					"stat": "damage",
+					"amount": 2,
+					"tag": "Attack",
+					"condition": {
+						"tag": "",
+						"min": 0
+					}
+				},
+				{
+					"stat": "cost",
+					"amount": 1,
+					"tag": "",
+					"condition": {
+						"tag": "",
+						"min": 0
+					}
+				}
+			],
+			"triggers": []
+		},
+		{
+			"id": "resonant_bulwark",
+			"name": "Resonant Bulwark",
+			"owner": "bastion",
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"tags": [
+				"Guard"
+			],
+			"effects": [
+				{
+					"kind": "guard",
+					"target": "actor",
+					"amount": 2
+				}
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": [
+				{
+					"id": "reactive_ward",
+					"name": "Reactive Ward",
+					"event": "damage",
+					"tag": "Attack",
+					"threshold": 1,
+					"condition": {
+						"tag": "",
+						"min": 0
+					},
+					"effects": [
+						{
+							"kind": "guard",
+							"target": "event_actor",
+							"amount": 3
+						}
+					]
+				}
 			]
+		},
+		{
+			"id": "arc_echo",
+			"name": "Arc Echo",
+			"owner": "kestrel",
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"tags": [
+				"Attack"
+			],
+			"effects": [
+				{
+					"kind": "damage_monster",
+					"amount": 2
+				}
+			],
+			"on_play": [],
+			"modifiers": [],
+			"triggers": [
+				{
+					"id": "return_arc",
+					"name": "Return Arc",
+					"event": "guard",
+					"tag": "",
+					"threshold": 1,
+					"condition": {
+						"tag": "",
+						"min": 0
+					},
+					"effects": [
+						{
+							"kind": "damage_monster",
+							"amount": 2
+						}
+					]
+				}
+			]
+		},
+		{
+			"id": "convergence_bolt",
+			"name": "Convergence Bolt",
+			"owner": "kestrel",
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"tags": [
+				"Attack"
+			],
+			"effects": [
+				{
+					"kind": "damage_monster",
+					"amount": 3
+				}
+			],
+			"on_play": [
+				{
+					"condition": {
+						"tag": "Tactic",
+						"min": 1
+					},
+					"effects": [
+						{
+							"kind": "damage_monster",
+							"amount": 3
+						}
+					]
+				}
+			],
+			"modifiers": [],
+			"triggers": []
 		}
 	],
 	"leviathans": [
@@ -269,104 +492,27 @@
 			"id": "stormmaw",
 			"name": "Stormmaw",
 			"hull": 70,
-			"starting_reaction": "wings",
-			"starting_intent": "bite",
-			"reactions": [
+			"stances": [
 				{
-					"id": "wings",
-					"name": "Buffeting Wings",
-					"trigger": {
-						"kind": "tag",
-						"tag": "Movement"
-					},
-					"effects": [
+					"id": "stance_1",
+					"name": "Buffeting Wings / Rending Bite",
+					"reactions": [
 						{
-							"kind": "damage_ship",
-							"target": "actor",
-							"amount": 3
+							"id": "wings",
+							"name": "Buffeting Wings",
+							"trigger": {
+								"kind": "tag",
+								"tag": "Movement"
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "actor",
+									"amount": 3
+								}
+							]
 						}
-					]
-				},
-				{
-					"id": "recoil",
-					"name": "Violent Recoil",
-					"trigger": {
-						"kind": "damage",
-						"threshold": 8
-					},
-					"effects": [
-						{
-							"kind": "damage_ship",
-							"target": "actor",
-							"amount": 4
-						}
-					]
-				},
-				{
-					"id": "lunge",
-					"name": "Predator’s Lunge",
-					"trigger": {
-						"kind": "tag_rank",
-						"tag": "Attack",
-						"rank": 1
-					},
-					"effects": [
-						{
-							"kind": "damage_ship",
-							"target": "actor",
-							"amount": 4
-						}
-					]
-				},
-				{
-					"id": "scent",
-					"name": "Aether Scent",
-					"trigger": {
-						"kind": "healed",
-						"threshold": 1
-					},
-					"effects": [
-						{
-							"kind": "damage_ship",
-							"target": "repaired",
-							"amount": 3
-						}
-					]
-				},
-				{
-					"id": "static",
-					"name": "Gathering Static",
-					"trigger": {
-						"kind": "cost",
-						"threshold": 2
-					},
-					"effects": [
-						{
-							"kind": "damage_ship",
-							"target": "all",
-							"amount": 2
-						}
-					]
-				},
-				{
-					"id": "tail",
-					"name": "Tail Sweep",
-					"trigger": {
-						"kind": "tag",
-						"tag": "Guard"
-					},
-					"effects": [
-						{
-							"kind": "swap_ends",
-							"amount": 3
-						}
-					]
-				}
-			],
-			"intents": [
-				{
-					"id": "bite",
-					"name": "Rending Bite",
+					],
 					"effects": [
 						{
 							"kind": "damage_ship",
@@ -376,8 +522,25 @@
 					]
 				},
 				{
-					"id": "lightning",
-					"name": "Forked Lightning",
+					"id": "stance_2",
+					"name": "Violent Recoil / Forked Lightning",
+					"reactions": [
+						{
+							"id": "recoil",
+							"name": "Violent Recoil",
+							"trigger": {
+								"kind": "damage",
+								"threshold": 8
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "actor",
+									"amount": 4
+								}
+							]
+						}
+					],
 					"effects": [
 						{
 							"kind": "damage_ship",
@@ -387,8 +550,28 @@
 					]
 				},
 				{
-					"id": "storm",
-					"name": "Storm Front",
+					"id": "stance_3",
+					"name": "Predator’s Lunge / Storm Front",
+					"reactions": [
+						{
+							"id": "lunge",
+							"name": "Predator’s Lunge",
+							"trigger": {
+								"kind": "tag_position",
+								"tag": "Attack",
+								"positions": [
+									"front"
+								]
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "actor",
+									"amount": 4
+								}
+							]
+						}
+					],
 					"effects": [
 						{
 							"kind": "damage_ship",
@@ -402,8 +585,25 @@
 					]
 				},
 				{
-					"id": "dive",
-					"name": "Hunting Dive",
+					"id": "stance_4",
+					"name": "Aether Scent / Hunting Dive",
+					"reactions": [
+						{
+							"id": "scent",
+							"name": "Aether Scent",
+							"trigger": {
+								"kind": "healed",
+								"threshold": 1
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "repaired",
+									"amount": 3
+								}
+							]
+						}
+					],
 					"effects": [
 						{
 							"kind": "damage_ship",
@@ -414,8 +614,64 @@
 							"kind": "rear_to_front"
 						}
 					]
+				},
+				{
+					"id": "stance_5",
+					"name": "Gathering Static / Rending Bite",
+					"reactions": [
+						{
+							"id": "static",
+							"name": "Gathering Static",
+							"trigger": {
+								"kind": "cost",
+								"threshold": 2
+							},
+							"effects": [
+								{
+									"kind": "damage_ship",
+									"target": "all",
+									"amount": 2
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "front",
+							"amount": 7
+						}
+					]
+				},
+				{
+					"id": "stance_6",
+					"name": "Tail Sweep / Forked Lightning",
+					"reactions": [
+						{
+							"id": "tail",
+							"name": "Tail Sweep",
+							"trigger": {
+								"kind": "tag",
+								"tag": "Guard"
+							},
+							"effects": [
+								{
+									"kind": "swap_ends",
+									"amount": 3
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "damage_ship",
+							"target": "ends",
+							"amount": 4
+						}
+					]
 				}
-			]
+			],
+			"starting_stance": "stance_1"
 		}
 	],
 	"setup": {
@@ -427,13 +683,19 @@
 		],
 		"fixed_hand": true,
 		"opening_hand": [
-			"advance",
-			"tow",
-			"escort",
-			"salvo",
-			"brace",
+			"aether_conduit",
+			"resonant_bulwark",
+			"arc_echo",
+			"convergence_bolt",
 			"broadside",
-			"patch"
-		]
+			"brace",
+			"relay"
+		],
+		"positions": [
+			"front",
+			"upper",
+			"rear"
+		],
+		"enemy_position": "front"
 	}
 }

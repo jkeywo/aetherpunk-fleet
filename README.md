@@ -38,6 +38,28 @@ After the full allied action and trigger chain, the first qualifying reaction re
 
 Guard absorbs damage before hull and expires after enemy activity. Intent damage still gains one per round beyond round three. A lethal allied action wins before enemy retaliation.
 
+## Example circle opening
+
+The saved setup starts with four example cards plus Broadside, Brace for Impact, and Signal Relay. The fleet still contributes six cards per ship (18 total). Each example replaces one old copy; every original card remains available. The bundled content is now version 2 so these rules are editable immediately.
+
+| Card | Ship | Cost | Circle mechanic |
+| --- | --- | --- | --- |
+| Aether Conduit | Lamplighter | 0 | Gain 2 guard. Neighbouring Attack cards gain +2 damage per damage effect; all neighbouring cards cost 1 less. |
+| Resonant Bulwark | Bastion | 0 | Gain 2 guard. Once per turn, a neighbouring Attack dealing damage gives its acting ship 3 guard. |
+| Arc Echo | Kestrel | 0 | Deal 2 damage. Once per turn, a neighbouring card granting guard makes Arc Echo deal 2 damage. |
+| Convergence Bolt | Kestrel | 1 | Deal 3 damage, plus a separate 3-damage effect if adjacent to a Tactic. |
+
+Try this sequence, with no payment cards selected:
+
+1. **Aether Conduit → North.** Lamplighter gains 2 guard.
+2. **Resonant Bulwark → East.** Bastion gains 2 guard; its reaction is armed.
+3. **Arc Echo → South.** Deal 2 damage, trigger Bulwark to give Kestrel 3 guard, then trigger Arc Echo for 2 more damage. Stormmaw has 66 hull. Both trigger badges are used for this turn.
+4. **Convergence Bolt → West.** Adjacent Conduit reduces the cost to zero, enables the Tactic condition, and adds 2 to each damage effect: 5 + 5 = 10 damage. Stormmaw has 56 hull and the circle expands.
+5. Optionally play **Broadside → Centre**, paying with **Brace for Impact**. Conduit reduces the cost to 1 and raises damage to 11. The used triggers stay spent. Stormmaw has 45 hull.
+
+These outcomes assume the unmodified opening stance and cards. To compare placement, retry and play Convergence Bolt at South directly after the North Conduit: it costs 1 and deals only 3 damage because the two cards are not adjacent. Hover cards and circle slots for full generated rules. Signal Relay can draw more cards for experimenting with expanded placements; its mandatory discard pauses resolution normally.
+
+
 ## Live content editor
 
 Use **Editor** on the main menu. Its tabs create, duplicate, edit, and delete leviathans, ships, and cards. Stable IDs survive renaming, and referenced entries cannot be deleted until their references are changed.
@@ -75,6 +97,7 @@ godot --headless --path . --script res://tests/smoke_flow.gd
 godot --headless --path . --script res://tests/combat_feedback.gd
 godot --headless --path . --script res://tests/results_flow.gd
 godot --headless --path . --script res://tests/editor_flow.gd
+godot --headless --path . --script res://tests/circle_examples.gd
 ```
 
 Suites cover unchanged payment, guard, repair, conservation, lethal-hit and results rules plus new positions, expansion timing, modifier costs, finite chains, paused discards, independent copies, stance transitions, migration, safe saving, live previews, real playtests, navigation, and animation cancellation. Editor/persistence tests use temporary user-data files and never save project content.
