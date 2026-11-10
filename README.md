@@ -1,6 +1,6 @@
 # Aetherpunk Fleet
 
-Godot 4.7 / GDScript / Compatibility renderer. Open `project.godot` and press **F5**.
+Godot 4.7 / GDScript / Compatibility renderer. Double-click `LaunchGame.bat` to play using the installed local Godot executable, or open `project.godot` and press **F5**.
 
 The prototype includes a main menu, battle, victory/defeat summaries, and a live content editor. **Start Game** opens fleet preparation using saved content. **Retry Battle** replays the fleet you launched; editor playtests use the editor's saved setup. Results and running battles keep detached snapshots.
 
