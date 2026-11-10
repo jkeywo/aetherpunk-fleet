@@ -60,6 +60,8 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 		ship["max_hull"] = int(ship.hull)
 		ship.hull = int(ship.hull)
 		ship["guard"] = 0
+		ship["recovery"] = 0
+		ship["last_position"] = Geometry.POSITIONS.find(definitions.positions[id])
 		formation[Geometry.POSITIONS.find(definitions.positions[id])] = id
 		for slot in ship.loadout:
 			for copy in int(slot.count):
@@ -514,6 +516,9 @@ func _cleanup() -> void:
 		var id: int = formation[point]
 		if id >= 0 and ships[id].hull <= 0:
 			formation[point] = -1
+			ships[id].guard = 0
+			ships[id].recovery = 0
+			ships[id].last_position = point
 			history.append(ships[id].name + " destroyed.")
 			_record("destroyed", {"target": id, "title": ships[id].name})
 	if alive_ids().is_empty():
@@ -685,7 +690,7 @@ func result_summary(reported_outcome: String = "") -> Dictionary:
 
 
 func board_snapshot() -> Dictionary:
-	return {"ships": ships.duplicate(true), "formation": formation.duplicate(), "enemy_position": enemy_position,
+	return {"ships": ships.duplicate(true), "formation": formation.duplicate(), "basic_actions": definitions.basic_actions.duplicate(), "enemy_position": enemy_position,
 		"monster_hull": monster_hull, "stance_index": stance_index, "circle": circle.duplicate(), "expanded": expanded,
 		"play_order": play_order.duplicate(), "used_triggers": used_triggers.duplicate(true),
 		"hand_size": hand.size(), "deck_size": deck.size(), "discard_size": discard.size()}
@@ -729,3 +734,116 @@ func contribution_details(uid: int, slot: int, simulated_used: Dictionary = {}) 
 		if not reasons.is_empty():
 			result[source] = reasons
 	return result
+
+
+func validate_basic(uid: int, recipient: int) -> String:
+	if phase != "fleet" or outcome != "":
+		return "Basic actions are available during the fleet phase."
+	if not hand.has(uid) or uid < 0:
+		return "Discard a card from your hand for this basic action."
+	if recipient < 0 or recipient >= ships.size():
+		return "Choose a player ship."
+	var actor: int = card(uid).owner
+	if actor == recipient:
+		if ships[actor].hull > 0 and ships[actor].hull >= ships[actor].max_hull:
+			return "This ship is already at full hull."
+		if ships[actor].hull <= 0 and not formation.has(-1):
+			return "Revival requires an empty formation position."
+		return ""
+	if ships[actor].hull <= 0 or not formation.has(actor):
+		return "A defeated ship can only recover itself."
+	if ships[recipient].hull <= 0 or not formation.has(recipient):
+		return "Only living ships can swap positions."
+	if not Geometry.unit_neighbours(formation.find(actor)).has(formation.find(recipient)):
+		return "Swap requires an adjacent player ship."
+	return ""
+
+
+func play_basic(uid: int, recipient: int) -> String:
+	var error := validate_basic(uid, recipient)
+	if error != "":
+		return error
+	var actor: int = card(uid).owner
+	var repair: bool = actor == recipient
+	var title: String = ("Basic Repair / " if repair else "Basic Swap / ") + ships[actor].name
+	feedback_events.clear()
+	hand.erase(uid)
+	held = [uid]
+	root_context = {"uid": -1, "actor": actor, "target": recipient, "damage": 0, "healed": 0,
+		"tags": ["Repair"] if repair else ["Movement"], "cost": 0, "title": title}
+	history.append("%s: discarded %s." % [title, card(uid).name])
+	_record("basic_action", {"uid": uid, "target": recipient, "source": actor,
+		"action": "repair" if repair else "swap", "title": title})
+	if repair:
+		var amount: int = int(definitions.basic_actions.repair)
+		if ships[actor].hull > 0:
+			var healed: int = mini(amount, int(ships[actor].max_hull) - int(ships[actor].hull))
+			ships[actor].hull += healed
+			root_context.healed = healed
+			history.append("%s restores %d hull." % [ships[actor].name, healed])
+			_record("repair", {"target": actor, "amount": healed})
+		else:
+			var threshold: int = int(definitions.basic_actions.revive_threshold)
+			var before: int = int(ships[actor].get("recovery", 0))
+			ships[actor].recovery = mini(threshold, before + amount)
+			history.append("%s recovery %d / %d." % [ships[actor].name, ships[actor].recovery, threshold])
+			_record("revive_progress", {"target": actor, "amount": int(ships[actor].recovery) - before,
+				"threshold": threshold, "title": ships[actor].name})
+			if ships[actor].recovery >= threshold:
+				var point: int = int(ships[actor].get("last_position", -1))
+				if point < 0 or formation[point] >= 0:
+					point = formation.find(-1)
+				formation[point] = actor
+				ships[actor].hull = mini(threshold, int(ships[actor].max_hull))
+				ships[actor].guard = 0
+				ships[actor].recovery = 0
+				root_context.healed = int(ships[actor].hull)
+				history.append("%s revived at %s with %d hull." % [ships[actor].name, Geometry.POSITION_NAMES[point], ships[actor].hull])
+				_record("revived", {"target": actor, "amount": ships[actor].hull, "title": ships[actor].name})
+	else:
+		_swap_points(formation.find(actor), formation.find(recipient))
+	_finish_root()
+	return ""
+
+
+func basic_preview(uid: int, recipient: int) -> Dictionary:
+	var error := validate_basic(uid, recipient)
+	if error != "":
+		return {"ok": false, "text": error, "action": ""}
+	var actor: int = card(uid).owner
+	var title: String
+	if actor != recipient:
+		title = "Swap %s ↔ %s" % [ships[actor].name, ships[recipient].name]
+	elif ships[actor].hull > 0:
+		var healed: int = mini(int(definitions.basic_actions.repair), int(ships[actor].max_hull) - int(ships[actor].hull))
+		title = "Repair %s: +%d hull (%d → %d)" % [ships[actor].name, healed, ships[actor].hull, ships[actor].hull + healed]
+	else:
+		var progress: int = int(ships[actor].get("recovery", 0))
+		var threshold: int = int(definitions.basic_actions.revive_threshold)
+		var next: int = mini(threshold, progress + int(definitions.basic_actions.repair))
+		title = "Recover %s: %d → %d / %d" % [ships[actor].name, progress, next, threshold]
+		if next >= threshold:
+			var point: int = int(ships[actor].get("last_position", -1))
+			if point < 0 or formation[point] >= 0:
+				point = formation.find(-1)
+			title += ". REVIVE with %d hull at %s" % [mini(threshold, int(ships[actor].max_hull)), Geometry.POSITION_NAMES[point]]
+	var sim = get_script().new(0, document)
+	for key in ["ships", "formation", "card_keys", "hand", "deck", "discard", "held", "circle", "play_order", "used_triggers"]:
+		sim.set(key, get(key).duplicate(true))
+	sim.monster_hull = monster_hull
+	sim.stance_index = stance_index
+	sim.expanded = expanded
+	sim._preview_only = true
+	sim.play_basic(uid, recipient)
+	var text: String = title + ". Discard " + card(uid).name + "; no extra payment. Ignores printed cost, effects, and position restrictions."
+	for event in sim.feedback_events:
+		if event.kind == "reaction_triggered":
+			text += " REACTION: " + event.title + "; next stance hidden."
+	for id in ships.size():
+		if sim.ships[id].hull != ships[id].hull:
+			text += " %s final hull: %d → %d." % [ships[id].name, ships[id].hull, sim.ships[id].hull]
+	if sim.ships[recipient].hull <= 0:
+		text += " %s is defeated (recovery %d / %d)." % [ships[recipient].name, sim.ships[recipient].get("recovery", 0), definitions.basic_actions.revive_threshold]
+	if sim.outcome != "":
+		text += " " + sim.outcome.to_upper() + "."
+	return {"ok": true, "text": text, "action": "Repair / Recover" if actor == recipient else "Swap Ships"}

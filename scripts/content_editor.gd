@@ -675,6 +675,10 @@ func _build_setup() -> void:
 	for index in 3:
 		setup_controls["point_" + str(index)] = _dropdown(setup_form, "Ship %d position" % (index + 1), point_options, draft.setup.positions[index], func(value): draft.setup.positions[index] = value; _dirty_changed())
 	setup_controls["enemy_point"] = _dropdown(setup_form, "Enemy position", point_options, draft.setup.enemy_position, func(value): draft.setup.enemy_position = value; _dirty_changed())
+	_label(setup_form, "BASIC ACTIONS / discard the dragged card", 14)
+	var basic := Catalog.basic_rules(draft)
+	setup_controls["basic_repair"] = _number(setup_form, "Basic repair", basic.repair, func(value): _set_basic_rule("repair", value))
+	setup_controls["revive_threshold"] = _number(setup_form, "Revive threshold", basic.revive_threshold, func(value): _set_basic_rule("revive_threshold", value))
 	setup_controls["fixed_hand"] = _check(setup_form, "Use fixed opening hand", draft.setup.fixed_hand, func(value):
 		draft.setup.fixed_hand = value
 		_dirty_changed()
@@ -990,3 +994,10 @@ func _live_preview() -> void:
 			preview_form.add_child(stance_view)
 			stance_view.configure(entry.stances[Catalog.index_by_id(entry.stances, editing_stance)])
 		preview_widget = view
+
+
+func _set_basic_rule(key: String, value: int) -> void:
+	var basic := Catalog.basic_rules(draft)
+	basic[key] = value
+	draft.setup["basic_actions"] = basic
+	_dirty_changed()

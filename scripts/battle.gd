@@ -13,6 +13,7 @@ var state
 var busy := false
 var selected_uid := -2
 var selected_slot := -1
+var basic_target := -1
 var payment: Array = []
 var refresh_discards: Array = []
 var target := -1
@@ -27,6 +28,7 @@ var feedback: CanvasLayer
 var menu: PopupMenu
 var dragged_uid := -1
 var drag_hover_slot := -1
+var drag_hover_ship := -1
 var drag_serial := 0
 var drag_payload: Dictionary = {}
 var history_dialog: AcceptDialog
@@ -96,6 +98,10 @@ func _build_ui() -> void:
 	_label(canvas, "CircleTitle", "MAGIC CIRCLE", 13).modulate = Color("#d6adee")
 	_label(canvas, "EnemyTitle", "ENEMY FORMATION", 13).modulate = Color("#ffb0a0")
 	allies = _named(Formation.new(), "Allies", canvas)
+	allies.drop_check = _can_drop_ship
+	allies.ship_drag_hovered.connect(_drag_over_ship)
+	allies.ship_drag_exited.connect(_drag_leave_ship)
+	allies.ship_dropped.connect(_drop_ship)
 	enemies = _named(Formation.new(), "Enemies", canvas)
 	circle_view = _named(Circle.new(), "Circle", canvas)
 	circle_view.slot_selected.connect(_circle_selected)
@@ -179,8 +185,8 @@ func _layout() -> void:
 	actions.size = Vector2(w - 32, 38)
 	%Inspection.position = Vector2(18, 752)
 	%Inspection.size = Vector2(w - 36, 42)
-	%Status.position = Vector2(20, 402)
-	%Status.size = Vector2(w - 430, 62)
+	%Status.position = Vector2(20, 435)
+	%Status.size = Vector2(w - 430, 38)
 
 
 func _render() -> void:
@@ -196,6 +202,7 @@ func _render() -> void:
 		face.configure(state.card(uid), state.ships[state.card(uid).owner])
 		face.pressed.connect(_choose_card.bind(uid))
 		face.drag_provider = _begin_card_drag.bind(uid)
+		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, or an adjacent living ally to swap. Basic actions discard this card." % state.ships[state.card(uid).owner].name
 		face.mouse_entered.connect(func(): hand_view.hover(face, true))
 		face.mouse_exited.connect(func(): hand_view.hover(face, false))
 	hand_view.arrange()
@@ -232,6 +239,7 @@ func _circle_selected(slot: int) -> void:
 		return
 	if selected_uid >= 0 and (slot < 4 or state.expanded):
 		selected_slot = slot
+		basic_target = -1
 		_fill_choices()
 		_update_controls()
 
@@ -246,6 +254,12 @@ func _choose_card(uid: int) -> void:
 		return
 	if state.phase == "refresh":
 		_toggle(refresh_discards, uid)
+	elif basic_target >= 0:
+		if selected_uid == uid:
+			_cancel()
+		else:
+			_select(uid)
+		return
 	elif selected_uid == -2:
 		_select(uid)
 		return
@@ -268,6 +282,7 @@ func _select(uid: int) -> void:
 	if busy or dragged_uid >= 0 or state.phase != "fleet":
 		return
 	selected_uid = uid
+	basic_target = -1
 	selected_slot = state.first_slot() if uid >= 0 else -1
 	payment.clear()
 	_fill_choices()
@@ -299,6 +314,7 @@ func _cancel() -> void:
 
 func _clear_draft() -> void:
 	selected_uid = -2
+	basic_target = -1
 	selected_slot = -1
 	payment.clear()
 	refresh_discards.clear()
@@ -314,6 +330,8 @@ func _commit() -> void:
 	var error := ""
 	if state.phase == "refresh":
 		error = state.refresh(refresh_discards)
+	elif basic_target >= 0:
+		error = state.play_basic(selected_uid, basic_target)
 	elif selected_uid != -2:
 		error = state.play(selected_uid, payment, target, movement_target, selected_slot)
 	else:
@@ -349,6 +367,10 @@ func _update_controls() -> void:
 		_update_drag_feedback()
 		return
 	circle_view.drag_active = false
+	if busy:
+		allies.show_basic_targets()
+	else:
+		_update_basic_highlights()
 	var contributing: Array = []
 	var contribution_details: Dictionary = {}
 	for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
@@ -360,8 +382,8 @@ func _update_controls() -> void:
 		button.modulate = Color("#a9e3cb") if payment.has(uid) or refresh_discards.has(uid) else Color.WHITE
 	hand_view.selected_uid = selected_uid
 	hand_view.arrange()
-	%TargetChoice.visible = selected_uid != -2 and %TargetChoice.item_count > 0
-	%MovementChoice.visible = selected_uid != -2 and %MovementChoice.item_count > 0
+	%TargetChoice.visible = basic_target < 0 and selected_uid != -2 and %TargetChoice.item_count > 0
+	%MovementChoice.visible = basic_target < 0 and selected_uid != -2 and %MovementChoice.item_count > 0
 	if busy:
 		%Inspection.text = "Resolving action and chained effects…"
 		return
@@ -376,6 +398,11 @@ func _update_controls() -> void:
 		%PlayButton.disabled = false
 		%PlayButton.text = "Refill Hand"
 		%Inspection.text = "New player turn: circle cleared. Select optional hand discards, then refill to seven."
+	elif basic_target >= 0:
+		var result: Dictionary = state.basic_preview(selected_uid, basic_target)
+		%PlayButton.disabled = not result.ok
+		%PlayButton.text = result.action if result.ok else "Basic Action"
+		%Inspection.text = result.text
 	elif selected_uid != -2:
 		var result: Dictionary = state.preview(selected_uid, payment, target, movement_target, selected_slot)
 		%PlayButton.disabled = not result.ok
@@ -384,13 +411,13 @@ func _update_controls() -> void:
 		contribution_details = result.get("contribution_details", {})
 		%PlayButton.text = "Manoeuvre" if selected_uid < 0 else "Play Card"
 	else:
-		%Inspection.text = "Select an action card, choose its circle slot, and select other cards as payment."
+		%Inspection.text = "Select a card to play, or drag it onto its own ship to repair/recover or an adjacent ally to swap."
 	%Status.text = "Hand %d / In circle %d\nGreen BONUS = contributor. Purple = adjacent. Next stance hidden." % [state.hand.size(), state.play_order.size()]
 	var cards: Dictionary = {}
 	for uid in state.circle:
 		if uid >= 0:
 			cards[uid] = state.card(uid)
-	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, selected_slot, contributing, contribution_details)
+	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, selected_slot if basic_target < 0 else -1, contributing, contribution_details)
 
 
 func _show_history() -> void:
@@ -456,6 +483,13 @@ func _notification(what: int) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and dragged_uid >= 0 and drag_hover_ship >= 0:
+		var widget: Control = allies.target_widget(drag_hover_ship)
+		if widget != null:
+			var point: Vector2 = widget.get_global_transform_with_canvas().affine_inverse() * event.position
+			if not Rect2(Vector2.ZERO, widget.size).has_point(point):
+				drag_hover_ship = -1
+				_update_drag_feedback()
 	if event is InputEventMouseMotion and dragged_uid >= 0 and drag_hover_slot >= 0:
 		var button: Control = circle_view.buttons[drag_hover_slot]
 		var local_point: Vector2 = button.get_global_transform_with_canvas().affine_inverse() * event.position
@@ -470,6 +504,7 @@ func _begin_card_drag(uid: int) -> Dictionary:
 	drag_serial += 1
 	dragged_uid = uid
 	drag_hover_slot = -1
+	drag_hover_ship = -1
 	drag_payload = {"kind": "fleet_hand_card", "battle": get_instance_id(), "uid": uid, "serial": drag_serial}
 	for face in hand_view.get_children():
 		if face.get_meta("uid", -1) == uid:
@@ -512,6 +547,7 @@ func _drag_over_slot(slot: int, data: Variant) -> void:
 	if not _is_our_drag(data) or drag_hover_slot == slot:
 		return
 	drag_hover_slot = slot
+	drag_hover_ship = -1
 	_update_drag_feedback()
 
 
@@ -525,6 +561,7 @@ func _update_drag_feedback() -> void:
 	for control in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
 		control.disabled = true
 	circle_view.drag_active = true
+	_update_basic_highlights(dragged_uid, drag_hover_ship)
 	circle_view.valid_drop_slots = []
 	circle_view.drop_errors = {}
 	for slot in 9:
@@ -540,7 +577,10 @@ func _update_drag_feedback() -> void:
 	var details: Dictionary = {}
 	var highlight := -1
 	var title: String = state.card(dragged_uid).name
-	if drag_hover_slot >= 0:
+	if drag_hover_ship >= 0:
+		var preview: Dictionary = state.basic_preview(dragged_uid, drag_hover_ship)
+		%Inspection.text = ("Drop to select basic action, then confirm. " if preview.ok else "Cannot drop: ") + preview.text
+	elif drag_hover_slot >= 0:
 		var error: String = circle_view.drop_errors[drag_hover_slot]
 		if error == "":
 			highlight = drag_hover_slot
@@ -556,7 +596,7 @@ func _update_drag_feedback() -> void:
 		else:
 			%Inspection.text = "Cannot place %s: %s" % [title, error]
 	else:
-		%Inspection.text = "Drag %s to an outlined slot. Drop selects the destination; Play Card confirms after payment." % title
+		%Inspection.text = "Drag %s to the circle, its own ship to repair/recover, or an adjacent ally to swap. Drop selects; confirm to spend the card." % title
 	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, highlight, contributors, details)
 
 
@@ -576,6 +616,7 @@ func _drop_card(slot: int, data: Variant) -> void:
 func _finish_card_drag(refresh: bool = true) -> void:
 	dragged_uid = -1
 	drag_hover_slot = -1
+	drag_hover_ship = -1
 	drag_payload.clear()
 	circle_view.drag_active = false
 	circle_view.valid_drop_slots.clear()
@@ -584,3 +625,51 @@ func _finish_card_drag(refresh: bool = true) -> void:
 		face.modulate.a = 1.0
 	if refresh:
 		_update_controls()
+
+
+func _can_drop_ship(data: Variant, ship_id: int) -> bool:
+	return _is_our_drag(data) and not busy and not get_tree().paused and state.validate_basic(dragged_uid, ship_id) == ""
+
+
+func _drag_over_ship(ship_id: int, data: Variant) -> void:
+	if not _is_our_drag(data) or drag_hover_ship == ship_id:
+		return
+	drag_hover_slot = -1
+	drag_hover_ship = ship_id
+	_update_drag_feedback()
+
+
+func _drag_leave_ship(ship_id: int) -> void:
+	if dragged_uid >= 0 and drag_hover_ship == ship_id:
+		drag_hover_ship = -1
+		_update_drag_feedback()
+
+
+func _drop_ship(ship_id: int, data: Variant) -> void:
+	if not _can_drop_ship(data, ship_id):
+		return
+	var uid := dragged_uid
+	_finish_card_drag(false)
+	_select(uid)
+	basic_target = ship_id
+	selected_slot = -1
+	%TargetChoice.clear()
+	%MovementChoice.clear()
+	_update_controls()
+
+
+func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
+	if uid < 0 and basic_target >= 0:
+		uid = selected_uid
+		hovered = basic_target
+	if uid < 0:
+		allies.show_basic_targets()
+		return
+	var hints: Dictionary = {}
+	var valid: Array = []
+	for ship_id in state.ships.size():
+		var preview: Dictionary = state.basic_preview(uid, ship_id)
+		hints[ship_id] = preview.text
+		if preview.ok:
+			valid.append(ship_id)
+	allies.show_basic_targets(hints, valid, hovered, int(state.card(uid).owner))

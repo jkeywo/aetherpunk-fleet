@@ -12,6 +12,21 @@ The gear opens a pausing battle menu with Resume, Main Menu, and Return to Edito
 
 Drag a hand card onto the circle as an alternative to clicking. Available destinations have blue **DROP HERE** outlines; hover turns the destination gold and highlights green **BONUS** sources and links. The preview recalculates adjacency, discounts, conditions, and available payment for that slot. Occupied, locked, unaffordable, and position-restricted destinations reject the drop. Dropping selects the action and destination: choose payment and targets, then press **Play Card**. Dropping outside or onto an invalid slot preserves the previous draft. Dragging the selected card keeps payment when still needed and clears it if the new slot makes the action free. Dragging is unavailable during resolution, mandatory discard, or hand refresh.
 
+### Basic ship actions
+
+Drag a card onto **its own ship** to select a basic repair, or onto an **adjacent living player ship** to select a swap. Confirm with the action button. Each action discards exactly that card, needs no extra payment, and ignores its printed cost, effects, tags, and acting-position restrictions. The card stays out of the circle and cannot fire circle triggers. Basic actions work even with a full circle.
+
+- **Repair:** restore 2 hull, capped at maximum. Full-hull ships cannot use this action.
+- **Recover a wreck:** defeated ships appear as recovery targets below the allied diamond. Their own cards add 2 recovery points per action; progress persists between turns. At 4 points they revive with 4 hull (capped at maximum), zero guard, and reset recovery. Use their former position if empty; otherwise use the first empty position in Front / Upper / Lower / Rear order. Defeated ships cannot swap or play cards into the circle.
+- **Swap:** the card's owning ship and target must both be alive and connected by a formation edge. The two ships exchange positions.
+
+Repair targets glow green, adjacent swap targets blue, and the hovered/selected target gold. Tooltips and the inspection line show the discarded card, actual healing, recovery progress, revival position, or the reason a target is invalid. Dropping only selects the action; cancelled or invalid drops preserve the prior draft.
+
+After each basic action, check the visible monster reaction once. Basic repairs use the Repair tag; swaps use Movement; both have action cost zero for reaction checks. Only actual restored hull counts as healing, so recovery below the revive threshold does not trigger healing reactions. Revival can provoke retaliation immediately. Preview text shows these consequences. The whole fleet being destroyed still ends the battle.
+
+Edit **Basic repair** and **Revive threshold** in the editor's Battle Setup panel. Both must be positive integers. Saved setups without these fields use 2 and 4. Ordinary repair cards retain their existing living-target rules.
+
+
 ### Magic circle
 
 The first four slots are North, East, South, and West, connected in a diamond. Filling them unlocks Centre and four outer corners. The fourth card and its complete allied chain resolve using the original graph; expansion happens afterward, before the monster reaction.
@@ -34,7 +49,7 @@ When a card and destination slot are selected, contributing neighbours have a gr
 
 As each chained effect resolves, a directional spark travels from the card that caused the event to the reacting card, with both endpoints outlined. Damage links are orange, guard links blue, repair links green, and other event links purple. The chain banner names both cards and the triggering event. Pulses follow the resolution queue, pause with the battle menu, and clear when finished.
 
-Triggered effects have automatic source/event-actor targets and no new movement prompts. Draw/discard effects pause the queue for player choices, then resume without resetting usage. Destroyed ships cannot receive guard or repairs; stored in-circle magic remains until cleanup. Previews simulate public effects without consuming real RNG, drawing hidden card identities, or revealing the next stance.
+Triggered effects have automatic source/event-actor targets and no new movement prompts. Draw/discard effects pause the queue for player choices, then resume without resetting usage. Circle effects cannot give guard or repairs to defeated ships; basic recovery can revive them. Stored in-circle magic remains until cleanup. Previews simulate public effects without consuming real RNG, drawing hidden card identities, or revealing the next stance.
 
 ### Enemy stances
 
@@ -106,6 +121,7 @@ godot --headless --path . --script res://tests/editor_flow.gd
 godot --headless --path . --script res://tests/circle_examples.gd
 godot --headless --path . --script res://tests/circle_feedback.gd
 godot --headless --path . --script res://tests/drag_drop.gd
+godot --headless --path . --script res://tests/basic_actions.gd
 ```
 
 Suites cover unchanged payment, guard, repair, conservation, lethal-hit and results rules plus new positions, expansion timing, modifier costs, finite chains, paused discards, independent copies, stance transitions, migration, safe saving, live previews, real playtests, navigation, and animation cancellation. Editor/persistence tests use temporary user-data files and never save project content.

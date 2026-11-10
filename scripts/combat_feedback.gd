@@ -39,6 +39,22 @@ func play(events: Array, battle_view: Control) -> void:
 				await _apply_board(event.board)
 				if event.uid >= 0:
 					await _place_card(event.uid, event.slot)
+			"basic_action":
+				_message(event.title, Color("#9ce6b7") if event.action == "repair" else Color("#67bdd4"))
+				await _discard_cards([event.uid])
+				_paid = [event.uid]
+				await _apply_board(event.board)
+			"revive_progress":
+				await _apply_board(event.board)
+				var wreck := _unit(event.target)
+				if wreck != null:
+					await _popup("RECOVERY +%d\n%d / %d" % [event.amount, event.board.ships[event.target].recovery, event.threshold], _visible_position(wreck.global_position), Color("#9ce6b7"), 0.45)
+			"revived":
+				await _apply_board(event.board)
+				_message("SHIP REVIVED / " + event.title, Color("#9ce6b7"))
+				var unit := _unit(event.target)
+				if unit != null:
+					await _popup("REVIVED / %d HULL" % event.amount, _visible_position(unit.global_position), Color("#9ce6b7"), 0.50)
 			"cards_discarded":
 				var remaining: Array = event.uids.filter(func(uid): return not _paid.has(uid))
 				await _discard_cards(remaining)
@@ -110,7 +126,7 @@ func _apply_board(snapshot: Dictionary) -> void:
 
 func _unit(id: int) -> Control:
 	var formation: Control = view.enemies if id < 0 else view.allies
-	for widget in formation.widgets.values():
+	for widget in formation.widgets.values() + formation.wreck_widgets.values():
 		if widget.get_meta("ship_index", -999) == id:
 			return widget
 	return null

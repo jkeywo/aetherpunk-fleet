@@ -1,5 +1,6 @@
 extends RefCounted
 ## Version-2 definitions. Version-1 migration is read-only until explicit Save.
+const DEFAULT_BASIC_RULES := {"repair": 2, "revive_threshold": 4}
 const Legacy = preload("res://scripts/content_legacy.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const CARD_EFFECTS = Legacy.CARD_EFFECTS
@@ -127,6 +128,14 @@ static func validate(value: Variant) -> Array:
 		return ["Battle setup must be an object."]
 	var errors: Array = Legacy.validate(_downgrade(value))
 	var setup: Dictionary = value.setup
+	if setup.has("basic_actions"):
+		var basic: Variant = setup.basic_actions
+		if not basic is Dictionary:
+			errors.append("Basic actions must configure repair and revive threshold.")
+		else:
+			for key in DEFAULT_BASIC_RULES:
+				if not Legacy._integer(basic.get(key), 1):
+					errors.append("Basic action %s must be a positive integer." % key)
 	var positions: Variant = setup.get("positions")
 	if not positions is Array or positions.size() != 3:
 		errors.append("Assign a position to each of the three ships.")
@@ -317,7 +326,7 @@ static func present_card(source: Dictionary, owner: int = 0) -> Dictionary:
 static func compile(content: Dictionary) -> Dictionary:
 	var doc := migrate(content)
 	var result := {"ships": [], "cards": {}, "monster": {}, "stances": [], "positions": doc.setup.positions.duplicate(),
-		"enemy_position": doc.setup.enemy_position, "fixed_hand": doc.setup.fixed_hand, "opening_hand": doc.setup.opening_hand.duplicate()}
+		"enemy_position": doc.setup.enemy_position, "fixed_hand": doc.setup.fixed_hand, "opening_hand": doc.setup.opening_hand.duplicate(), "basic_actions": basic_rules(doc)}
 	for id in doc.setup.ships:
 		result.ships.append(doc.ships[index_by_id(doc.ships, id)].duplicate(true))
 	for card in doc.cards:
@@ -329,3 +338,7 @@ static func compile(content: Dictionary) -> Dictionary:
 	result.stances = monster.stances.duplicate(true)
 	result["starting_stance"] = index_by_id(monster.stances, monster.starting_stance)
 	return result
+
+
+static func basic_rules(doc: Dictionary) -> Dictionary:
+	return doc.get("setup", {}).get("basic_actions", DEFAULT_BASIC_RULES).duplicate(true)

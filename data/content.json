@@ -696,6 +696,10 @@
 			"upper",
 			"rear"
 		],
-		"enemy_position": "front"
+		"enemy_position": "front",
+		"basic_actions": {
+			"repair": 2,
+			"revive_threshold": 4
+		}
 	}
 }
