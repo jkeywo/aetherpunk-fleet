@@ -52,7 +52,7 @@ var actions: HFlowContainer
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = true
-	state = State.new(-1, ContentStore.snapshot())
+	state = State.new(-1, BattleSession.battle_content(ContentStore.snapshot()))
 	BattleSession.clear_result()
 	theme = _make_theme()
 	_build_ui()

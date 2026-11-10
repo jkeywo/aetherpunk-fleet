@@ -22,7 +22,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
-primary_scene = "res://scenes/game.tscn"
+primary_scene = "res://scenes/fleet_preparation.tscn"
 secondary_scene = ""
 
 [node name="Background" type="ColorRect" parent="."]

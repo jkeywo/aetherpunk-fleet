@@ -10,6 +10,6 @@ func _ready() -> void:
 
 
 func _navigate(destination: String) -> void:
-	if destination == "res://scenes/game.tscn":
+	if destination in ["res://scenes/game.tscn", "res://scenes/fleet_preparation.tscn"]:
 		BattleSession.editor_playtest = false
 	super._navigate(destination)

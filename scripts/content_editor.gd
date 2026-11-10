@@ -551,15 +551,7 @@ func _build_setup() -> void:
 
 func _repair_branch(slot: Dictionary) -> void:
 	var index := Catalog.index_by_id(draft.ships, slot.ship)
-	if index < 0: return
-	var ship: Dictionary = draft.ships[index]
-	if slot.level < 2: slot.level_2 = ""; slot.level_3 = ""; return
-	if Catalog.index_by_id(ship.levels.two, slot.level_2) < 0: slot.level_2 = ship.levels.two[0].id
-	if slot.level < 3: slot.level_3 = ""; return
-	var blocked: String = ship.levels.two[Catalog.index_by_id(ship.levels.two, slot.level_2)].blocks
-	if Catalog.index_by_id(ship.levels.three, slot.level_3) < 0 or slot.level_3 == blocked:
-		for package in ship.levels.three:
-			if package.id != blocked: slot.level_3 = package.id; break
+	if index >= 0: Catalog.repair_fleet_branch(slot, draft.ships[index])
 
 
 func _live_preview() -> void:

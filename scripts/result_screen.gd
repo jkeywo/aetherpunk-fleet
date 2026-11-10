@@ -16,6 +16,13 @@ func _ready() -> void:
 		return_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		primary_button.get_parent().add_child(return_button)
 		return_button.pressed.connect(_navigate.bind("res://scenes/editor.tscn"))
+	if not BattleSession.editor_playtest:
+		var prepare := Button.new()
+		prepare.name = "PrepareFleet"
+		prepare.text = "Prepare Fleet"
+		prepare.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		primary_button.get_parent().add_child(prepare)
+		prepare.pressed.connect(_navigate.bind("res://scenes/fleet_preparation.tscn"))
 	summary = BattleSession.last_result.duplicate(true)
 	if summary.is_empty() or summary.get("outcome", "") != outcome:
 		summary.clear()

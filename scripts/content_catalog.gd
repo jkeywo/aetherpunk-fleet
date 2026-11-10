@@ -380,6 +380,23 @@ static func _validate_setup(doc: Dictionary, ships: Dictionary, captains: Dictio
 			else: deck.remove_at(position)
 
 
+static func repair_fleet_branch(slot: Dictionary, ship: Dictionary) -> void:
+	if slot.level < 2:
+		slot.level_2 = ""
+		slot.level_3 = ""
+		return
+	if index_by_id(ship.levels.two, slot.get("level_2", "")) < 0: slot.level_2 = ship.levels.two[0].id
+	if slot.level < 3:
+		slot.level_3 = ""
+		return
+	var blocked: String = ship.levels.two[index_by_id(ship.levels.two, slot.level_2)].blocks
+	if index_by_id(ship.levels.three, slot.get("level_3", "")) < 0 or slot.level_3 == blocked:
+		for package in ship.levels.three:
+			if package.id != blocked:
+				slot.level_3 = package.id
+				break
+
+
 static func compile(source: Dictionary) -> Dictionary:
 	var doc := migrate(source)
 	var result := {"ships": [], "cards": {}, "enemies": [], "deck_keys": [], "positions": [], "setup": doc.setup.duplicate(true), "basic_actions": basic_rules(doc), "fixed_hand": doc.setup.fixed_hand, "opening_hand": doc.setup.opening_hand.duplicate()}

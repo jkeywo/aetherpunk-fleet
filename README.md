@@ -2,7 +2,7 @@
 
 Godot 4.7 / GDScript / Compatibility renderer. Open `project.godot` and press **F5**.
 
-The prototype includes a main menu, battle, victory/defeat summaries, and a live content editor. **Start Game**, **Retry Battle**, and editor playtests use the saved project setup. Results and running battles keep detached snapshots.
+The prototype includes a main menu, battle, victory/defeat summaries, and a live content editor. **Start Game** opens fleet preparation using saved content. **Retry Battle** replays the fleet you launched; editor playtests use the editor's saved setup. Results and running battles keep detached snapshots.
 
 ## Playing
 
@@ -16,7 +16,9 @@ Hover cards, ships, circle slots, and enemy-row cards for complete generated rul
 
 Each of the three ships has a weapon, armour, and a named resource. Resources start at zero, persist between rounds, and reset on defeat. The initial capacity is six, before authored bonuses. Optional boosts reserve their resource before automatic spending rules evaluate.
 
-Choose a captain, level, and branches in **Editor → Battle Setup**. Captains cannot be assigned twice. Each ship contributes its starter design twice and its captain's design twice. Level 2 and level 3 each add another pair, giving **4 / 6 / 8 physical cards per ship**. Each level-2 branch blocks one different level-3 package; the third level-3 package is available on either path. Tier labels the captain's authored power budget; it does not multiply statistics.
+Choose your fleet in **Main Menu → Start Game → Fleet Preparation**, then **Launch Battle**. Select ships, captains, starting positions, levels, and upgrade branches in the three ship panels. Occupied ship, captain, and position choices swap assignments, keeping the fleet unique. Level-3 menus hide the branch blocked by level 2; hover an upgrade option for its card pair, rule, and passive rewards. Effective stats, contributed cards, and formation update live. The editor's Battle Setup still supplies the authored defaults and encounter. Captains cannot be assigned twice. Each ship contributes its starter design twice and its captain's design twice. Level 2 and level 3 each add another pair, giving **4 / 6 / 8 physical cards per ship**. Each level-2 branch blocks one different level-3 package; the third level-3 package is available on either path. Tier labels the captain's authored power budget; it does not multiply statistics.
+
+Preparation choices stay in the current session and never write content files. **Main Menu** remembers your draft; **Reset to Saved Fleet** restores authored defaults. If the saved fixed opening includes unavailable cards after your changes, launch uses a shuffled seven-card hand. You can also opt into a shuffled opening. **Retry Battle** resets the exact prepared snapshot; **Prepare Fleet** on normal result screens returns to selection. Editor playtests continue to use saved editor setup. Changed saved content resets stale preparation choices.
 
 Initial provisional balance:
 
