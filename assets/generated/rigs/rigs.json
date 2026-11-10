@@ -1,0 +1,897 @@
+{
+  "version": 1,
+  "coordinates": "Part pivots and parent attachment anchors are normalized to each cropped atlas region; pivot_px is local pixels inside that region. Display dimensions are logical rig units. Positive angles turn clockwise.",
+  "rigs": [
+    {
+      "id": "ship-bastion",
+      "name": "Bastion",
+      "kind": "ship",
+      "atlas": "ship-bastion-atlas.png",
+      "canvas": [
+        1000,
+        650
+      ],
+      "parts": [
+        {
+          "id": "hull",
+          "region": [
+            291,
+            391,
+            1370,
+            414
+          ],
+          "size": [
+            710,
+            214.5547
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            685.0,
+            207.0
+          ],
+          "z": 0,
+          "motion": {
+            "degrees": 0.16,
+            "bob_y": 2,
+            "period": 10.5,
+            "phase": 0.0
+          },
+          "position": [
+            510,
+            465
+          ]
+        },
+        {
+          "id": "balloon",
+          "region": [
+            52,
+            33,
+            1823,
+            317
+          ],
+          "size": [
+            920,
+            159.9781
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            911.5,
+            158.5
+          ],
+          "z": 1,
+          "motion": {
+            "degrees": 0.24,
+            "bob_y": 1.1,
+            "period": 12.5,
+            "phase": 1.4
+          },
+          "parent": "hull",
+          "anchor": [
+            0.5,
+            0.5
+          ],
+          "offset": [
+            -5,
+            -280
+          ]
+        }
+      ],
+      "cables": [
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.22,
+            0.93
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.12,
+            0.34
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.37,
+            0.93
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.33,
+            0.32
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.54,
+            0.93
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.52,
+            0.33
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.72,
+            0.93
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.66,
+            0.34
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ship-kestrel",
+      "name": "Kestrel",
+      "kind": "ship",
+      "atlas": "ship-kestrel-atlas.png",
+      "canvas": [
+        1000,
+        650
+      ],
+      "parts": [
+        {
+          "id": "hull",
+          "region": [
+            87,
+            376,
+            1954,
+            331
+          ],
+          "size": [
+            710,
+            120.2712
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            977.0,
+            165.5
+          ],
+          "z": 0,
+          "motion": {
+            "degrees": 0.16,
+            "bob_y": 2,
+            "period": 11.5,
+            "phase": 0.7
+          },
+          "position": [
+            510,
+            465
+          ]
+        },
+        {
+          "id": "balloon",
+          "region": [
+            36,
+            40,
+            2072,
+            290
+          ],
+          "size": [
+            920,
+            128.7645
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            1036.0,
+            145.0
+          ],
+          "z": 1,
+          "motion": {
+            "degrees": 0.24,
+            "bob_y": 1.1,
+            "period": 13.5,
+            "phase": 2.0
+          },
+          "parent": "hull",
+          "anchor": [
+            0.5,
+            0.5
+          ],
+          "offset": [
+            -5,
+            -280
+          ]
+        }
+      ],
+      "cables": [
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.164,
+            0.95
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.27,
+            0.44
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.329,
+            0.95
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.44,
+            0.49
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.506,
+            0.95
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.54,
+            0.5
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.688,
+            0.95
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.64,
+            0.48
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ship-lamplighter",
+      "name": "Lamplighter",
+      "kind": "ship",
+      "atlas": "ship-lamplighter-atlas.png",
+      "canvas": [
+        1000,
+        650
+      ],
+      "parts": [
+        {
+          "id": "hull",
+          "region": [
+            340,
+            363,
+            1253,
+            441
+          ],
+          "size": [
+            710,
+            249.8883
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            626.5,
+            220.5
+          ],
+          "z": 0,
+          "motion": {
+            "degrees": 0.16,
+            "bob_y": 2,
+            "period": 12.5,
+            "phase": 1.4
+          },
+          "position": [
+            510,
+            465
+          ]
+        },
+        {
+          "id": "balloon",
+          "region": [
+            94,
+            27,
+            1749,
+            301
+          ],
+          "size": [
+            920,
+            158.3305
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            874.5,
+            150.5
+          ],
+          "z": 1,
+          "motion": {
+            "degrees": 0.24,
+            "bob_y": 1.1,
+            "period": 14.5,
+            "phase": 2.5999999999999996
+          },
+          "parent": "hull",
+          "anchor": [
+            0.5,
+            0.5
+          ],
+          "offset": [
+            -5,
+            -280
+          ]
+        }
+      ],
+      "cables": [
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.22,
+            0.9
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.18,
+            0.4
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.38,
+            0.96
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.3,
+            0.42
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.54,
+            0.96
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.52,
+            0.42
+          ]
+        },
+        {
+          "from": "balloon",
+          "from_uv": [
+            0.72,
+            0.92
+          ],
+          "to": "hull",
+          "to_uv": [
+            0.67,
+            0.41
+          ]
+        }
+      ]
+    },
+    {
+      "id": "enemy-stormmaw",
+      "name": "Stormmaw",
+      "kind": "creature",
+      "atlas": "enemy-stormmaw-atlas.png",
+      "canvas": [
+        1000,
+        650
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "region": [
+            20,
+            52,
+            851,
+            363
+          ],
+          "size": [
+            600,
+            255.9342
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            425.5,
+            181.5
+          ],
+          "z": 0,
+          "motion": {
+            "degrees": 0.2,
+            "bob_y": 1.8,
+            "period": 11.5,
+            "phase": 0
+          },
+          "position": [
+            350,
+            335
+          ]
+        },
+        {
+          "id": "near_fin",
+          "region": [
+            968,
+            35,
+            746,
+            388
+          ],
+          "size": [
+            325,
+            169.0349
+          ],
+          "pivot": [
+            0.13,
+            0.26
+          ],
+          "pivot_px": [
+            96.98,
+            100.88
+          ],
+          "z": 2,
+          "motion": {
+            "degrees": 1.25,
+            "bob_y": 0,
+            "period": 7.4,
+            "phase": 0.8
+          },
+          "parent": "body",
+          "anchor": [
+            0.48,
+            0.64
+          ]
+        },
+        {
+          "id": "far_fin",
+          "region": [
+            202,
+            505,
+            497,
+            302
+          ],
+          "size": [
+            220,
+            133.6821
+          ],
+          "pivot": [
+            0.15,
+            0.2
+          ],
+          "pivot_px": [
+            74.55,
+            60.4
+          ],
+          "z": -2,
+          "motion": {
+            "degrees": 0.85,
+            "bob_y": 0,
+            "period": 7.8,
+            "phase": 2
+          },
+          "parent": "body",
+          "anchor": [
+            0.49,
+            0.67
+          ]
+        },
+        {
+          "id": "tail",
+          "region": [
+            896,
+            512,
+            859,
+            261
+          ],
+          "size": [
+            355,
+            107.8638
+          ],
+          "pivot": [
+            0.05,
+            0.54
+          ],
+          "pivot_px": [
+            42.95,
+            140.94
+          ],
+          "z": -1,
+          "motion": {
+            "degrees": 1.1,
+            "bob_y": 0,
+            "period": 9.5,
+            "phase": 1.2
+          },
+          "parent": "body",
+          "anchor": [
+            0.95,
+            0.57
+          ]
+        }
+      ],
+      "cables": []
+    },
+    {
+      "id": "enemy-storm-ray",
+      "name": "Storm Ray",
+      "kind": "creature",
+      "atlas": "enemy-storm-ray-atlas.png",
+      "canvas": [
+        1000,
+        650
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "region": [
+            10,
+            118,
+            810,
+            311
+          ],
+          "size": [
+            470,
+            180.4568
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            405.0,
+            155.5
+          ],
+          "z": 0,
+          "motion": {
+            "degrees": 0.18,
+            "bob_y": 1.6,
+            "period": 10.8,
+            "phase": 0.6
+          },
+          "position": [
+            340,
+            425
+          ]
+        },
+        {
+          "id": "sail_wing",
+          "region": [
+            949,
+            10,
+            750,
+            490
+          ],
+          "size": [
+            425,
+            277.6667
+          ],
+          "pivot": [
+            0.055,
+            0.89
+          ],
+          "pivot_px": [
+            41.25,
+            436.1
+          ],
+          "z": -1,
+          "motion": {
+            "degrees": 1.0,
+            "bob_y": 0,
+            "period": 8.2,
+            "phase": 0.5
+          },
+          "parent": "body",
+          "anchor": [
+            0.57,
+            0.36
+          ]
+        },
+        {
+          "id": "lower_fin",
+          "region": [
+            240,
+            591,
+            408,
+            227
+          ],
+          "size": [
+            220,
+            122.402
+          ],
+          "pivot": [
+            0.16,
+            0.17
+          ],
+          "pivot_px": [
+            65.28,
+            38.59
+          ],
+          "z": -2,
+          "motion": {
+            "degrees": 0.9,
+            "bob_y": 0,
+            "period": 7.6,
+            "phase": 1.9
+          },
+          "parent": "body",
+          "anchor": [
+            0.61,
+            0.79
+          ]
+        },
+        {
+          "id": "tail",
+          "region": [
+            901,
+            666,
+            856,
+            77
+          ],
+          "size": [
+            420,
+            37.7804
+          ],
+          "pivot": [
+            0.03,
+            0.63
+          ],
+          "pivot_px": [
+            25.68,
+            48.51
+          ],
+          "z": -1,
+          "motion": {
+            "degrees": 1.2,
+            "bob_y": 0,
+            "period": 9.2,
+            "phase": 1.3
+          },
+          "parent": "body",
+          "anchor": [
+            0.95,
+            0.64
+          ]
+        }
+      ],
+      "cables": []
+    },
+    {
+      "id": "enemy-needlewing",
+      "name": "Needlewing",
+      "kind": "creature",
+      "atlas": "enemy-needlewing-atlas.png",
+      "canvas": [
+        1000,
+        650
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "region": [
+            16,
+            98,
+            708,
+            251
+          ],
+          "size": [
+            625,
+            221.5749
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "pivot_px": [
+            354.0,
+            125.5
+          ],
+          "z": 0,
+          "motion": {
+            "degrees": 0.2,
+            "bob_y": 1.5,
+            "period": 10.4,
+            "phase": 1.2
+          },
+          "position": [
+            355,
+            395
+          ]
+        },
+        {
+          "id": "near_wing",
+          "region": [
+            793,
+            26,
+            645,
+            359
+          ],
+          "size": [
+            405,
+            225.4186
+          ],
+          "pivot": [
+            0.055,
+            0.9
+          ],
+          "pivot_px": [
+            35.475,
+            323.1
+          ],
+          "z": 2,
+          "motion": {
+            "degrees": 1.35,
+            "bob_y": 0,
+            "period": 7.2,
+            "phase": 0.4
+          },
+          "parent": "body",
+          "anchor": [
+            0.7,
+            0.49
+          ]
+        },
+        {
+          "id": "far_wing",
+          "region": [
+            1512,
+            63,
+            614,
+            317
+          ],
+          "size": [
+            365,
+            188.4446
+          ],
+          "pivot": [
+            0.06,
+            0.89
+          ],
+          "pivot_px": [
+            36.84,
+            282.13
+          ],
+          "z": -2,
+          "motion": {
+            "degrees": 1.0,
+            "bob_y": 0,
+            "period": 7.7,
+            "phase": 1.7
+          },
+          "parent": "body",
+          "anchor": [
+            0.69,
+            0.45
+          ]
+        },
+        {
+          "id": "tail",
+          "region": [
+            18,
+            468,
+            692,
+            177
+          ],
+          "size": [
+            315,
+            80.5708
+          ],
+          "pivot": [
+            0.035,
+            0.58
+          ],
+          "pivot_px": [
+            24.22,
+            102.66
+          ],
+          "z": -1,
+          "motion": {
+            "degrees": 1.1,
+            "bob_y": 0,
+            "period": 8.8,
+            "phase": 2
+          },
+          "parent": "body",
+          "anchor": [
+            0.95,
+            0.64
+          ]
+        },
+        {
+          "id": "near_leg",
+          "region": [
+            994,
+            417,
+            245,
+            273
+          ],
+          "size": [
+            72,
+            80.2286
+          ],
+          "pivot": [
+            0.48,
+            0.15
+          ],
+          "pivot_px": [
+            117.6,
+            40.95
+          ],
+          "z": -1,
+          "motion": {
+            "degrees": 0.55,
+            "bob_y": 0,
+            "period": 9.7,
+            "phase": 0.2
+          },
+          "parent": "body",
+          "anchor": [
+            0.75,
+            0.85
+          ]
+        },
+        {
+          "id": "far_leg",
+          "region": [
+            1731,
+            446,
+            176,
+            228
+          ],
+          "size": [
+            59,
+            76.4318
+          ],
+          "pivot": [
+            0.45,
+            0.15
+          ],
+          "pivot_px": [
+            79.2,
+            34.2
+          ],
+          "z": -2,
+          "motion": {
+            "degrees": 0.45,
+            "bob_y": 0,
+            "period": 10.2,
+            "phase": 1.8
+          },
+          "parent": "body",
+          "anchor": [
+            0.82,
+            0.84
+          ]
+        }
+      ],
+      "cables": []
+    }
+  ]
+}

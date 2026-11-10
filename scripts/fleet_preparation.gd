@@ -76,8 +76,7 @@ func _clear(node: Node) -> void:
 	for child in node.get_children(): node.remove_child(child); child.queue_free()
 
 func _build() -> void:
-	var background := ColorRect.new()
-	background.color = Color("#07121b")
+	var background := preload("res://scripts/sky_background.gd").new()
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
 	var margin := MarginContainer.new()
@@ -201,6 +200,10 @@ func _render() -> void:
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships,slot.ship)]
 	_label(inspector,ship.name,24).set_meta("plain_text",true)
+	var captain_header := HBoxContainer.new()
+	inspector.add_child(captain_header)
+	captain_header.add_child(preload("res://scripts/art_assets.gd").portrait_view(slot.captain,Vector2(64,85)))
+	_label(captain_header,draft.captains[Catalog.index_by_id(draft.captains,slot.captain)].name,17)
 	_button(inspector, "View selected ship’s deck", _show_deck)
 	var options: Array = []
 	for entry in draft.ships: options.append({"label":entry.name,"value":entry.id})
@@ -287,8 +290,13 @@ func _wire_formation(board: Dictionary) -> void:
 		badge.set_meta("plain_text",true)
 		badge.text=captain.name+" · Tier "+str(captain.tier)
 		badge.add_theme_font_size_override("font_size",12)
-		badge.position=Vector2(7,84)
+		widget.set_meta("footer_space",32)
+		widget._art_layout()
+		badge.position=Vector2(7,widget.size.y-32)
 		badge.size=Vector2(widget.size.x-14,30)
+		badge.icon=preload("res://scripts/art_assets.gd").portrait(captain.id)
+		badge.expand_icon=true
+		badge.add_theme_constant_override("icon_max_width",24)
 		badge.tooltip_text="Drag to assign/swap this captain.\n"+Rules.rule_text(captain.passive, board.ships[id].name)
 		widget.add_child(badge)
 		badge.pressed.connect(func(): selected_ship=id; _render())
@@ -590,6 +598,7 @@ func _show_captains() -> void:
 		var current: bool = assigned == selected_ship
 		var other_name := ""
 		if assigned >= 0: other_name = draft.ships[Catalog.index_by_id(draft.ships, draft.setup.fleet[assigned].ship)].name
+		column.add_child(preload("res://scripts/art_assets.gd").portrait_view(captain.id,Vector2(width,145)))
 		var title := _label(column, captain.name + " / Tier " + str(captain.tier), 19)
 		title.set_meta("plain_text", true)
 		title.custom_minimum_size.y = 48

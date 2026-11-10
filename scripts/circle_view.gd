@@ -7,6 +7,7 @@ signal link_pulse_started(source_uid: int, receiver_uid: int, event_kind: String
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const BONUS_COLOR := Color("#9ce6b7")
 var buttons: Array = []
+var circle_art: TextureRect
 var expanded := false
 var selected := -1
 var contents: Array = []
@@ -25,11 +26,23 @@ var drop_errors: Dictionary = {}
 
 
 func _ready() -> void:
+	circle_art = TextureRect.new()
+	circle_art.name = "MagicCircleArt"
+	circle_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	circle_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	circle_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	circle_art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	circle_art.offset_left = -28
+	circle_art.offset_top = -28
+	circle_art.offset_right = 28
+	circle_art.offset_bottom = 28
+	add_child(circle_art)
 	resized.connect(_arrange)
 
 
 func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictionary = {}, selected_slot: int = -1, contributors: Array = [], details: Dictionary = {}, persistence: Dictionary = {}) -> void:
 	expanded = is_expanded
+	circle_art.texture = preload("res://scripts/art_assets.gd").texture("circle/stage-%d.png" % (2 if expanded else 1))
 	selected = selected_slot
 	contents = circle.duplicate()
 	card_data = cards
@@ -56,11 +69,19 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 		var button: Button = buttons[slot]
 		var provides: bool = uid >= 0 and contributors.has(uid) and selected >= 0 and Geometry.neighbours(selected, expanded).has(slot)
 		button.disabled = locked
+		button.visible = not locked
 		button.text = "Locked" if locked else Geometry.SLOT_NAMES[slot] + "\n+"
 		button.modulate = Color("#3b4859") if locked else Color.WHITE
 		button.tooltip_text = Geometry.SLOT_NAMES[slot]
 		for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
 			button.remove_theme_stylebox_override(style_name)
+		for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
+			var base := StyleBoxFlat.new()
+			base.bg_color = Color(.025,.065,.10,.88 if uid >= 0 else .28)
+			base.border_color = Color(.45,.75,.82,.45)
+			base.set_border_width_all(1)
+			base.set_corner_radius_all(5)
+			button.add_theme_stylebox_override(style_name,base)
 		if uid >= 0 and cards.has(uid):
 			var card: Dictionary = cards[uid]
 			var count := 0
@@ -194,3 +215,8 @@ func _can_drop_at(_at_position: Vector2, data: Variant, slot: int) -> bool:
 func _drop_at(_at_position: Vector2, data: Variant, slot: int) -> void:
 	if drop_check.is_valid() and drop_check.call(data, slot):
 		card_dropped.emit(slot, data)
+
+
+func _process(_delta: float) -> void:
+	if circle_art != null and is_visible_in_tree():
+		circle_art.modulate.a = .48 + .045*sin(Time.get_ticks_msec()/1000.0*TAU/8)

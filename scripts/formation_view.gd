@@ -55,6 +55,13 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
 			widget.text = Geometry.POSITION_NAMES[point] + "\nEmpty" + (" / Cover " + str(cover_amount) if cover_amount > 0 else "")
 			widget.modulate = Color("#506977")
+			for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
+				var empty := StyleBoxFlat.new()
+				empty.bg_color = Color(.025,.065,.10,.35)
+				empty.border_color = Color(.35,.55,.65,.4)
+				empty.set_border_width_all(1)
+				empty.set_corner_radius_all(5)
+				widget.add_theme_stylebox_override(style_name,empty)
 			add_child(widget)
 			if not is_enemy: _wire_target(widget, 100 + point)
 		widget.pressed.connect(func(): position_selected.emit(point))
@@ -79,9 +86,9 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 
 
 func _arrange() -> void:
-	var w := minf(218 if large_cards else 144, size.x * 0.43)
-	var h := 120.0 if large_cards else 80.0
-	var coordinates := [Vector2(0.77 if not enemy else 0.23, 0.50), Vector2(0.5, 0.12), Vector2(0.5, 0.88), Vector2(0.23 if not enemy else 0.77, 0.5)]
+	var w := minf(218 if large_cards else 120, size.x * 0.43)
+	var h := 156.0 if large_cards else 119.0
+	var coordinates := [Vector2(0.86 if not enemy else 0.14, 0.50), Vector2(0.5, 0.12), Vector2(0.5, 0.88), Vector2(0.14 if not enemy else 0.86, 0.5)]
 	for point in widgets:
 		widgets[point].size = Vector2(w, h)
 		var centre: Vector2 = Vector2(size.x, size.y) * coordinates[point]
@@ -106,6 +113,10 @@ func _wire_target(widget: Button, ship_id: int) -> void:
 			widget.tooltip_text += "\nDrag its own card here to repair, or an adjacent living ship's card to swap. Release to act immediately; this discards the dragged card."
 		widget.set_meta("base_guard_text", widget.guard_label.text)
 	widget.set_meta("base_tooltip", widget.tooltip_text)
+	var styles: Dictionary = {}
+	for key in ["normal","hover","pressed","hover_pressed"]:
+		if widget.has_theme_stylebox_override(key): styles[key] = widget.get_theme_stylebox(key)
+	widget.set_meta("base_styles",styles)
 	widget.set_drag_forwarding(Callable(), _can_drop_on_ship.bind(ship_id), _drop_on_ship.bind(ship_id))
 	widget.mouse_exited.connect(func(): ship_drag_exited.emit(ship_id))
 
@@ -141,7 +152,8 @@ func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship
 		if widget == null:
 			continue
 		for key in ["normal", "hover", "pressed", "hover_pressed"]:
-			widget.remove_theme_stylebox_override(key)
+			if widget.get_meta("base_styles",{}).has(key): widget.add_theme_stylebox_override(key,widget.get_meta("base_styles")[key])
+			else: widget.remove_theme_stylebox_override(key)
 		widget.tooltip_text = str(widget.get_meta("base_tooltip", ""))
 		if widget is Unit:
 			widget.guard_label.text = str(widget.get_meta("base_guard_text", ""))
@@ -178,7 +190,13 @@ func show_rule_preview(notes: Dictionary = {}, source: int = -999) -> void:
 		if not widget.has_meta("rule_base_tooltip"):
 			widget.set_meta("rule_base_tooltip",widget.tooltip_text)
 			widget.set_meta("rule_base_tint",widget.modulate)
-		for state in ["normal","hover","pressed","hover_pressed"]: widget.remove_theme_stylebox_override(state)
+			var styles: Dictionary={}
+			for style_name in ["normal","hover","pressed","hover_pressed"]:
+				if widget.has_theme_stylebox_override(style_name): styles[style_name]=widget.get_theme_stylebox(style_name)
+			widget.set_meta("rule_base_styles",styles)
+		for state in ["normal","hover","pressed","hover_pressed"]:
+			if widget.get_meta("rule_base_styles",{}).has(state): widget.add_theme_stylebox_override(state,widget.get_meta("rule_base_styles")[state])
+			else: widget.remove_theme_stylebox_override(state)
 		widget.tooltip_text=str(widget.get_meta("rule_base_tooltip",""))
 		widget.modulate=widget.get_meta("rule_base_tint",Color.WHITE)
 		for child in widget.get_children():

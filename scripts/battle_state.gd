@@ -1613,5 +1613,5 @@ func result_summary(reported: String = "") -> Dictionary:
 		hull += int(ship.hull)
 		maximum += int(ship.get("starting_max_hull", ship.max_hull))
 		if ship.hull > 0: survivors += 1
-		fleet.append({"name": ship.name, "role": ship.role, "color": ship.color, "hull": ship.hull, "max_hull": ship.get("starting_max_hull", ship.max_hull) if ship.hull <= 0 else ship.max_hull, "alive": ship.hull > 0, "captain": ship.captain.name, "level": ship.level})
+		fleet.append({"id": ship.id, "name": ship.name, "role": ship.role, "color": ship.color, "hull": ship.hull, "max_hull": ship.get("starting_max_hull", ship.max_hull) if ship.hull <= 0 else ship.max_hull, "alive": ship.hull > 0, "captain": ship.captain.name, "level": ship.level})
 	return {"outcome": result, "ships": fleet, "survivors": survivors, "remaining_hull": hull, "starting_hull": maximum, "hull_percent": roundi(100.0 * hull / maxi(1, maximum)), "rounds": round_number, "is_test": result != outcome, "enemies_remaining": alive_ids(true).size()}

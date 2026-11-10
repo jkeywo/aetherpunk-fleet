@@ -21,6 +21,7 @@ static func make() -> Theme:
 	result.set_stylebox("tab_unselected", "TabBar", normal)
 	result.set_stylebox("panel", "ItemList", normal)
 	result.set_stylebox("selected", "ItemList", hover)
+	preload("res://scripts/art_assets.gd").skin_theme(result)
 	return result
 
 

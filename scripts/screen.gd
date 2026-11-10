@@ -31,7 +31,13 @@ func _ready() -> void:
 	theme_resource.set_stylebox("hover", "Button", hover)
 	theme_resource.set_stylebox("pressed", "Button", hover)
 	theme_resource.set_stylebox("focus", "Button", focus)
+	preload("res://scripts/art_assets.gd").skin_theme(theme_resource, Vector4(24,12,24,12))
 	theme = theme_resource
+	var sky := preload("res://scripts/sky_background.gd").new()
+	sky.dimming = .65
+	if has_node("Background"): get_node("Background").hide()
+	add_child(sky)
+	move_child(sky,0)
 
 	primary_button.pressed.connect(_navigate.bind(primary_scene))
 	secondary_button.pressed.connect(_navigate.bind(secondary_scene))

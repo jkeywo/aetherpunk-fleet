@@ -563,6 +563,7 @@ func _live_preview() -> void:
 	if _kind() == "cards" or _kind() == "captains":
 		var source: Dictionary = entry
 		if _kind() == "captains":
+			preview_form.add_child(preload("res://scripts/art_assets.gd").portrait_view(entry.id,Vector2(150,200)))
 			_label(preview_form, entry.name + " / Tier " + str(entry.tier), 18)
 			var index := Catalog.index_by_id(draft.cards, entry.card)
 			if index < 0: _label(preview_form, "Choose an existing captain card pair."); return

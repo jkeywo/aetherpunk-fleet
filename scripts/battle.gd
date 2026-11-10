@@ -98,8 +98,7 @@ func _label(parent: Node, id: String, text: String, font: int = 15) -> Label:
 
 
 func _build_ui() -> void:
-	var background := ColorRect.new()
-	background.color = Color("#07121b")
+	var background := preload("res://scripts/sky_background.gd").new()
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
 	var scroll := ScrollContainer.new()
@@ -243,11 +242,11 @@ func _layout() -> void:
 	header.size = Vector2(w - 32, 38)
 	%AlliedTitle.position = Vector2(20, 65)
 	%EnemyTitle.position = Vector2(w - 355, 65)
-	%CircleTitle.position = Vector2(w / 2 - 75, 58)
-	allies.position = Vector2(8, 110)
-	allies.size = Vector2(360, 255)
-	enemies.position = Vector2(w - 368, 110)
-	enemies.size = Vector2(360, 255)
+	%CircleTitle.position = Vector2(w / 2 - 75, 49)
+	allies.position = Vector2(8, 82)
+	allies.size = Vector2(360, 294)
+	enemies.position = Vector2(w - 368, 82)
+	enemies.size = Vector2(360, 294)
 	circle_view.position = Vector2(w / 2 - 152, 83)
 	circle_view.size = Vector2(304, 286)
 	stance_panel.position = Vector2(382, 382)
@@ -645,6 +644,7 @@ func _make_theme() -> Theme:
 	var fill := _box(Color("#78b7aa"), Color.TRANSPARENT)
 	result.set_stylebox("background", "ProgressBar", background)
 	result.set_stylebox("fill", "ProgressBar", fill)
+	preload("res://scripts/art_assets.gd").skin_theme(result)
 	return result
 
 

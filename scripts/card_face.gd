@@ -66,13 +66,26 @@ func _layout() -> void:
 	labels.rules.size = Vector2(size.x-20,maxf(20,size.y-86))
 
 func _draw() -> void:
+	var frame := preload("res://scripts/art_assets.gd").texture("ui/card-frame.png")
+	draw_texture_rect_region(frame,Rect2(0,0,size.x,60),Rect2(0,0,1024,350))
+	draw_texture_rect_region(frame,Rect2(0,60,size.x,maxf(1,size.y-80)),Rect2(0,350,1024,1000))
+	draw_texture_rect_region(frame,Rect2(0,size.y-20,size.x,20),Rect2(0,1350,1024,186))
+	# Cover baked sample badges; all types, costs and payment crystals remain live data.
+	draw_rect(Rect2(4,4,size.x-8,51),Color("#0c1c27"))
+	draw_rect(Rect2(size.x*.76,4,size.x*.22,53),Color("#0c1c27"))
+	var outline := StyleBoxFlat.new()
+	outline.bg_color = Color.TRANSPARENT
+	outline.border_color = ship_color.lightened(.2 if button_pressed else 0)
+	outline.set_border_width_all(3)
+	outline.set_corner_radius_all(7)
+	draw_style_box(outline,Rect2(Vector2.ZERO,size))
 	var type_key := Icons.key(info.get("type","Support"))
 	draw_texture_rect(Icons.texture(type_key),Rect2(8,10,25,25),false)
 	var centre := Vector2(size.x-23,21)
 	draw_circle(centre,16,Color("#091721"))
 	draw_arc(centre,16,0,TAU,40,ship_color,2,true)
 	var font := get_theme_default_font()
-	var cost := str(info.get("cost",0))
+	var cost := str(int(info.get("cost",0)))
 	draw_string(font,centre+Vector2(-font.get_string_size(cost,HORIZONTAL_ALIGNMENT_LEFT,-1,20).x/2,7),cost,HORIZONTAL_ALIGNMENT_LEFT,-1,20,Color.WHITE)
 	var count: int = int(info.get("pays",1))
 	for i in mini(count,4):

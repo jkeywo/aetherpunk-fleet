@@ -57,7 +57,7 @@ func _run() -> void:
 	prep._render()
 	prep._show_captains()
 	await flush()
-	expect("Kestrel" in prep.captain_dialog.title and column_for(prep,"iona").get_child(2).owner_info.name == "Kestrel", "Comparison retained the previous selected ship.")
+	expect("Kestrel" in prep.captain_dialog.title and column_for(prep,"iona").get_children().filter(func(child): return child.has_meta("card_id"))[0].owner_info.name == "Kestrel", "Comparison retained the previous selected ship.")
 	root.size = Vector2i(1024,640)
 	prep._show_captains()
 	await flush()

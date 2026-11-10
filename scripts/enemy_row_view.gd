@@ -26,6 +26,13 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.clip_text = true
 		button.clip_contents = true
+		for state in ["normal","hover","pressed","hover_pressed"]:
+			var style := StyleBoxFlat.new()
+			style.bg_color = Color("#102632")
+			style.border_color = Color("#5a7783")
+			style.set_border_width_all(1)
+			style.set_corner_radius_all(5)
+			button.add_theme_stylebox_override(state,style)
 		button.add_theme_font_size_override("font_size", 11)
 		add_child(button)
 		buttons.append(button)
@@ -59,6 +66,13 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 			react.text=("Stunned / " if stunned.has(key) else "Reaction / ")+Rules.text("condition",reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
 			react.add_theme_font_size_override("font_size",10)
 			react.clip_text=true
+			for state in ["normal","hover","pressed","hover_pressed"]:
+				var style := StyleBoxFlat.new()
+				style.bg_color = Color("#152e3b")
+				style.border_color = Color("#3d6476")
+				style.set_border_width_all(1)
+				style.set_corner_radius_all(3)
+				react.add_theme_stylebox_override(state,style)
 			react.tooltip_text=reaction.name+"\n"+Rules.text("condition",reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
 			column.add_child(react)
 			react.pressed.connect(func(): reaction_selected.emit(key))

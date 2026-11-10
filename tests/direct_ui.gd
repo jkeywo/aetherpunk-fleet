@@ -92,12 +92,13 @@ func _run() -> void:
 	b=current_scene
 	var before:=JSON.stringify(b.state.board_snapshot())
 	var seed: int=b.state.rng.state
+	var resting_style=b.allies.target_widget(0).get_theme_stylebox("normal")
 	b._reaction_hovered(b.state.enemy_row[0])
 	expect(b.allies.target_widget(0).get_theme_stylebox("normal").border_width_left==3,"Reaction hover did not highlight target ship.")
 	expect(b.enemies.widgets[0].get_theme_stylebox("normal").border_width_left==3,"Reaction source not highlighted.")
 	expect(JSON.stringify(b.state.board_snapshot())==before and b.state.rng.state==seed,"Reaction hover mutated live state or RNG.")
 	b._reaction_exited(b.state.enemy_row[0])
-	expect(not b.allies.target_widget(0).has_theme_stylebox_override("normal"),"Reaction hover left stale highlights.")
+	expect(b.allies.target_widget(0).get_theme_stylebox("normal")==resting_style,"Reaction hover left stale highlights.")
 	root.get_node("ContentStore").saved=fixture.duplicate(true)
 	change_scene_to_file("res://scenes/fleet_preparation.tscn")
 	await scene_changed

@@ -3,6 +3,8 @@ extends Control
 ## Lightweight vector silhouettes, scaled to the available UI space.
 
 @export_enum("Ship", "Leviathan") var subject: int = 0
+var art_id := ""
+var rig_view: Control
 @export var accent: Color = Color("#d8b477"):
 	set(value):
 		accent = value
@@ -15,6 +17,7 @@ func _ready() -> void:
 
 
 func _draw() -> void:
+	if rig_view != null: return
 	var scale_factor := minf(size.x / 240.0, size.y / 90.0)
 	var origin := (size - Vector2(240, 90) * scale_factor) / 2.0
 	draw_set_transform(origin, 0, Vector2.ONE * scale_factor)
@@ -48,3 +51,13 @@ func _draw() -> void:
 		draw_circle(Vector2(209, 43), 3, Color("#e8bd77"))
 		draw_line(Vector2(186, 50), Vector2(221, 49), Color("#d2e3db"), 1, true)
 	draw_set_transform(Vector2.ZERO)
+
+
+func set_art(id: String) -> void:
+	art_id = id
+	if rig_view != null: rig_view.queue_free()
+	rig_view = preload("res://scripts/rig_view.gd").new()
+	rig_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(rig_view)
+	rig_view.configure(id,subject==1)
+	queue_redraw()

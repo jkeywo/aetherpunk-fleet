@@ -82,3 +82,10 @@ godot --headless --path . --editor --import --quit
 Tests cover registry metadata/forms/execution, immutable migrations and failed saves, physical pair assembly and branches, resources and boosts, payment cancellation, mana, persistence, armour/multi-hit/range, enemy ownership/replacements/defaults, control effects, hidden decisions, native drag/drop, animated feedback, results/retries, and editor playtests. UI checks use a 1280 × 800 viewport; editor and battle content scroll in smaller windows.
 
 Campaign progression, XP, acquisition, production art, and custom content scripts remain outside this prototype.
+
+
+### Generated art
+
+The game loads the generated painterly art from `assets/generated/`: three ship rigs, three creature rigs, three captain portraits, card and button skins, a two-layer sky, and both luminous magic-circle stages. Ship balloons and creature limbs use parented attachment pivots and subtle idle rotations; suspension cables follow their two moving endpoints. A shared visual clock preserves idle poses across UI refreshes and never uses combat RNG. The far and near skies drift at 6 and 15 pixels per second using mirrored repetition.
+
+Circle artwork stays behind the native slots and adjacency feedback; expansion changes the glowing seal while keeping the same logical slot coordinates. Card type, cost, mana production, rules and ship-coloured borders remain generated from live content. Captain portraits appear in preparation, assignment comparisons and editor previews. Unknown custom IDs keep a neutral artwork fallback. Button normal, hover and pressed textures are separate; their nine-slice textures are fitted at runtime without changing the original PNG files.
