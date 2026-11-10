@@ -1,4 +1,6 @@
 extends SceneTree
+
+var fixture: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gdd_content.json"))
 ## Real asynchronous playback: ordering, locks, cleanup, and leaving during feedback.
 
 const State = preload("res://scripts/battle_state.gd")
@@ -42,6 +44,7 @@ func _open_battle() -> void:
 
 
 func _run() -> void:
+	root.get_node("ContentStore").saved = fixture.duplicate(true)
 	await _open_battle()
 	var battle = current_scene
 	battle.state.reaction_deck = [1, 2, 3, 4, 5]
@@ -75,7 +78,7 @@ func _run() -> void:
 	expect(battle.feedback.overlay.get_child_count() == 1, "Transient feedback nodes leaked.")
 
 	# A repair followed by damage must retain both events rather than showing only the net +1.
-	battle.state = State.new(5)
+	battle.state = State.new(5, fixture)
 	battle.state.ships[0].hull = 24
 	battle.state.reaction_index = 3
 	battle._render()
@@ -94,7 +97,7 @@ func _run() -> void:
 	expect(repair_amount == 4 and damage_amount == 3 and battle.state.ships[0].hull == 25, "Repair and reaction damage were collapsed into a net change.")
 
 	# Guard gained, consumed by damage, and expired are distinct feedback beats.
-	battle.state = State.new(6)
+	battle.state = State.new(6, fixture)
 	battle._render()
 	await process_frame
 	_button("brace").pressed.emit()

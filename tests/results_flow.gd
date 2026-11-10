@@ -1,4 +1,6 @@
 extends SceneTree
+
+var fixture: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gdd_content.json"))
 ## Verifies real battle summaries, result navigation, detached data, and clean retries.
 
 const State = preload("res://scripts/battle_state.gd")
@@ -46,8 +48,9 @@ func _fresh_battle() -> void:
 
 
 func _run() -> void:
+	root.get_node("ContentStore").saved = fixture.duplicate(true)
 	session = root.get_node("BattleSession")
-	var sample = State.new(7)
+	var sample = State.new(7, fixture)
 	expect(sample.result_summary().is_empty(), "Unfinished battle produced a real result.")
 	sample.outcome = "victory"
 	sample.ships[0].hull = 17

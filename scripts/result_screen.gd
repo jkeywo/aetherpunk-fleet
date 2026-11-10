@@ -9,6 +9,13 @@ var summary: Dictionary = {}
 func _ready() -> void:
 	super._ready()
 	_style_results()
+	if BattleSession.editor_playtest:
+		var return_button := Button.new()
+		return_button.name = "ReturnToEditor"
+		return_button.text = "Return to Editor"
+		return_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		primary_button.get_parent().add_child(return_button)
+		return_button.pressed.connect(_navigate.bind("res://scenes/editor.tscn"))
 	summary = BattleSession.last_result.duplicate(true)
 	if summary.is_empty() or summary.get("outcome", "") != outcome:
 		summary.clear()
@@ -35,7 +42,7 @@ func _ready() -> void:
 
 func _add_ship_result(ship: Dictionary) -> void:
 	var panel := ShipScene.instantiate()
-	panel.name = ship.name
+	panel.name = ship.name.validate_node_name()
 	panel.custom_minimum_size = Vector2(0, 78)
 	%Ships.add_child(panel)
 	panel.get_node("%Rank").hide()

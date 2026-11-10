@@ -1,4 +1,6 @@
 extends SceneTree
+
+var fixture: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gdd_content.json"))
 const State = preload("res://scripts/battle_state.gd")
 var failures: int = 0
 var checks: int = 0
@@ -16,7 +18,7 @@ func expect(condition: bool, message: String) -> void:
 
 
 func make_state(keys: Array, reaction: int = 0):
-	var battle = State.new(12345)
+	var battle = State.new(12345, fixture)
 	var available: Array = []
 	for uid in battle.card_keys.size():
 		available.append(uid)
@@ -64,6 +66,7 @@ func conserved(battle) -> bool:
 
 
 func _run() -> void:
+	root.get_node("ContentStore").saved = fixture.duplicate(true)
 	_payment_and_preview()
 	_worked_sequence()
 	_effects_and_reactions()
@@ -106,7 +109,7 @@ func _payment_and_preview() -> void:
 
 
 func _worked_sequence() -> void:
-	var b = State.new(7)
+	var b = State.new(7, fixture)
 	b.reaction_deck = [1, 2, 3, 4, 5]
 	var move_uid := uid_for(b, "advance")
 	var pay_uid := uid_for(b, "tow")
@@ -206,7 +209,7 @@ func _destruction() -> void:
 
 
 func _rounds() -> void:
-	var b = State.new(99)
+	var b = State.new(99, fixture)
 	b.ships[0].guard = 5
 	expect(b.end_phase() == "" and b.ships[0].hull == 26, "Intent or guard failed.")
 	expect(b.phase == "refresh" and b.ships[0].guard == 0 and b.round_number == 2, "Round transition failed.")
@@ -215,19 +218,19 @@ func _rounds() -> void:
 	expect(b.refresh([dropped, dropped]) != "", "Duplicate refresh discard accepted.")
 	expect(b.refresh([dropped]) == "" and b.hand.size() == 7 and b.hand.has(retained), "Retention or refill failed.")
 	expect(conserved(b) and b.phase == "fleet", "Refresh broke card conservation.")
-	b = State.new(2)
+	b = State.new(2, fixture)
 	b.round_number = 4
 	b.end_phase()
 	expect(b.ships[0].hull == 20, "Round-four escalation incorrect.")
-	b = State.new(2)
+	b = State.new(2, fixture)
 	b.intent_index = 2
 	b.end_phase()
 	expect(b.formation == [2, 1, 0] and b.ships[0].hull == 25 and b.ships[2].hull == 15, "Storm Front incorrect.")
-	b = State.new(2)
+	b = State.new(2, fixture)
 	b.intent_index = 3
 	b.end_phase()
 	expect(b.formation == [2, 0, 1] and b.ships[2].hull == 12, "Hunting Dive incorrect.")
-	b = State.new(2)
+	b = State.new(2, fixture)
 	b.intent_index = 1
 	b.formation = [0]
 	b.ships[1].hull = 0

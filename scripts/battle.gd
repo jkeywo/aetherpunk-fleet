@@ -3,13 +3,14 @@ extends Control
 signal resolution_finished
 ## Presentation and action drafting; battle_state.gd owns validation and resolution.
 
-const Setup = preload("res://data/battle_setup.gd")
+const Catalog = preload("res://scripts/content_catalog.gd")
 const State = preload("res://scripts/battle_state.gd")
 const Feedback = preload("res://scripts/combat_feedback.gd")
 const ShipScene = preload("res://scenes/components/ship_panel.tscn")
 const CardScene = preload("res://scenes/components/hand_card.tscn")
 
-var state = State.new()
+var state
+var movement_target: int = -1
 var selected_uid: int = -2
 var payment: Array = []
 var target: int = -1
@@ -19,6 +20,7 @@ var feedback: CanvasLayer
 
 
 func _ready() -> void:
+	state = State.new(-1, ContentStore.snapshot())
 	BattleSession.clear_result()
 	theme = _make_theme()
 	feedback = Feedback.new()
@@ -31,6 +33,15 @@ func _ready() -> void:
 	%ManoeuvreButton.pressed.connect(_select.bind(-1))
 	%EndPhaseButton.pressed.connect(_end_phase)
 	%TargetChoice.item_selected.connect(_target_changed)
+	%MovementChoice.item_selected.connect(_movement_changed)
+	%ReturnToEditor.visible = BattleSession.editor_playtest
+	%ReturnToEditor.pressed.connect(_navigate.bind("res://scenes/editor.tscn"))
+	if not state.init_error.is_empty():
+		%Inspection.text = "Cannot start battle: " + state.init_error
+		%Status.text = "Open the Editor to repair the saved content."
+		for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %WinButton, %LossButton]:
+			button.disabled = true
+		return
 	_render()
 
 
@@ -43,7 +54,7 @@ func _clear_children(container: Node) -> void:
 func _render() -> void:
 	_show_board(state.board_snapshot())
 	_clear_children(%Hand)
-	var intent: Dictionary = Setup.INTENTS[state.intent_index]
+	var intent: Dictionary = state.definitions.intents[state.intent_index]
 	%IntentName.text = intent.name
 	%IntentTrigger.text = intent.trigger
 	%IntentEffect.text = intent.effect
@@ -69,22 +80,23 @@ func _show_piles(snapshot: Dictionary) -> void:
 
 func _show_board(snapshot: Dictionary) -> void:
 	_clear_children(%Formation)
-	%MonsterName.text = Setup.MONSTER.name.to_upper()
-	%MonsterHull.text = "HULL  %d / %d" % [snapshot.monster_hull, Setup.MONSTER.hull]
-	%MonsterBar.max_value = Setup.MONSTER.hull
+	%MonsterName.text = state.definitions.monster.name.to_upper()
+	%MonsterHull.text = "HULL  %d / %d" % [snapshot.monster_hull, state.definitions.monster.hull]
+	%MonsterBar.max_value = state.definitions.monster.hull
 	%MonsterBar.value = snapshot.monster_hull
-	var reaction: Dictionary = Setup.REACTIONS[snapshot.reaction_index]
+	var reaction: Dictionary = state.definitions.reactions[snapshot.reaction_index]
 	%ReactionName.text = reaction.name
 	%ReactionTrigger.text = reaction.trigger
 	%ReactionEffect.text = reaction.effect
 	for index in snapshot.formation.size():
 		var ship_id: int = snapshot.formation[index]
-		_add_ship(index, snapshot.ships[ship_id])
+		_add_ship(ship_id, index, snapshot.ships[ship_id])
 
 
-func _add_ship(rank: int, ship: Dictionary) -> void:
+func _add_ship(ship_id: int, rank: int, ship: Dictionary) -> void:
 	var panel := ShipScene.instantiate()
-	panel.name = ship.name
+	panel.name = ship.name.validate_node_name()
+	panel.set_meta("ship_index", ship_id)
 	%Formation.add_child(panel)
 	panel.get_node("%Rank").text = ["01  /  FRONT", "02  /  CENTRE", "03  /  REAR"][rank]
 	panel.get_node("%ShipName").text = ship.name
@@ -155,12 +167,26 @@ func _select(uid: int) -> void:
 	selected_uid = uid
 	payment.clear()
 	target = -1
+	movement_target = -1
 	%TargetChoice.clear()
+	%MovementChoice.clear()
 	for option in state.choices(uid):
 		%TargetChoice.add_item(option.label, option.value)
 	if %TargetChoice.item_count > 0:
 		%TargetChoice.select(0)
 		target = %TargetChoice.get_item_id(0)
+	for option in state.choices(uid, "movement"):
+		%MovementChoice.add_item(option.label, option.value)
+	if %MovementChoice.item_count > 0:
+		%MovementChoice.select(0)
+		movement_target = %MovementChoice.get_item_id(0)
+	_update_controls()
+
+
+func _movement_changed(index: int) -> void:
+	if busy:
+		return
+	movement_target = %MovementChoice.get_item_id(index)
 	_update_controls()
 
 
@@ -176,7 +202,9 @@ func _clear_draft() -> void:
 	payment.clear()
 	target = -1
 	refresh_discards.clear()
+	movement_target = -1
 	%TargetChoice.clear()
+	%MovementChoice.clear()
 
 
 func _cancel() -> void:
@@ -193,7 +221,7 @@ func _commit() -> void:
 	if state.phase == "refresh":
 		error = state.refresh(refresh_discards)
 	elif selected_uid != -2:
-		error = state.play(selected_uid, payment, target)
+		error = state.play(selected_uid, payment, target, movement_target)
 	if error != "":
 		%Inspection.text = error
 		return
@@ -224,12 +252,13 @@ func _present_resolution() -> void:
 
 func _update_controls() -> void:
 	if busy:
-		for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %WinButton, %LossButton]:
+		for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
 			button.disabled = true
 		for button in %Hand.get_children():
 			button.disabled = true
 		return
 	%TargetChoice.disabled = false
+	%MovementChoice.disabled = false
 	%WinButton.disabled = false
 	%LossButton.disabled = false
 	for button in %Hand.get_children():
@@ -243,13 +272,14 @@ func _update_controls() -> void:
 		if state.phase == "refresh" and marked:
 			button.get_node("%Payment").text = "DROP"
 	%TargetChoice.visible = selected_uid != -2 and %TargetChoice.item_count > 0
+	%MovementChoice.visible = selected_uid != -2 and %MovementChoice.item_count > 0
 	%CancelButton.disabled = selected_uid == -2 and refresh_discards.is_empty()
 	%ManoeuvreButton.disabled = state.phase != "fleet" or state.formation.size() < 2
 	%EndPhaseButton.disabled = state.phase != "fleet"
 	%PlayButton.disabled = true
 	%PlayButton.text = "Play Card"
 	if state.phase == "discard":
-		%Inspection.text = "SIGNAL RELAY: click one card to discard. Finish this choice before taking another action."
+		%Inspection.text = "%s: choose %d more card(s) to discard before continuing." % [state.pending.title, state.pending.discard_remaining]
 		%Status.text = "Action in progress: choose one discard."
 	elif state.phase == "refresh":
 		%PlayButton.disabled = false
@@ -258,7 +288,7 @@ func _update_controls() -> void:
 			state.hand.size() - refresh_discards.size(), refresh_discards.size()]
 		%Status.text = "Keep cards you want; refill to seven."
 	elif selected_uid != -2:
-		var result: Dictionary = state.preview(selected_uid, payment, target)
+		var result: Dictionary = state.preview(selected_uid, payment, target, movement_target)
 		%PlayButton.disabled = not result.ok
 		%PlayButton.text = "Manoeuvre" if selected_uid == -1 else "Play Card"
 		%Inspection.text = result.text
@@ -272,11 +302,13 @@ func _update_controls() -> void:
 
 func _navigate(destination: String) -> void:
 	# Menu remains an immediate escape while feedback is playing.
-	if busy and destination != "res://scenes/main_menu.tscn":
+	if busy and destination not in ["res://scenes/main_menu.tscn", "res://scenes/editor.tscn"]:
 		return
 	if destination in ["res://scenes/victory.tscn", "res://scenes/defeat.tscn"]:
 		var result: String = destination.get_file().get_basename()
 		BattleSession.record_result(state.result_summary(result))
+	if destination in ["res://scenes/main_menu.tscn", "res://scenes/editor.tscn"]:
+		BattleSession.editor_playtest = false
 	var error := get_tree().change_scene_to_file(destination)
 	if error != OK:
 		push_error("Unable to open %s: %s" % [destination, error_string(error)])

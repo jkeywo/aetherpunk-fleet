@@ -1,4 +1,6 @@
 extends SceneTree
+
+var fixture: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/gdd_content.json"))
 ## Exercises actual UI selection, payment, target choices, outcomes, and exit.
 
 const MENU_BUTTONS := "Center/Panel/Margin/Content/"
@@ -9,6 +11,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	root.get_node("ContentStore").saved = fixture.duplicate(true)
 	if change_scene_to_file("res://scenes/main_menu.tscn") != OK:
 		_fail("Could not load main menu.")
 		return

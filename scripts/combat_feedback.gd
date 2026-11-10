@@ -252,7 +252,10 @@ func _draw_cards(uids: Array) -> void:
 
 
 func _ship_panel(ship_id: int) -> Control:
-	return view.get_node("%Formation").get_node_or_null(NodePath(view.state.ships[ship_id].name)) as Control
+	for panel in view.get_node("%Formation").get_children():
+		if panel.get_meta("ship_index", -1) == ship_id:
+			return panel
+	return null
 
 
 func _apply_board(snapshot: Dictionary) -> void:
@@ -306,13 +309,13 @@ func _move_ships(snapshot: Dictionary) -> void:
 		ghost.position = panel.global_position
 		ghost.size = panel.size
 		_ignore_input(ghost)
-		ghosts[panel.name] = ghost
+		ghosts[panel.get_meta("ship_index")] = ghost
 	await _apply_board(snapshot)
 	var tween := create_tween().set_parallel(true)
 	for panel in view.get_node("%Formation").get_children():
-		if ghosts.has(panel.name):
+		if ghosts.has(panel.get_meta("ship_index")):
 			panel.modulate.a = 0.0
-			tween.tween_property(ghosts[panel.name], "position", panel.global_position, _time(0.34)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+			tween.tween_property(ghosts[panel.get_meta("ship_index")], "position", panel.global_position, _time(0.34)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	await tween.finished
 	for ghost in ghosts.values():
 		ghost.queue_free()

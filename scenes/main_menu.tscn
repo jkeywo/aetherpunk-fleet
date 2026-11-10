@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/screen.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/main_menu.gd" id="1"]
 
 [sub_resource type="StyleBoxFlat" id="PanelStyle"]
 bg_color = Color(0.055, 0.105, 0.145, 1)
@@ -86,6 +86,12 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 text = "Start Game"
+
+[node name="EditorButton" type="Button" parent="Center/Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 56)
+text = "Editor"
 
 [node name="SecondaryButton" type="Button" parent="Center/Panel/Margin/Content"]
 unique_name_in_owner = true

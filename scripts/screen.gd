@@ -42,6 +42,8 @@ func _navigate(destination: String) -> void:
 	if destination.is_empty():
 		get_tree().quit()
 		return
+	if destination in ["res://scenes/main_menu.tscn", "res://scenes/editor.tscn"]:
+		BattleSession.editor_playtest = false
 	var error := get_tree().change_scene_to_file(destination)
 	if error != OK:
 		push_error("Unable to open scene %s: %s" % [destination, error_string(error)])
