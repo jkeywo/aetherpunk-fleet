@@ -3,6 +3,7 @@ const Catalog = preload("res://scripts/content_catalog.gd")
 const Rules = preload("res://scripts/rules/rule_registry.gd")
 const State = preload("res://scripts/battle_state.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
+const CardFace = preload("res://scripts/card_face.gd")
 const Formation = preload("res://scripts/formation_view.gd")
 const Ui = preload("res://scripts/ui_theme.gd")
 var source: Dictionary = {}
@@ -23,6 +24,10 @@ var opening_note: Label
 var launch_button: Button
 var formation: Control
 var encounter: Label
+var fleet_scroll: ScrollContainer
+var deck_preview: VBoxContainer
+var deck_cards: HBoxContainer
+var deck_summary: Label
 var content_scroll: ScrollContainer
 
 func _ready() -> void:
@@ -83,6 +88,7 @@ func _build() -> void:
 	split.split_offset = 675
 	outer.add_child(split)
 	var left_scroll := ScrollContainer.new()
+	fleet_scroll = left_scroll
 	left_scroll.custom_minimum_size.x = 570
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	split.add_child(left_scroll)
@@ -101,6 +107,20 @@ func _build() -> void:
 	_label(left,"CAPTAINS / drag onto a ship",12).modulate = Color("#e8bd77")
 	captain_bank = HFlowContainer.new()
 	left.add_child(captain_bank)
+	deck_preview = VBoxContainer.new()
+	deck_preview.add_theme_constant_override("separation", 8)
+	left.add_child(deck_preview)
+	deck_summary = _label(deck_preview, "", 17)
+	deck_summary.set_meta("plain_text", true)
+	deck_summary.modulate = Color("#e8bd77")
+	_label(deck_preview, "One preview per design; copy counts show how many enter the deck. Scroll sideways for more cards.", 12)
+	var card_scroll := ScrollContainer.new()
+	card_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	card_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	deck_preview.add_child(card_scroll)
+	deck_cards = HBoxContainer.new()
+	deck_cards.add_theme_constant_override("separation", 12)
+	card_scroll.add_child(deck_cards)
 	encounter = _label(left,"",13)
 	opening = CheckBox.new()
 	opening.text = "Use saved opening when compatible"
@@ -151,6 +171,7 @@ func _render() -> void:
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships,slot.ship)]
 	_label(inspector,ship.name,24).set_meta("plain_text",true)
+	_button(inspector, "View selected ship’s deck", _show_deck)
 	var options: Array = []
 	for entry in draft.ships: options.append({"label":entry.name,"value":entry.id})
 	_menu(inspector,"Airship",options,slot.ship,_change.bind(selected_ship,"ship"),"ship_"+str(selected_ship))
@@ -322,6 +343,7 @@ func _update() -> void:
 	_wire_formation(board)
 	formation.show_rule_preview({},selected_ship)
 	var ship: Dictionary = compiled.ships[selected_ship]
+	_render_deck_preview(compiled, ship, candidate.setup.fleet[selected_ship])
 	var unit_data: Dictionary = board.ships[selected_ship]
 	var lines: Array = ["%s · HULL %d · ARMOUR %d" % [ship.role,unit_data.max_hull,unit_data.armour],"Weapon %d · %s / %s %d" % [unit_data.weapon.damage,unit_data.weapon.range,ship.resource.name,unit_data.resource_capacity]]
 	for pair in ship.loadout:
@@ -372,3 +394,43 @@ func _launch() -> void:
 	BattleSession.prepared_content = candidate.duplicate(true)
 	BattleSession.editor_playtest = false
 	get_tree().change_scene_to_file("res://scenes/game.tscn")
+
+
+func _show_deck() -> void:
+	fleet_scroll.ensure_control_visible(deck_preview)
+
+
+func _render_deck_preview(compiled: Dictionary, ship: Dictionary, slot: Dictionary) -> void:
+	_clear(deck_cards)
+	var groups: Array = []
+	if ship.has("legacy_loadout"):
+		for pair in ship.loadout: groups.append({"label": "Imported loadout", "card": pair.card, "count": pair.count})
+	else:
+		groups.append({"label": "Starter / Level 1", "card": ship.starter, "count": 2})
+		groups.append({"label": "Captain / " + ship.captain.name + " / Tier " + str(ship.captain.tier), "card": ship.captain.card, "count": 2})
+		for tier in ["two", "three"]:
+			var level := 2 if tier == "two" else 3
+			if slot.level < level: continue
+			var package: Dictionary = ship.levels[tier][Catalog.index_by_id(ship.levels[tier], slot["level_2" if tier == "two" else "level_3"])]
+			groups.append({"label": "Level %d / %s / +2 cards" % [level, package.name], "card": package.card, "count": 2})
+	var total := 0
+	for group in groups:
+		total += int(group.count)
+		var column := VBoxContainer.new()
+		column.custom_minimum_size.x = 240
+		deck_cards.add_child(column)
+		var origin := _label(column, group.label, 12)
+		origin.set_meta("plain_text", true)
+		origin.custom_minimum_size.y = 40
+		origin.modulate = Color("#91b9c6")
+		_label(column, "%d copies" % group.count, 14).set_meta("plain_text", true)
+		var face := CardFace.new()
+		face.set_meta("card_id", group.card)
+		face.set_meta("copies", group.count)
+		face.set_meta("origin", group.label)
+		face.custom_minimum_size = Vector2(240, 320)
+		face.toggle_mode = false
+		face.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		face.configure(compiled.cards[group.card], ship)
+		column.add_child(face)
+	deck_summary.text = "%s / Level %d / %d cards in deck" % [ship.name, slot.level, total]

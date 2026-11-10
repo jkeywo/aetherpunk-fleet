@@ -9,6 +9,9 @@ func select_value(prep, key: String, value: Variant) -> void:
 			return
 	expect(false,"Missing preparation option " + key + ": " + str(value))
 
+func preview_faces(prep) -> Array:
+	return prep.deck_cards.get_children().map(func(column): return column.get_child(column.get_child_count() - 1))
+
 func _run() -> void:
 	root.size = Vector2i(1280,800)
 	var store_node = root.get_node("ContentStore")
@@ -25,18 +28,24 @@ func _run() -> void:
 	expect(prep.name == "FleetPreparation" and prep.controls.size() == 6,"Start Game did not open preparation controls.")
 	expect(prep.fixed_available and prep._candidate().setup.fixed_hand and not prep.launch_button.disabled,"Saved opening not preserved.")
 	expect("18 cards" in prep.status.text and "ARMOUR 3" in prep.details[0].text,"Fleet/card/effective-stat preview incorrect.")
+	expect(preview_faces(prep).map(func(face): return face.get_meta("card_id")) == ["brace", "field_orders", "escort"] and "6 cards" in prep.deck_summary.text, "Initial selected-ship deck preview is incomplete.")
+	expect(preview_faces(prep).all(func(face): return face.get_meta("copies") == 2 and face.owner_info.name == "Bastion" and not face.labels.rules.text.is_empty()), "Card previews lost copy counts, ship styling, or rules.")
 	await select_value(prep,"ship_0","kestrel")
 	expect(prep.draft.setup.fleet[0].ship == "kestrel" and prep.draft.setup.fleet[1].ship == "bastion","Choosing an occupied ship did not swap unique assignments.")
 	await select_value(prep,"captain_0","rook")
 	expect(prep.draft.setup.fleet[0].captain == "rook" and prep.draft.setup.fleet[1].captain == "iona","Captain reassignment duplicated a captain.")
+	expect(preview_faces(prep)[1].get_meta("card_id") == "command_barrage" and preview_faces(prep)[1].owner_info.name == "Kestrel", "Captain assignment did not update card preview or acting ship.")
 	await select_value(prep,"level_0",3)
+	expect(preview_faces(prep).size() == 4 and "8 cards" in prep.deck_summary.text, "Level 3 preview does not show both upgrade pairs.")
 	var level_three: OptionButton = prep.controls.level_3_0
 	var options: Array = []
 	for index in level_three.item_count: options.append(level_three.get_item_metadata(index))
 	expect(not options.has("artillery") and options.size() == 2,"Blocked level-3 option was selectable.")
 	expect(not level_three.get_popup().get_item_tooltip(0).is_empty(),"Upgrade option lacks reward tooltip.")
 	await select_value(prep,"level_3_0","conductor")
+	expect(preview_faces(prep)[3].get_meta("card_id") == "cyclone_salvo" and "Level 3" in preview_faces(prep)[3].get_meta("origin"), "Level-3 branch preview did not change.")
 	await select_value(prep,"level_2_0","assault")
+	expect(preview_faces(prep)[2].get_meta("card_id") == "strafe", "Level-2 branch preview did not change.")
 	expect(prep.draft.setup.fleet[0].level_3 == "conductor","Shared legal level-3 choice did not survive branch change.")
 	await select_value(prep,"level_3_0","artillery")
 	await select_value(prep,"level_2_0","defence")
@@ -44,6 +53,10 @@ func _run() -> void:
 	await select_value(prep,"level_0",1)
 	expect(prep.draft.setup.fleet[0].level_2 == "" and prep.draft.setup.fleet[0].level_3 == "" and prep.controls.level_2_0.disabled and prep.controls.level_3_0.disabled,"Lowering level kept active upgrade branches.")
 	expect(not prep._candidate().setup.fixed_hand and "unavailable" in prep.opening_note.text,"Incompatible saved opening did not fall back to shuffled.")
+	expect(preview_faces(prep).size() == 2 and "4 cards" in prep.deck_summary.text, "Lowering level left upgrade cards in preview.")
+	prep._show_deck()
+	await flush()
+	expect(prep.fleet_scroll.scroll_vertical > 0, "View deck did not scroll to card previews.")
 	await select_value(prep,"position_0","rear")
 	expect(prep.draft.setup.fleet[2].position == "front","Occupied position was duplicated.")
 	var chosen: Array = prep.draft.setup.fleet.duplicate(true)
