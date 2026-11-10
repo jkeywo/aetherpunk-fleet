@@ -3,6 +3,8 @@ extends Button
 var name_label: Label
 var hull_label: Label
 var guard_label: Label
+var resource_label: Label
+var cover_label: Label
 var bar: ProgressBar
 var art: Control
 var info_column: VBoxContainer
@@ -24,7 +26,9 @@ func _init() -> void:
 	add_child(column)
 	name_label = Label.new()
 	name_label.set_meta("plain_text",true)
-	name_label.add_theme_font_size_override("font_size", 13)
+	name_label.add_theme_font_size_override("font_size", 14)
+	name_label.add_theme_color_override("font_outline_color",Color("#08151f"))
+	name_label.add_theme_constant_override("outline_size",4)
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	column.add_child(name_label)
 	art = preload("res://scripts/rig_view.gd").new()
@@ -32,7 +36,12 @@ func _init() -> void:
 	column.add_child(art)
 	hull_label = Label.new()
 	hull_label.add_theme_font_size_override("font_size", 10)
-	column.add_child(hull_label)
+	hull_label.set_meta("plain_text",true)
+	hull_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+	hull_label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+	hull_label.add_theme_font_size_override("font_size",12)
+	hull_label.add_theme_color_override("font_outline_color",Color("#08151f"))
+	hull_label.add_theme_constant_override("outline_size",4)
 	bar = ProgressBar.new()
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = Color("#78b7aa")
@@ -43,12 +52,22 @@ func _init() -> void:
 	bar.add_theme_stylebox_override("fill", fill)
 	bar.add_theme_stylebox_override("background", background)
 	bar.show_percentage = false
-	bar.custom_minimum_size.y = 5
+	bar.custom_minimum_size.y = 19
 	column.add_child(bar)
+	bar.add_child(hull_label)
+	hull_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bar.value_changed.connect(func(value):hull_label.text="%d / %d" % [roundi(value),roundi(bar.max_value)])
 	guard_label = Label.new()
-	guard_label.add_theme_font_size_override("font_size", 8)
+	guard_label.add_theme_font_size_override("font_size", 10)
 	guard_label.modulate = Color("#8bd8ff")
 	column.add_child(guard_label)
+	resource_label=Label.new()
+	resource_label.set_meta("plain_text",true)
+	resource_label.add_theme_font_size_override("font_size",10)
+	column.add_child(resource_label)
+	cover_label=Label.new()
+	cover_label.add_theme_font_size_override("font_size",10)
+	column.add_child(cover_label)
 	for child in column.get_children():
 		child.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -56,26 +75,31 @@ func _init() -> void:
 func configure(data: Dictionary, enemy: bool = false) -> void:
 	name_label.text = data.get("name", "Unit")
 	art.configure_data(data, enemy)
-	for state_name in ["normal", "hover", "pressed", "hover_pressed"]:
+	for state_name in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
 		var style := StyleBoxFlat.new()
-		style.bg_color = Color(.035,.075,.11,.65 if state_name == "normal" else .85)
+		style.bg_color = Color(1,1,1,0)
 		style.border_color = Color(data.get("color", "#b38883")) if not enemy else Color("#a47c79")
-		style.set_border_width_all(1)
+		style.set_border_width_all(0)
 		style.set_corner_radius_all(5)
 		add_theme_stylebox_override(state_name,style)
 	_art_layout()
 	var maximum: int = int(data.get("max_hull", data.get("hull", 1)))
 	var hull: int = int(data.get("hull", maximum))
-	hull_label.text = "HULL %d / %d" % [hull, maximum]
+	hull_label.text = "%d / %d" % [hull, maximum]
 	bar.max_value = maxi(1, maximum)
 	bar.value = hull
 	var weapon: Dictionary = data.get("weapon", {"damage": 0, "range": "Long"})
-	guard_label.text = "SH %d / A%d / W%d %s" % [data.get("guard", 0), data.get("armour", 0), weapon.damage, weapon.range]
-	if not enemy: guard_label.text += "\n%s %d/%d" % [data.get("resource_name", "Charge"), data.get("resource", 0), data.get("resource_capacity", 6)]
-	else: guard_label.text += "\n%d row activation(s)" % data.get("row_activations", 0)
+	guard_label.text="Shields %d" % data.get("guard",0)
+	guard_label.visible=int(data.get("guard",0))>0
+	resource_label.visible=not enemy
+	resource_label.text="%s %d/%d" % [data.get("resource_name","Charge"),data.get("resource",0),data.get("resource_capacity",6)] if not enemy else ""
+	cover_label.hide()
+	_art_layout()
 	name_label.modulate = Color("#ffb0a0") if enemy else Color(data.get("color", "#91c8ad"))
 	tooltip_text = "%s\nHull %d / %d\n%s" % [name_label.text, hull, maximum, data.get("role", "Leviathan")]
-	tooltip_text += "\nArmour %d / Shields %d\nWeapon %d %s" % [data.get("armour", 0), data.get("guard", 0), weapon.damage, weapon.range]
+	tooltip_text += "\nArmour %d" % data.get("armour",0)
+	if int(data.get("guard",0))>0:tooltip_text+="\nShields %d" % data.guard
+	tooltip_text+="\nWeapon %d %s" % [weapon.damage,weapon.range]
 	if enemy: tooltip_text += "\nDefault if not activated: " + data.get("default_text", "None")
 	else:
 		tooltip_text += "\nLevel %d / Captain %s\n%s %d/%d" % [data.get("level", 1), data.get("captain", {}).get("name", "Unassigned"), data.get("resource_name", "Charge"), data.get("resource", 0), data.get("resource_capacity", 6)]
@@ -90,13 +114,11 @@ func _make_custom_tooltip(for_text: String) -> Object:
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 10)
 	panel.add_child(margin)
-	var label := Label.new()
-	label.set_meta("plain_text", true)
-	label.custom_minimum_size.x = 440
-	label.size.x = 440
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", 13)
-	label.text = for_text
+	var label:=preload("res://scripts/keyword_text.gd").new()
+	label.custom_minimum_size.x=440
+	label.fit_content=true
+	label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	label.configure(for_text,13)
 	margin.add_child(label)
 	return panel
 
@@ -105,4 +127,9 @@ func _art_layout() -> void:
 	if art == null or info_column == null: return
 	var footer := float(get_meta("footer_space",0))
 	info_column.offset_bottom = -4-footer
-	art.custom_minimum_size.y = maxf(24,size.y-70-footer)
+	art.custom_minimum_size.y = maxf(28,size.y-40-footer-(12 if resource_label.visible else 0)-(12 if guard_label.visible else 0)-(12 if cover_label.visible else 0))
+
+func set_cover(amount: int) -> void:
+	cover_label.text="Cover %d" % amount
+	cover_label.visible=amount>0
+	_art_layout()

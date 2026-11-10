@@ -226,6 +226,9 @@ static func validate(source: Variant) -> Array:
 		_rules(ship.get("resource", {}).get("rules", []), "Resource " + id, errors)
 		_rules(ship.get("rules", []), "Ship " + id, errors)
 		_check_card(cards, ship.get("starter", ""), id, "Ship " + id + " starter", errors)
+		if ship.get("starter_two","")!="":
+			_check_card(cards,ship.starter_two,id,"Ship "+id+" second starter",errors)
+			if ship.starter_two==ship.starter:errors.append("Ship "+id+": choose two distinct starter designs.")
 		if ship.has("legacy_loadout"):
 			if not ship.legacy_loadout is Array: errors.append("Ship " + id + ": invalid legacy loadout.")
 			else:
@@ -410,7 +413,9 @@ static func compile(source: Dictionary) -> Dictionary:
 		ship["active_rules"] = ship.get("rules", []).duplicate(true) + ship.resource.get("rules", []).duplicate(true)
 		ship.active_rules.append(captain.passive.duplicate(true))
 		result.positions.append(entry.position)
-		var loadout: Array = [{"card": ship.starter, "count": 2}, {"card": captain.card, "count": 2}]
+		var loadout: Array = [{"card": ship.starter, "count": 2}]
+		if ship.get("starter_two","")!="":loadout.append({"card":ship.starter_two,"count":2})
+		loadout.append({"card":captain.card,"count":2})
 		for level in ["two", "three"]:
 			if int(entry.level) < (2 if level == "two" else 3): continue
 			var package_index: int = index_by_id(ship.levels[level], entry.get("level_2" if level == "two" else "level_3", ""))
@@ -468,6 +473,7 @@ static func references(doc: Dictionary, kind: String, id: String) -> Array:
 	if kind == "cards":
 		for ship in doc.ships:
 			if ship.starter == id: result.append(ship.name + " starter pair")
+			if ship.get("starter_two","")==id:result.append(ship.name+" second starter pair")
 			for tier in ["two", "three"]:
 				for package in ship.levels[tier]:
 					if package.card == id: result.append(ship.name + " / " + package.name)

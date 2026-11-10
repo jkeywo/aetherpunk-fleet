@@ -553,3 +553,17 @@ static func _formatted(category: String, p: Dictionary) -> String:
 	if category == "cost":
 		return "Spend " + _raw_text("value", p.get("amount", 2)) + " personal resource"
 	return ""
+
+static func reaction_condition_text(condition: Dictionary, owner_name: String = "") -> String:
+	match condition.get("kind",""):
+		"card_matches":
+			var matches: Array=[]
+			for key in ["card_type","trait","card_id"]:
+				if condition.get(key,"")!="":matches.append(str(condition[key]))
+			return "On played "+(" ".join(matches) if not matches.is_empty() else "card")
+		"all","any":
+			var parts: Array=[]
+			for child in condition.get("items",[]):parts.append(reaction_condition_text(child,owner_name))
+			return (" AND " if condition.kind=="all" else " OR ").join(parts) if not parts.is_empty() else "always"
+		"not":return "not ("+reaction_condition_text(condition.get("condition",{}),owner_name)+")"
+	return text("condition",condition,owner_name)

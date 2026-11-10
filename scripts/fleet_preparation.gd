@@ -38,6 +38,7 @@ var deck_summary: Label
 var preparation_tabs: TabContainer
 var fleet_deck_body: VBoxContainer
 var fleet_deck_summary: Label
+var ship_info_dialog: AcceptDialog
 var content_scroll: ScrollContainer
 
 func _ready() -> void:
@@ -91,18 +92,18 @@ func _build() -> void:
 	_label(header,"FLEET PREPARATION",26).modulate = Color("#e8bd77")
 	_button(header,"Reset to Saved Fleet",_reset)
 	_button(header,"Main Menu",_back)
-	_label(outer,"Select a ship for its options. Drag ships between positions; drag captains onto ships to assign or swap them.",14).modulate = Color("#91b9c6")
+	_label(outer,"Drag ships between positions and captains onto ships. Click a ship’s i button for its details, levels and cards.",14).modulate = Color("#91b9c6")
 	preparation_tabs = TabContainer.new()
 	preparation_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	outer.add_child(preparation_tabs)
-	var split := HSplitContainer.new()
+	var split := VBoxContainer.new()
 	split.name = "Fleet Setup"
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	split.split_offset = 675
 	preparation_tabs.add_child(split)
 	var left_scroll := ScrollContainer.new()
 	fleet_scroll = left_scroll
-	left_scroll.custom_minimum_size.x = 570
+	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	split.add_child(left_scroll)
 	var left := VBoxContainer.new()
@@ -111,18 +112,39 @@ func _build() -> void:
 	left_scroll.add_child(left)
 	formation = Formation.new()
 	formation.large_cards = true
-	formation.custom_minimum_size = Vector2(550,370)
+	formation.custom_minimum_size = Vector2(550,420)
 	left.add_child(formation)
 	formation.position_selected.connect(_select_position)
-	_label(left,"SHIPS / drag to move or replace",12).modulate = Color("#e8bd77")
+	var ships_header:=HBoxContainer.new()
+	left.add_child(ships_header)
+	_label(ships_header,"SHIPS / drag to move or replace",12).modulate=Color("#e8bd77")
 	ship_bank = HFlowContainer.new()
 	left.add_child(ship_bank)
-	_label(left,"CAPTAINS / drag onto a ship",12).modulate = Color("#e8bd77")
+	var captains_header:=HBoxContainer.new()
+	left.add_child(captains_header)
+	_label(captains_header,"CAPTAINS / drag onto a ship",12).modulate=Color("#e8bd77")
+	ship_info_dialog=AcceptDialog.new()
+	ship_info_dialog.name="ShipDetails"
+	ship_info_dialog.get_ok_button().text="Close"
+	add_child(ship_info_dialog)
+	var info_scroll:=ScrollContainer.new()
+	info_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	info_scroll.offset_left=14;info_scroll.offset_top=14;info_scroll.offset_right=-14;info_scroll.offset_bottom=-60
+	info_scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
+	ship_info_dialog.add_child(info_scroll)
+	var info_columns:=HBoxContainer.new()
+	info_columns.custom_minimum_size=Vector2(850,460)
+	info_columns.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	info_columns.size_flags_vertical=Control.SIZE_EXPAND_FILL
+	info_columns.add_theme_constant_override("separation",18)
+	info_scroll.add_child(info_columns)
 	captain_bank = HFlowContainer.new()
 	left.add_child(captain_bank)
 	deck_preview = VBoxContainer.new()
 	deck_preview.add_theme_constant_override("separation", 8)
-	left.add_child(deck_preview)
+	info_columns.add_child(deck_preview)
+	deck_preview.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	deck_preview.custom_minimum_size.x=500
 	deck_summary = _label(deck_preview, "", 17)
 	deck_summary.set_meta("plain_text", true)
 	deck_summary.modulate = Color("#e8bd77")
@@ -141,9 +163,11 @@ func _build() -> void:
 	opening.toggled.connect(func(value): prefer_fixed=value; _update())
 	opening_note = _label(left,"",12)
 	content_scroll = ScrollContainer.new()
-	content_scroll.custom_minimum_size.x = 380
+	content_scroll.custom_minimum_size.x = 330
+	content_scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	split.add_child(content_scroll)
+	info_columns.add_child(content_scroll)
+	info_columns.move_child(content_scroll,0)
 	inspector = VBoxContainer.new()
 	inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector.add_theme_constant_override("separation",7)
@@ -204,18 +228,7 @@ func _render() -> void:
 	inspector.add_child(captain_header)
 	captain_header.add_child(preload("res://scripts/art_assets.gd").portrait_view(slot.captain,Vector2(64,85)))
 	_label(captain_header,draft.captains[Catalog.index_by_id(draft.captains,slot.captain)].name,17)
-	_button(inspector, "View selected ship’s deck", _show_deck)
 	var options: Array = []
-	for entry in draft.ships: options.append({"label":entry.name,"value":entry.id})
-	_menu(inspector,"Airship",options,slot.ship,_change.bind(selected_ship,"ship"),"ship_"+str(selected_ship))
-	_button(inspector, "Compare ships", _show_ships)
-	options=[]
-	for entry in draft.captains: options.append({"label":entry.name+" · Tier "+str(entry.tier),"value":entry.id,"tooltip":Rules.rule_text(entry.passive, ship.name)})
-	_menu(inspector,"Captain",options,slot.captain,_change.bind(selected_ship,"captain"),"captain_"+str(selected_ship))
-	_button(inspector, "Compare captains", _show_captains)
-	options=[]
-	for point in 4: options.append({"label":Geometry.POSITION_NAMES[point],"value":Geometry.POSITIONS[point]})
-	_menu(inspector,"Starting position",options,slot.position,_change.bind(selected_ship,"position"),"position_"+str(selected_ship))
 	_menu(inspector,"Level",[{"label":"1 · Starter + captain pairs","value":1},{"label":"2 · Add one upgrade pair","value":2},{"label":"3 · Add both upgrade pairs","value":3}],slot.level,_change.bind(selected_ship,"level"),"level_"+str(selected_ship))
 	options=[]
 	for package in ship.levels.two: options.append({"label":package.name,"value":package.id,"tooltip":_package_text(package)})
@@ -241,11 +254,13 @@ func _render() -> void:
 		button.set_meta("plain_text",true)
 		button.tooltip_text="Drag to move this ship, or replace a ship in the fleet."
 		button.set_drag_forwarding(_drag_from.bind({"kind":"ship","ship":entry.id},button),Callable(),Callable())
+	_button(ship_bank,"Compare Airships",_show_ships)
 	for entry in draft.captains:
 		var button := _button(captain_bank,entry.name+" · "+str(entry.tier),func(): pass)
 		button.tooltip_text=Rules.rule_text(entry.passive, ship.name)
 		button.set_meta("plain_text",true)
 		button.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":entry.id},button),Callable(),Callable())
+	_button(captain_bank,"Compare Captains",_show_captains)
 	opening.set_pressed_no_signal(prefer_fixed)
 	opening.disabled=not source.setup.fixed_hand
 	_update()
@@ -302,6 +317,15 @@ func _wire_formation(board: Dictionary) -> void:
 		badge.pressed.connect(func(): selected_ship=id; _render())
 		badge.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":captain.id},badge),_can_drop_at.bind(point),_drop_at.bind(point))
 		widget.set_meta("captain_badge",badge)
+		var info_button:=Button.new()
+		info_button.text="i"
+		info_button.set_meta("plain_text",true)
+		info_button.set_meta("ship_info",id)
+		info_button.tooltip_text="Ship details, levels, upgrade branches and cards"
+		info_button.position=Vector2(widget.size.x-29,0)
+		info_button.size=Vector2(28,26)
+		widget.add_child(info_button)
+		info_button.pressed.connect(_show_ship_info.bind(id))
 
 func _drag_from(_point: Vector2, payload: Dictionary, origin: Control) -> Dictionary:
 	drag_payload=payload.duplicate(true)
@@ -441,8 +465,14 @@ func _launch() -> void:
 	get_tree().change_scene_to_file("res://scenes/game.tscn")
 
 
+func _show_ship_info(index: int) -> void:
+	selected_ship=index
+	_render()
+	ship_info_dialog.title=draft.ships[Catalog.index_by_id(draft.ships,draft.setup.fleet[index].ship)].name+" / Preparation"
+	ship_info_dialog.popup_centered(Vector2i(mini(1160,int(get_viewport_rect().size.x*.94)),mini(650,int(get_viewport_rect().size.y*.9))))
+
 func _show_deck() -> void:
-	fleet_scroll.ensure_control_visible(deck_preview)
+	_show_ship_info(selected_ship)
 
 
 func _render_deck_preview(compiled: Dictionary, ship: Dictionary, slot: Dictionary) -> void:
@@ -479,7 +509,7 @@ func _show_upgrades(tier: String) -> void:
 	upgrade_dialog = AcceptDialog.new()
 	upgrade_dialog.name = "UpgradeComparison"
 	upgrade_dialog.get_ok_button().text = "Close"
-	add_child(upgrade_dialog)
+	(ship_info_dialog if ship_info_dialog.visible else self).add_child(upgrade_dialog)
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, slot.ship)]
 	var level := 2 if tier == "two" else 3
@@ -644,7 +674,7 @@ func _show_ships() -> void:
 	body.custom_minimum_size.x = viewer_size.x - 40
 	ship_dialog.add_child(body)
 	var caption := Label.new()
-	caption.text = "Base stats exclude captains and upgrades. Starter cards contribute two copies.\nShips already in your fleet swap slots. Captains and level choices stay with their slots."
+	caption.text = "Base stats exclude captains and upgrades. Each starter design contributes two copies.\nShips already in your fleet swap slots. Captains and level choices stay with their slots."
 	caption.add_theme_font_size_override("font_size", 13)
 	body.add_child(caption)
 	var scroll := ScrollContainer.new()
@@ -677,14 +707,15 @@ func _show_ships() -> void:
 		var stats := _label(column, "%s\nHull %d / Armour %d\nWeapon %d / %s\n%s capacity %d" % [ship.role, ship.hull, ship.armour, ship.weapon.damage, ship.weapon.range, ship.resource.name, ship.resource.capacity], 14)
 		stats.custom_minimum_size.y = 84
 		stats.set_meta("ship_stats", ship.id)
-		var face := CardFace.new()
-		face.custom_minimum_size = Vector2(width, 240)
-		face.toggle_mode = false
-		face.mouse_default_cursor_shape = Control.CURSOR_ARROW
-		face.configure(Catalog.present_card(draft.cards[Catalog.index_by_id(draft.cards, ship.starter)], selected_ship, ship.name), ship)
-		face.set_meta("card_id", ship.starter)
-		face.set_meta("copies", 2)
-		column.add_child(face)
+		for starter_id in [ship.starter]+([ship.starter_two] if ship.get("starter_two","")!="" else []):
+			var face := CardFace.new()
+			face.custom_minimum_size = Vector2(width, 240)
+			face.toggle_mode = false
+			face.mouse_default_cursor_shape = Control.CURSOR_ARROW
+			face.configure(Catalog.present_card(draft.cards[Catalog.index_by_id(draft.cards, starter_id)], selected_ship, ship.name), ship)
+			face.set_meta("card_id", starter_id)
+			face.set_meta("copies", 2)
+			column.add_child(face)
 		var choose := _button(column, "Selected" if current else ("Swap with " + position_name if assigned >= 0 else "Choose for " + slot.position.capitalize()), _choose_ship.bind(ship.id))
 		choose.set_meta("choose_ship", ship.id)
 		choose.disabled = current
@@ -707,6 +738,7 @@ func _ship_card_groups(ship: Dictionary, slot: Dictionary) -> Array:
 		for pair in ship.loadout: groups.append({"label": "Imported loadout", "card": pair.card, "count": pair.count})
 	else:
 		groups.append({"label": "Starter / Level 1", "card": ship.starter, "count": 2})
+		if ship.get("starter_two","")!="":groups.append({"label":"Starter / Level 1 / second pair","card":ship.starter_two,"count":2})
 		groups.append({"label": "Captain / " + ship.captain.name + " / Tier " + str(ship.captain.tier), "card": ship.captain.card, "count": 2})
 		for tier in ["two", "three"]:
 			var level := 2 if tier == "two" else 3

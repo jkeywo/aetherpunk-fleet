@@ -46,7 +46,7 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 			widget.configure(data, is_enemy)
 			widget.set_meta("ship_index", -1 - id if is_enemy else id)
 			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
-			if cover_amount > 0: widget.hull_label.text += "  C" + str(cover_amount)
+			widget.set_cover(cover_amount)
 			widget.tooltip_text += "\nSlot cover: " + str(cover_amount)
 			if not is_enemy:
 				_wire_target(widget, id)
@@ -86,8 +86,8 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 
 
 func _arrange() -> void:
-	var w := minf(218 if large_cards else 120, size.x * 0.43)
-	var h := 156.0 if large_cards else 119.0
+	var w := minf(228 if large_cards else 140, size.x * 0.43)
+	var h := 166.0 if large_cards else 128.0
 	var coordinates := [Vector2(0.86 if not enemy else 0.14, 0.50), Vector2(0.5, 0.12), Vector2(0.5, 0.88), Vector2(0.14 if not enemy else 0.86, 0.5)]
 	for point in widgets:
 		widgets[point].size = Vector2(w, h)
@@ -112,6 +112,7 @@ func _wire_target(widget: Button, ship_id: int) -> void:
 		if drop_check.is_valid():
 			widget.tooltip_text += "\nDrag its own card here to repair, or an adjacent living ship's card to swap. Release to act immediately; this discards the dragged card."
 		widget.set_meta("base_guard_text", widget.guard_label.text)
+		widget.set_meta("base_guard_visible",widget.guard_label.visible)
 	widget.set_meta("base_tooltip", widget.tooltip_text)
 	var styles: Dictionary = {}
 	for key in ["normal","hover","pressed","hover_pressed"]:
@@ -157,6 +158,7 @@ func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship
 		widget.tooltip_text = str(widget.get_meta("base_tooltip", ""))
 		if widget is Unit:
 			widget.guard_label.text = str(widget.get_meta("base_guard_text", ""))
+			widget.guard_label.visible=widget.get_meta("base_guard_visible",false)
 		if not hints.has(ship_id):
 			continue
 		widget.tooltip_text = str(hints[ship_id])
@@ -166,6 +168,7 @@ func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship
 			tint = Color("#9ce6b7") if ship_id == actor else Color("#67bdd4")
 			if widget is Unit:
 				widget.guard_label.text = "REPAIR (discard 1 card)" if ship_id == actor else "SWAP (discard 1 card)"
+				widget.guard_label.show()
 			fill = Color("#153329") if ship_id == actor else Color("#102b36")
 			if selected_ship == ship_id:
 				tint = Color("#e8bd77")

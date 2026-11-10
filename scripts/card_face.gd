@@ -5,6 +5,10 @@ var labels: Dictionary = {}
 var info: Dictionary = {}
 var owner_info: Dictionary = {}
 var drag_provider: Callable
+var discard_choice := false:
+	set(value):
+		discard_choice=value
+		queue_redraw()
 var ship_color := Color("#91c8ad")
 
 func _init() -> void:
@@ -21,7 +25,7 @@ func _init() -> void:
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(label)
 		labels[entry[0]] = label
-	labels.name.max_lines_visible = 3
+	labels.name.max_lines_visible = 2
 	labels.name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	labels.numbers.hide()
 	labels.tags.hide()
@@ -56,8 +60,8 @@ func _layout() -> void:
 	var wide := size.x >= 230
 	labels.name.add_theme_font_size_override("font_size",17 if wide else 12)
 	labels.rules.add_theme_font_size_override("font_size",16 if wide else 11)
-	labels.name.position = Vector2(39,8)
-	labels.name.size = Vector2(maxf(42,size.x-85),48)
+	labels.name.position = Vector2(39,23)
+	labels.name.size = Vector2(maxf(42,size.x-85),32)
 	labels.owner.position = Vector2(9,size.y-16)
 	labels.owner.size = Vector2(size.x-90,13)
 	labels.positions.position = Vector2(size.x-76,size.y-16)
@@ -67,12 +71,13 @@ func _layout() -> void:
 
 func _draw() -> void:
 	var frame := preload("res://scripts/art_assets.gd").texture("ui/card-frame.png")
-	draw_texture_rect_region(frame,Rect2(0,0,size.x,60),Rect2(0,0,1024,350))
+	# The blank footer, reflected vertically, provides an ornate empty header.
+	# No opaque badge mask can cover the brass frame or ship-coloured border.
+	draw_set_transform(Vector2(0,60),0,Vector2(1,-1))
+	draw_texture_rect_region(frame,Rect2(0,0,size.x,60),Rect2(0,1350,1024,186))
+	draw_set_transform(Vector2.ZERO)
 	draw_texture_rect_region(frame,Rect2(0,60,size.x,maxf(1,size.y-80)),Rect2(0,350,1024,1000))
 	draw_texture_rect_region(frame,Rect2(0,size.y-20,size.x,20),Rect2(0,1350,1024,186))
-	# Cover baked sample badges; all types, costs and payment crystals remain live data.
-	draw_rect(Rect2(4,4,size.x-8,51),Color("#0c1c27"))
-	draw_rect(Rect2(size.x*.76,4,size.x*.22,53),Color("#0c1c27"))
 	var outline := StyleBoxFlat.new()
 	outline.bg_color = Color.TRANSPARENT
 	outline.border_color = ship_color.lightened(.2 if button_pressed else 0)
@@ -94,7 +99,16 @@ func _draw() -> void:
 		draw_colored_polygon(points,Color("#cb7af1"))
 		draw_polyline(points+PackedVector2Array([points[0]]),Color("#572d71"),1,true)
 	if count > 4: draw_string(font,Vector2(size.x-36,60),"×"+str(count),HORIZONTAL_ALIGNMENT_LEFT,-1,10,Color("#d8a8f5"))
-	if get_meta("refresh_discard",false): draw_texture_rect(Icons.texture("discard"),Rect2(8,size.y-25,19,19),false)
+	if discard_choice:
+		# Hollow concentric strokes keep the art and rules readable through the halo.
+		for ring in range(6,0,-1):
+			var glow:=StyleBoxFlat.new()
+			glow.draw_center=false
+			glow.border_color=Color(1,.13,.22,.8*(1-float(ring)/8))
+			glow.set_border_width_all(2)
+			glow.set_corner_radius_all(6)
+			var inset:=float(ring*2)
+			draw_style_box(glow,Rect2(Vector2.ONE*inset,size-Vector2.ONE*inset*2))
 	draw_line(Vector2(8,57),Vector2(size.x-8,57),ship_color.darkened(0.5),1,true)
 
 func _get_tooltip(at_position: Vector2) -> String:

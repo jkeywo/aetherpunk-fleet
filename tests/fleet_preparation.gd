@@ -1,5 +1,24 @@
 extends "res://tests/support/v3_test.gd"
 func select_value(prep, key: String, value: Variant) -> void:
+	if not prep.controls.has(key):
+		var index:=int(key.get_slice("_",1))
+		if key.begins_with("ship_"):
+			prep._show_ships()
+			for column in prep.ship_comparison.get_children():
+				for child in column.get_children():
+					if child.get_meta("choose_ship","")==value:child.pressed.emit();break
+			prep.ship_dialog.hide()
+		elif key.begins_with("captain_"):
+			prep._show_captains()
+			for column in prep.captain_comparison.get_children():
+				for child in column.get_children():
+					if child.get_meta("assign_captain","")==value:child.pressed.emit();break
+			prep.captain_dialog.hide()
+		else:
+			prep._drop_at(Vector2.ZERO,{"kind":"ship","ship":prep.draft.setup.fleet[index].ship,"preparation":prep.get_instance_id()},Geometry.POSITIONS.find(value))
+		await flush()
+		return
+	prep._show_ship_info(int(key.get_slice("_",key.get_slice_count("_")-1)))
 	var menu: OptionButton = prep.controls[key]
 	for index in menu.item_count:
 		if typeof(menu.get_item_metadata(index)) == typeof(value) and menu.get_item_metadata(index) == value:
@@ -25,7 +44,7 @@ func _run() -> void:
 	await scene_changed
 	var prep = current_scene
 	await flush()
-	expect(prep.name == "FleetPreparation" and prep.controls.size() == 6,"Start Game did not open preparation controls.")
+	expect(prep.name == "FleetPreparation" and prep.controls.size() == 3,"Start Game did not open preparation controls.")
 	expect(prep.fixed_available and prep._candidate().setup.fixed_hand and not prep.launch_button.disabled,"Saved opening not preserved.")
 	expect("18 cards" in prep.status.text and "ARMOUR 3" in prep.details[0].text,"Fleet/card/effective-stat preview incorrect.")
 	expect(preview_faces(prep).map(func(face): return face.get_meta("card_id")) == ["brace", "field_orders", "escort"] and "6 cards" in prep.deck_summary.text, "Initial selected-ship deck preview is incomplete.")
@@ -56,7 +75,7 @@ func _run() -> void:
 	expect(preview_faces(prep).size() == 2 and "4 cards" in prep.deck_summary.text, "Lowering level left upgrade cards in preview.")
 	prep._show_deck()
 	await flush()
-	expect(prep.fleet_scroll.scroll_vertical > 0, "View deck did not scroll to card previews.")
+	expect(prep.ship_info_dialog.visible and prep.deck_preview.is_visible_in_tree(), "Ship info did not reveal card previews.")
 	await select_value(prep,"position_0","rear")
 	expect(prep.draft.setup.fleet[2].position == "front","Occupied position was duplicated.")
 	var chosen: Array = prep.draft.setup.fleet.duplicate(true)

@@ -426,7 +426,8 @@ func _ship_form(form: Node, entry: Dictionary) -> void:
 	colour.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_row(form, "Colour").add_child(colour)
 	colour.color_changed.connect(func(value): _edit(entry, "color", value.to_html()))
-	_menu(form, "Starter pair", _options("cards", entry.id), entry.starter, func(value): _edit(entry, "starter", value), "starter")
+	_menu(form, "Starter pair / simple", _options("cards", entry.id), entry.starter, func(value): _edit(entry, "starter", value), "starter")
+	_menu(form,"Starter pair / two effects",[{"label":"None / imported single pair","value":""}]+_options("cards",entry.id),entry.get("starter_two",""),func(value):_edit(entry,"starter_two",value),"starter_two")
 	if entry.has("legacy_loadout"):
 		_label(form, "Imported loadout retained until you adopt pair progression.", 12)
 		for slot in entry.legacy_loadout:
@@ -700,7 +701,10 @@ func _new_entry(kind: String) -> void:
 	elif kind == "ships":
 		var card_id := _id(draft.cards, id + "_starter")
 		draft.cards.append(_new_card(card_id, id))
-		entry = {"id": id, "name": "New Ship", "role": "SPECIALIST", "color": "#91c8ad", "hull": 20, "armour": 0, "weapon": {"damage": 4, "range": "Long"}, "resource": {"name": "Charge", "capacity": 6, "rules": []}, "starter": card_id, "rules": [], "levels": {"two": [], "three": []}}
+		entry = {"id": id, "name": "New Ship", "role": "SPECIALIST", "color": "#91c8ad", "hull": 20, "armour": 0, "weapon": {"damage": 4, "range": "Long"}, "resource": {"name": "Charge", "capacity": 6, "rules": []}, "starter": card_id, "starter_two": _id(draft.cards,id+"_starter_two"), "rules": [], "levels": {"two": [], "three": []}}
+		var second_starter:=_new_card(entry.starter_two,id,2)
+		second_starter.name="New Compound Starter"
+		draft.cards.append(second_starter)
 		for level in ["two", "three"]:
 			for i in (2 if level == "two" else 3):
 				var rule := R.rule("turn_start", [{"kind": "gain_resource", "target": "owner", "amount": 1}], "ship")
@@ -757,6 +761,7 @@ func _duplicate_entry(kind: String) -> void:
 			draft.cards.append(card_copy)
 		if kind == "ships":
 			copy.starter = mapping.get(copy.starter, copy.starter)
+			if copy.get("starter_two","")!="":copy.starter_two=mapping.get(copy.starter_two,copy.starter_two)
 			for tier in ["two", "three"]:
 				for package in copy.levels[tier]: package.card = mapping.get(package.card, package.card)
 			for slot in copy.get("legacy_loadout", []): slot.card = mapping.get(slot.card, slot.card)

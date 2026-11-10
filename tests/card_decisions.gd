@@ -52,8 +52,9 @@ func _run() -> void:
 	expect(b.monster_hull == 70 and b.phase == "refresh", "Circle cleanup fired On Discard.")
 	b = State.new(1, doc)
 	b.end_phase()
-	b.refresh([uid_for(b, "brace")])
-	expect(b.monster_hull == 20, "Optional refresh discard failed to fire deliberate discard ability.")
+	var retained_uid: int=uid_for(b,"brace")
+	expect(b.refresh([retained_uid])!="" and b.monster_hull==70 and b.hand.has(retained_uid),"Voluntary refresh discard remained available.")
+	b.refresh([])
 	# Empty deck scry may reshuffle discard, but never invents extra copies.
 	b = State.new(1, neutral())
 	b.discard = b.deck.duplicate()

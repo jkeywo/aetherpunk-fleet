@@ -22,7 +22,6 @@ var action_options: Dictionary = {}
 var selected_crystals := 0
 var locked_cost := -1
 var selected_boosts: Array = []
-var end_turn_discards: Array = []
 var pair_first := -1
 var hovered_reaction := -1
 var reaction_panel: PanelContainer
@@ -38,7 +37,6 @@ var scry_order: Array = []
 var scry_zones: Dictionary = {}
 var scry_signature := ""
 var payment: Array = []
-var refresh_discards: Array = []
 var target := -1
 var movement_target := -1
 var canvas: Control
@@ -82,7 +80,7 @@ func _named(node: Node, id: String, parent: Node) -> Node:
 
 
 func _button(parent: Node, id: String, text: String, callback: Callable) -> Button:
-	var button := Button.new()
+	var button: Button = preload("res://scripts/card_pile.gd").new() if id in ["DeckPile","DiscardPile"] else Button.new()
 	button.text = text
 	_named(button, id, parent)
 	button.pressed.connect(callback)
@@ -244,9 +242,9 @@ func _layout() -> void:
 	%EnemyTitle.position = Vector2(w - 355, 65)
 	%CircleTitle.position = Vector2(w / 2 - 75, 49)
 	allies.position = Vector2(8, 82)
-	allies.size = Vector2(360, 294)
-	enemies.position = Vector2(w - 368, 82)
-	enemies.size = Vector2(360, 294)
+	allies.size = Vector2(390, 304)
+	enemies.position = Vector2(w - 398, 82)
+	enemies.size = Vector2(390, 304)
 	circle_view.position = Vector2(w / 2 - 152, 83)
 	circle_view.size = Vector2(304, 286)
 	stance_panel.position = Vector2(382, 382)
@@ -290,11 +288,8 @@ func _render() -> void:
 		hand_view.add_child(face)
 		face.configure(state.card(uid), state.ships[state.card(uid).owner])
 		face.pressed.connect(_choose_card.bind(uid))
-		face.set_meta("refresh_discard",end_turn_discards.has(uid))
-		face.gui_input.connect(func(event):
-			if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed: _queue_refresh_discard(uid))
 		face.drag_provider = _begin_card_drag.bind(uid)
-		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, or an adjacent ally/empty position to swap/move. Basic actions immediately discard this card on drop. Right-click to toggle discard at the next automatic refill." % state.ships[state.card(uid).owner].name
+		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, or an adjacent ally/empty position to swap/move. Basic actions immediately discard this card on drop." % state.ships[state.card(uid).owner].name
 		face.mouse_entered.connect(func(): hand_view.hover(face, true))
 		face.mouse_exited.connect(func(): hand_view.hover(face, false))
 	hand_view.arrange()
@@ -306,6 +301,9 @@ func _render() -> void:
 
 
 func _show_piles(_snapshot: Dictionary) -> void:
+	%DeckPile.show_cards(state.deck.size())
+	var top: Dictionary=state.card(state.discard.back()) if not state.discard.is_empty() else {}
+	%DiscardPile.show_cards(state.discard.size(),top,state.ships[top.owner] if not top.is_empty() else {})
 	%DeckPile.text = "DECK\n%d" % state.deck.size()
 	var pending_count: int = payment.size() + (1 if basic_target >= 0 else 0) if pending_play and not busy else 0
 	%DiscardPile.text = "DISCARD\n%d" % state.discard.size() + ("\n+%d pending" % pending_count if pending_count > 0 else "")
@@ -364,10 +362,7 @@ func _choose_card(uid: int) -> void:
 		if error == "":
 			await _present_resolution()
 		return
-	if state.phase == "refresh":
-		_toggle(refresh_discards, uid)
-		_update_controls()
-		return
+	if state.phase == "refresh": return
 	if pending_play:
 		if basic_target >= 0:
 			%Inspection.text = "This basic action discards its own card. Resolve it or Cancel Play."
@@ -454,7 +449,6 @@ func _clear_draft() -> void:
 	basic_target = -1
 	selected_slot = -1
 	payment.clear()
-	refresh_discards.clear()
 	target = -1
 	movement_target = -1
 	%TargetChoice.clear()
@@ -466,7 +460,7 @@ func _commit() -> void:
 		return
 	var error := ""
 	if state.phase == "refresh":
-		error = state.refresh(refresh_discards)
+		error = state.refresh([])
 	elif not pending_play:
 		return
 	elif basic_target >= 0:
@@ -478,8 +472,6 @@ func _commit() -> void:
 	if error != "":
 		%Inspection.text = error
 		return
-	if selected_uid>=0: end_turn_discards.erase(selected_uid)
-	for uid in payment: end_turn_discards.erase(uid)
 	if pending_play and basic_target < 0:
 		for event in state.feedback_events:
 			if event.kind == "card_played":
@@ -506,9 +498,7 @@ func _present_resolution() -> void:
 	_update_controls()
 	await feedback.play(state.feedback_events.duplicate(true), self)
 	if state.phase == "refresh" and state.outcome == "":
-		var discarded: Array = end_turn_discards.filter(func(uid): return state.hand.has(uid))
-		end_turn_discards.clear()
-		state.refresh(discarded)
+		state.refresh([])
 		await feedback.play(state.feedback_events.duplicate(true),self)
 	busy = false
 	_clear_draft()
@@ -527,7 +517,8 @@ func _update_controls() -> void:
 		var uid: int = button.get_meta("uid")
 		button.disabled = busy
 		button.set_pressed_no_signal(uid == selected_uid or payment.has(uid))
-		button.modulate = Color("#9c86aa") if end_turn_discards.has(uid) else Color.WHITE
+		button.modulate=Color.WHITE
+		button.discard_choice=not busy and (state.phase=="discard" or (pending_play and state.phase=="fleet" and basic_target<0 and uid!=selected_uid and _payment_amount()<_current_cost()))
 	hand_view.selected_uid = selected_uid
 	hand_view.arrange()
 	%ManaButton.text = "Mana %d/%d" % [state.mana-(selected_crystals if pending_play else 0),state.fleet_stat("mana_capacity")]
@@ -553,7 +544,7 @@ func _update_controls() -> void:
 	else:
 		allies.show_basic_targets()
 		enemies.show_rule_preview()
-		%Inspection.text = "Drag to the circle to play. Drop on ships/empty positions for immediate basic actions. Right-click hand cards to discard at next turn's automatic refill."
+		%Inspection.text = "Drag to the circle to play. Drop on ships/empty positions for immediate basic actions."
 	var cards: Dictionary = {}
 	for uid in state.circle:
 		if uid>=0: cards[uid]=state.card(uid)
@@ -567,19 +558,13 @@ func _update_controls() -> void:
 		contributors=state.contributing_cards(selected_uid,selected_slot)
 		details=state.contribution_details(selected_uid,selected_slot)
 	circle_view.configure(shown,state.expanded,cards,state.used_triggers,selected_slot,contributors,details,state.persistence)
-	%Status.text = "Hand %d / In circle %d\nRight-click: discard at refill (%d marked)" % [state.hand.size(),state.play_order.size(),end_turn_discards.size()]
+	%Status.text = "Hand %d / In circle %d" % [state.hand.size(),state.play_order.size()]
 	_show_piles(state.board_snapshot())
 
 
 func _try_resolve_pending() -> void:
 	if busy or not pending_play or dragged_uid>=0 or get_tree().paused or boost_dialog.visible or state.phase!="fleet": return
 	if state.validate(selected_uid,payment,target,movement_target,selected_slot,_action_options())=="": _commit()
-
-
-func _queue_refresh_discard(uid: int) -> void:
-	if busy or pending_play or dragged_uid>=0 or state.phase!="fleet": return
-	_toggle(end_turn_discards,uid)
-	_render()
 
 
 func _show_target_choices() -> void:
@@ -840,7 +825,6 @@ func _drop_ship(ship_id: int, data: Variant) -> void:
 		%Inspection.text = error
 		_update_controls()
 		return
-	end_turn_discards.erase(uid)
 	await _present_resolution()
 
 
@@ -1074,18 +1058,26 @@ func _build_pile_counters() -> void:
 		button.set_meta("plain_text",true)
 		for color in ["font_color","font_hover_color","font_pressed_color","font_disabled_color"]: button.add_theme_color_override(color,Color.TRANSPARENT)
 		var box:=VBoxContainer.new()
-		box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		box.offset_top=-60
+		box.offset_right=-6
+		box.offset_bottom=-10
 		box.alignment=BoxContainer.ALIGNMENT_CENTER
 		box.mouse_filter=Control.MOUSE_FILTER_IGNORE
 		button.add_child(box)
 		var heading:=Label.new()
 		heading.text=pair[1]
+		heading.add_theme_font_size_override("font_size",12)
+		heading.add_theme_color_override("font_outline_color",Color("#07151f"))
+		heading.add_theme_constant_override("outline_size",7)
 		heading.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 		heading.mouse_filter=Control.MOUSE_FILTER_IGNORE
 		box.add_child(heading)
 		var number:=Label.new()
 		number.set_meta("plain_text",true)
-		number.add_theme_font_size_override("font_size",28)
+		number.add_theme_font_size_override("font_size",22)
+		number.add_theme_color_override("font_outline_color",Color("#07151f"))
+		number.add_theme_constant_override("outline_size",7)
 		number.add_theme_color_override("font_color",Color.WHITE)
 		number.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 		number.mouse_filter=Control.MOUSE_FILTER_IGNORE

@@ -1391,23 +1391,14 @@ func _round_cleanup() -> void:
 	_emit("turn_start", root_context, {"actor": -999, "amount": 1})
 
 
-func refresh(optional_discards: Array) -> String:
+func refresh(optional_discards: Array = []) -> String:
 	if phase != "refresh": return "Refresh is only available between rounds."
-	var unique: Array = []
-	for uid in optional_discards:
-		if not hand.has(uid) or unique.has(uid): return "Choose distinct hand cards."
-		unique.append(uid)
+	if not optional_discards.is_empty(): return "Cards can only be discarded for a cost or an effect. Retained cards stay in hand at refill."
 	feedback_events.clear()
 	action_id += 1
 	used_triggers.clear()
 	phase = "fleet"
 	_stage = "refresh_discard"
-	for uid in optional_discards:
-		hand.erase(uid)
-		discard.append(uid)
-	if not optional_discards.is_empty():
-		_record("cards_discarded", {"uids": optional_discards.duplicate(), "reason": "Refresh discard"})
-		for uid in optional_discards: _emit_discard(uid, "refresh", root_context)
 	_drain()
 	return ""
 

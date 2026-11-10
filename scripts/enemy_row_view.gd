@@ -37,15 +37,15 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 		add_child(button)
 		buttons.append(button)
 		if index >= row.size():
-			button.text = "ENEMY ROW / Empty\nNo additional physical cards available"
+			button.text = "ENEMY ROW: Empty\nNo additional physical cards available"
 			button.disabled = true
 			continue
 		var stance: Dictionary = row[index]
 		var lines: Array = []
 		for reaction in stance.get("reactions", []):
 			var key := str(stance.uid) + "/" + str(reaction.id)
-			lines.append(("STUNNED / " if stunned.has(key) else "React / ") + Rules.text("condition", reaction.conditions, stance.get("owner_name", "")) + " → " + Catalog.effects_text(reaction.effects, stance.get("owner_name", "")))
-		lines.append("Act / " + Catalog.effects_text(stance.get("effects", []), stance.get("owner_name", "")))
+			lines.append(("STUNNED: " if stunned.has(key) else "React: ") + Rules.reaction_condition_text(reaction.conditions, stance.get("owner_name", "")) + " → " + Catalog.effects_text(reaction.effects, stance.get("owner_name", "")))
+		lines.append("Act: " + Catalog.effects_text(stance.get("effects", []), stance.get("owner_name", "")))
 		var margin := MarginContainer.new()
 		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -58,12 +58,12 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 		heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		heading.add_theme_font_size_override("font_size", 11)
 		heading.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		heading.text = "%d / %s · %s" % [index + 1, stance.get("owner_name", "Enemy"), stance.name]
+		heading.text = "%d: %s · %s" % [index + 1, stance.get("owner_name", "Enemy"), stance.name]
 		column.add_child(heading)
 		for reaction in stance.get("reactions",[]):
 			var react := Button.new()
 			var key := str(stance.uid)+"/"+str(reaction.id)
-			react.text=("Stunned / " if stunned.has(key) else "Reaction / ")+Rules.text("condition",reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
+			react.text=("Stunned: " if stunned.has(key) else "Reaction: ")+Rules.reaction_condition_text(reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
 			react.add_theme_font_size_override("font_size",10)
 			react.clip_text=true
 			for state in ["normal","hover","pressed","hover_pressed"]:
@@ -73,7 +73,7 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 				style.set_border_width_all(1)
 				style.set_corner_radius_all(3)
 				react.add_theme_stylebox_override(state,style)
-			react.tooltip_text=reaction.name+"\n"+Rules.text("condition",reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
+			react.tooltip_text=reaction.name+"\n"+Rules.reaction_condition_text(reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
 			column.add_child(react)
 			react.pressed.connect(func(): reaction_selected.emit(key))
 			react.mouse_entered.connect(func(): card_hovered.emit(stance.uid))
@@ -83,11 +83,11 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 		body.add_theme_font_size_override("font_size", 10)
 		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		body.max_lines_visible = 5
-		body.text = "Intent / " + Catalog.effects_text(stance.get("effects",[]), stance.get("owner_name", ""))
+		body.text = "Intent: " + Catalog.effects_text(stance.get("effects",[]), stance.get("owner_name", ""))
 		column.add_child(body)
-		button.tooltip_text = "%s / %s\n" % [stance.get("owner_name", "Enemy"), stance.name]
+		button.tooltip_text = "%s: %s\n" % [stance.get("owner_name", "Enemy"), stance.name]
 		for reaction in stance.get("reactions", []):
-			button.tooltip_text += reaction.name + " [" + reaction.get("category", "") + "]\n" + Rules.text("condition", reaction.conditions, stance.get("owner_name", "")) + " → " + Catalog.effects_text(reaction.effects, stance.get("owner_name", "")) + "\n"
+			button.tooltip_text += reaction.name + " [" + reaction.get("category", "") + "]\n" + Rules.reaction_condition_text(reaction.conditions, stance.get("owner_name", "")) + " → " + Catalog.effects_text(reaction.effects, stance.get("owner_name", "")) + "\n"
 		button.tooltip_text += "Enemy phase: " + Catalog.effects_text(stance.get("effects", []), stance.get("owner_name", "")) + "\nReplacements remain hidden until revealed."
 		button.set_meta("stance_uid", stance.uid)
 		button.pressed.connect(func(): card_selected.emit(stance.uid))

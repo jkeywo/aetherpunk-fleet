@@ -357,7 +357,8 @@
 						}
 					}
 				]
-			}
+			},
+			"starter_two": "covering_fire"
 		},
 		{
 			"id": "kestrel",
@@ -717,7 +718,8 @@
 						}
 					}
 				]
-			}
+			},
+			"starter_two": "aether_shot"
 		},
 		{
 			"id": "lamplighter",
@@ -1074,7 +1076,8 @@
 						}
 					}
 				]
-			}
+			},
+			"starter_two": "supply_run"
 		}
 	],
 	"captains": [
@@ -2636,6 +2639,192 @@
 				},
 				{
 					"id": "reload",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "draw",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "covering_fire",
+			"name": "Covering Fire",
+			"owner": "bastion",
+			"type": "Attack",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 2,
+							"hits": 1,
+							"range": "Short"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "followup",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "owner",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "aether_shot",
+			"name": "Aether Shot",
+			"owner": "kestrel",
+			"type": "Attack",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 3,
+							"hits": 1,
+							"range": "Long"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "followup",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "supply_run",
+			"name": "Supply Run",
+			"owner": "lamplighter",
+			"type": "Support",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "repair",
+							"target": "chosen_ally",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "followup",
 					"trigger": {
 						"kind": "on_play",
 						"subject": "self_card"
