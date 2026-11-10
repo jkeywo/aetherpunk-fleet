@@ -422,7 +422,7 @@ static func compile(source: Dictionary) -> Dictionary:
 		ship["loadout"] = loadout
 		for slot in loadout:
 			var definition: Dictionary = doc.cards[index_by_id(doc.cards, slot.card)]
-			result.cards[definition.id] = present_card(definition, i)
+			result.cards[definition.id] = present_card(definition, i, ship.name)
 			for copy in int(slot.count): result.deck_keys.append(definition.id)
 		result.ships.append(ship)
 	for i in doc.setup.enemies.size():
@@ -437,7 +437,7 @@ static func compile(source: Dictionary) -> Dictionary:
 	return result
 
 
-static func present_card(source: Dictionary, owner: int = 0) -> Dictionary:
+static func present_card(source: Dictionary, owner: int = 0, owner_name: String = "") -> Dictionary:
 	var card := source.duplicate(true)
 	card["owner"] = owner
 	card["allowed_positions"] = source.get("positions", Geometry.POSITIONS).duplicate()
@@ -446,14 +446,14 @@ static func present_card(source: Dictionary, owner: int = 0) -> Dictionary:
 	if not card.tag_ids.has(source.get("type", "")): card.tag_ids.append(source.get("type", ""))
 	card["tags"] = str(source.get("type", "")) + (" · " + " · ".join(source.get("traits", [])) if not source.get("traits", []).is_empty() else "")
 	var lines: Array = []
-	for r in source.get("rules", []): lines.append(Rules.rule_text(r))
+	for r in source.get("rules", []): lines.append(Rules.rule_text(r, owner_name))
 	card["effect"] = "\n".join(lines)
 	return card
 
 
-static func effects_text(effects: Array) -> String:
+static func effects_text(effects: Array, owner_name: String = "") -> String:
 	var parts: Array = []
-	for effect in effects: parts.append(Rules.text("effect", effect))
+	for effect in effects: parts.append(Rules.text("effect", effect, owner_name))
 	return " → ".join(parts)
 
 

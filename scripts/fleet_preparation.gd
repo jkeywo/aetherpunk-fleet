@@ -155,7 +155,7 @@ func _render() -> void:
 	for entry in draft.ships: options.append({"label":entry.name,"value":entry.id})
 	_menu(inspector,"Airship",options,slot.ship,_change.bind(selected_ship,"ship"),"ship_"+str(selected_ship))
 	options=[]
-	for entry in draft.captains: options.append({"label":entry.name+" · Tier "+str(entry.tier),"value":entry.id,"tooltip":Rules.rule_text(entry.passive)})
+	for entry in draft.captains: options.append({"label":entry.name+" · Tier "+str(entry.tier),"value":entry.id,"tooltip":Rules.rule_text(entry.passive, ship.name)})
 	_menu(inspector,"Captain",options,slot.captain,_change.bind(selected_ship,"captain"),"captain_"+str(selected_ship))
 	options=[]
 	for point in 4: options.append({"label":Geometry.POSITION_NAMES[point],"value":Geometry.POSITIONS[point]})
@@ -185,7 +185,7 @@ func _render() -> void:
 		button.set_drag_forwarding(_drag_from.bind({"kind":"ship","ship":entry.id},button),Callable(),Callable())
 	for entry in draft.captains:
 		var button := _button(captain_bank,entry.name+" · "+str(entry.tier),func(): pass)
-		button.tooltip_text=Rules.rule_text(entry.passive)
+		button.tooltip_text=Rules.rule_text(entry.passive, ship.name)
 		button.set_meta("plain_text",true)
 		button.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":entry.id},button),Callable(),Callable())
 	opening.set_pressed_no_signal(prefer_fixed)
@@ -215,7 +215,8 @@ func _change(value: Variant, index: int, key: String) -> void:
 	if controls.has(key+"_"+str(index)): controls[key+"_"+str(index)].grab_focus()
 
 func _package_text(package: Dictionary) -> String:
-	return "2 × "+draft.cards[Catalog.index_by_id(draft.cards,package.card)].name+"\n"+Rules.rule_text(package.rule)+"\n"+Rules.rule_text(package.passive)
+	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, draft.setup.fleet[selected_ship].ship)]
+	return "2 × "+draft.cards[Catalog.index_by_id(draft.cards,package.card)].name+"\n"+Rules.rule_text(package.rule, ship.name)+"\n"+Rules.rule_text(package.passive, ship.name)
 
 func _repair_branch(slot: Dictionary) -> void:
 	Catalog.repair_fleet_branch(slot,draft.ships[Catalog.index_by_id(draft.ships,slot.ship)])
@@ -233,7 +234,7 @@ func _wire_formation(board: Dictionary) -> void:
 		badge.add_theme_font_size_override("font_size",12)
 		badge.position=Vector2(7,84)
 		badge.size=Vector2(widget.size.x-14,30)
-		badge.tooltip_text="Drag to assign/swap this captain.\n"+Rules.rule_text(captain.passive)
+		badge.tooltip_text="Drag to assign/swap this captain.\n"+Rules.rule_text(captain.passive, board.ships[id].name)
 		widget.add_child(badge)
 		badge.pressed.connect(func(): selected_ship=id; _render())
 		badge.set_drag_forwarding(_drag_from.bind({"kind":"captain","captain":captain.id},badge),_can_drop_at.bind(point),_drop_at.bind(point))
@@ -327,13 +328,13 @@ func _update() -> void:
 		lines.append("%d × %s" % [pair.count,compiled.cards[pair.card].name])
 	details[0].text = "\n".join(lines)
 	details[0].tooltip_text = "\n".join(ship.loadout.map(func(pair): return compiled.cards[pair.card].effect))
-	var rewards: Array = ["Captain: " + Rules.rule_text(ship.captain.passive)]
+	var rewards: Array = ["Captain: " + Rules.rule_text(ship.captain.passive, ship.name)]
 	var slot: Dictionary = candidate.setup.fleet[selected_ship]
 	for tier in ["two","three"]:
 		if slot.level < (2 if tier == "two" else 3): continue
 		var package: Dictionary = ship.levels[tier][Catalog.index_by_id(ship.levels[tier],slot["level_2" if tier == "two" else "level_3"])]
-		rewards.append(package.name + ": " + Rules.rule_text(package.passive))
-		rewards.append(Rules.rule_text(package.rule))
+		rewards.append(package.name + ": " + Rules.rule_text(package.passive, ship.name))
+		rewards.append(Rules.rule_text(package.rule, ship.name))
 	details[1].text = "\n".join(rewards)
 	if ship.has("legacy_loadout"): details[1].text += "\nImported card loadout retained."
 	var enemies: Array = []

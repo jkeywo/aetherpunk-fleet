@@ -29,16 +29,18 @@ func _init() -> void:
 
 func configure(card: Dictionary, owner: Dictionary = {}) -> void:
 	info = card.duplicate(true)
+	if card.has("rules"):
+		info["effect"] = "\n".join(card.rules.map(func(rule): return preload("res://scripts/rules/rule_registry.gd").rule_text(rule, str(owner.get("name", "")))))
 	owner_info = owner.duplicate(true)
 	ship_color = Color(owner.get("color","#91c8ad"))
 	labels.name.text = card.get("name","Untitled card") if not str(card.get("name","")).strip_edges().is_empty() else "Untitled card"
 	labels.owner.text = str(owner.get("name","Unassigned")).to_upper()
 	labels.owner.modulate = ship_color
 	labels.positions.text = card.get("ranks",", ".join(card.get("positions",[])))
-	labels.rules.text = str(card.get("effect","")).replace(" [once per action]","")
+	labels.rules.text = str(info.get("effect","")).replace(" [once per action]","")
 	labels.numbers.text = "COST %d / PAYS %d" % [card.get("cost",0),card.get("pays",1)]
 	labels.tags.text = card.get("type","")
-	tooltip_text = labels.name.text + "\nShip: " + str(owner.get("name","Unassigned")) + "\n" + card.get("type","") + " / " + labels.numbers.text + "\n" + labels.positions.text + "\n" + card.get("effect","")
+	tooltip_text = labels.name.text + "\nShip: " + str(owner.get("name","Unassigned")) + "\n" + card.get("type","") + " / " + labels.numbers.text + "\n" + labels.positions.text + "\n" + info.get("effect","")
 	for state in ["normal","hover","pressed","hover_pressed","focus","disabled"]:
 		var style := StyleBoxFlat.new()
 		style.bg_color = Color("#132b38").lightened(0.08 if state in ["hover","hover_pressed","pressed"] else 0.0)

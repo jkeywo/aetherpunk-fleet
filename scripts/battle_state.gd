@@ -1503,11 +1503,11 @@ func contribution_details(uid: int, slot: int, simulated: Dictionary = {}) -> Di
 				if modifier.get("card_type", "") != "" and card(uid).type != modifier.card_type: continue
 				if modifier.get("trait", "") != "" and not card(uid).traits.has(modifier.trait): continue
 				if modifier.kind == "cost" and int(card(uid).cost) == 0: continue
-				reasons.append(Rules.text("modifier", modifier))
+				reasons.append(Rules.text("modifier", modifier, unit(source.owner).name))
 		for rule in card(uid).rules:
 			var condition: Dictionary = rule.get("conditions", {"kind": "always"})
 			if condition.get("kind") == "adjacent" and Rules.condition(condition, c) and Rules._matches_card(card(source_uid), condition):
-				reasons.append("Enables on-play: " + Rules.text("condition", condition))
+				reasons.append("Enables on-play: " + Rules.text("condition", condition, unit(card(uid).owner).name))
 		for rule in card(source_uid).rules:
 			var key := "%d/%s" % [source_uid, rule.id]
 			if simulated.has(key): reasons.append("Will trigger: " + str(rule.get("name", rule.id)))
@@ -1530,7 +1530,7 @@ func _display_units(list: Array, enemy: bool = false) -> Array:
 		copy.weapon.range = weapon_range(id)
 		copy.resource_capacity = stat(id, "resource_capacity")
 		if enemy:
-			copy["default_text"] = Catalog.effects_text(source.default_action)
+			copy["default_text"] = Catalog.effects_text(source.default_action, source.name)
 			copy["row_activations"] = enemy_row.filter(func(uid): return stance_cards[uid].owner == id).size()
 		for key in ["active_rules", "levels", "loadout", "legacy_loadout", "stances", "stance_loadout", "default_action", "rules"]:
 			copy.erase(key)
@@ -1580,7 +1580,7 @@ func reaction_preview(uid: int, action: Dictionary = {}) -> Dictionary:
 		sim._stage=""
 		sim.tasks=sim._effect_jobs(behaviour.effects,c)
 		sim._drain()
-		lines.append(behaviour.name + ": " + Catalog.effects_text(behaviour.effects))
+		lines.append(behaviour.name + ": " + Catalog.effects_text(behaviour.effects, row.owner_name))
 		for event in sim.feedback_events:
 			if event.kind in ["damage","guard","repair","resource"]:
 				var id: int=event.target

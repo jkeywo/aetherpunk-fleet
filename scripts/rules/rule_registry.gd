@@ -253,18 +253,30 @@ static func validate_rule(value: Variant, where: String, errors: Array, context:
 		pass
 
 
-static func text(category: String, spec: Variant) -> String:
+static func _target_text(selector: String) -> String:
+	return {"owner": "{{rule_owner}}", "event_actor": "that card's owner", "event_target": "that target", "chosen_ally": "chosen ally", "chosen_enemy": "chosen enemy", "all_allies": "all player ships", "all_enemies": "all enemies", "self_card": "this card", "adjacent_cards": "adjacent cards", "source_slot": "this slot", "fleet": "the fleet"}.get(selector, selector.replace("_", " "))
+
+
+static func _named_text(value: String, owner_name: String) -> String:
+	return value.replace("{{rule_owner}}", owner_name if not owner_name.is_empty() else "this ship")
+
+
+static func text(category: String, spec: Variant, owner_name: String = "") -> String:
+	return _named_text(_raw_text(category, spec), owner_name)
+
+
+static func _raw_text(category: String, spec: Variant) -> String:
 	if spec is int or spec is float:
 		return str(int(spec))
 	if not spec is Dictionary:
 		return "?"
 	for group in ["all", "any", "not"]:
 		if category == "condition" and spec.has(group):
-			return text(category, {"kind": group, "condition": spec[group]} if group == "not" else {"kind": group, "items": spec[group]})
+			return _raw_text(category, {"kind": group, "condition": spec[group]} if group == "not" else {"kind": group, "items": spec[group]})
 	var desc := descriptor(category, spec.get("kind", ""))
 	var formatted := _formatted(category, spec)
 	if formatted != "":
-		if spec.has("filter") and spec.filter != {"kind": "always"}: formatted += " where " + text("condition", spec.filter)
+		if spec.has("filter") and spec.filter != {"kind": "always"}: formatted += " where " + _raw_text("condition", spec.filter)
 		if spec.get("exclude_owner", "No") == "Yes": formatted += " (other ships only)"
 		if category == "trigger":
 			if spec.get("card_type", "") != "" and spec.kind != "adjacent_card_played": formatted += " [" + spec.card_type + "]"
@@ -281,29 +293,29 @@ static func text(category: String, spec: Variant) -> String:
 		if (value is String and value.is_empty()) or (value is Array and value.is_empty()):
 			continue
 		if meta.type in ["value", "condition"]:
-			values.append(key.replace("_", " ") + " " + text(meta.type, value))
+			values.append(key.replace("_", " ") + " " + _raw_text(meta.type, value))
 		elif meta.type in ["values", "conditions"]:
 			var parts: Array = []
 			for child in value:
-				parts.append(text("value" if meta.type == "values" else "condition", child))
+				parts.append(_raw_text("value" if meta.type == "values" else "condition", child))
 			values.append(" / ".join(parts))
 		else:
-			values.append(key.replace("_", " ") + " " + str(value))
+			values.append(key.replace("_", " ") + " " + (_target_text(str(value)) if meta.type == "target" else str(value)))
 	return str(desc.title) + (" (" + "; ".join(values) + ")" if not values.is_empty() else "")
 
 
-static func rule_text(spec: Dictionary) -> String:
-	var lines: Array = [text("trigger", spec.get("trigger", {}))]
+static func rule_text(spec: Dictionary, owner_name: String = "") -> String:
+	var lines: Array = [_raw_text("trigger", spec.get("trigger", {}))]
 	if spec.get("conditions", {"kind": "always"}) != {"kind": "always"}:
-		lines.append("if " + text("condition", spec.conditions))
+		lines.append("if " + _raw_text("condition", spec.conditions))
 	for cost in spec.get("costs", []):
-		lines.append(text("cost", cost))
+		lines.append(_raw_text("cost", cost))
 	var result := " · ".join(lines) + ": "
 	var effects: Array = []
 	for effect in spec.get("effects", []):
-		effects.append(text("effect", effect))
+		effects.append(_raw_text("effect", effect))
 	for modifier in spec.get("modifiers", []):
-		effects.append(text("modifier", modifier))
+		effects.append(_raw_text("modifier", modifier))
 	result += " → ".join(effects)
 	if spec.get("optional", false):
 		result = "Optional boost · " + result
@@ -311,7 +323,7 @@ static func rule_text(spec: Dictionary) -> String:
 		result += " [" + str(spec.get("limit", "once_per_action")).replace("_", " ") + "]"
 	if spec.get("zone", "circle") == "discard_top":
 		result += " [top of discard]"
-	return result
+	return _named_text(result, owner_name)
 
 
 static func _trigger(p: Dictionary, c: Dictionary, kind: String) -> bool:
@@ -474,16 +486,16 @@ static func _formatted(category: String, p: Dictionary) -> String:
 			"adjacent_count": return "matching adjacent cards"
 			"sum", "product", "min", "max":
 				var values: Array = []
-				for item in p.get("values", []): values.append(text("value", item))
+				for item in p.get("values", []): values.append(_raw_text("value", item))
 				return "(" + (" + " if kind == "sum" else (" × " if kind == "product" else " " + kind + " ")).join(values) + ")"
 	if category == "trigger":
 		var owner: String = p.get("subject", "owner")
 		match kind:
 			"passive": return "While active"
-			"on_play": return "On Play" if owner == "self_card" else "After this ship plays a card"
+			"on_play": return "On Play" if owner == "self_card" else "After {{rule_owner}} plays a card"
 			"adjacent_card_played": return "After an adjacent " + p.get("card_type", "") + " card is played"
 			"discarded": return "On Discard" + (" for " + p.reason if p.get("reason", "") != "" else " (deliberate only)")
-			"moved": return "After " + ("an adjacent card moves a ship" if owner == "adjacent" else "this ship moves")
+			"moved": return "After " + ("an adjacent card moves a ship" if owner == "adjacent" else "{{rule_owner}} moves")
 			"repaired": return "After actual repair"
 			"revived": return "After revival"
 			"hull_damaged": return "After " + ("an adjacent card deals hull damage" if owner == "adjacent" else "hull damage")
@@ -502,42 +514,42 @@ static func _formatted(category: String, p: Dictionary) -> String:
 		match kind:
 			"always": return "always"
 			"adjacent": return "at least %d adjacent %s%s%s" % [p.get("minimum", 1), p.get("card_type", "") if p.get("card_type", "") != "" else "card", " with " + p.trait if p.get("trait", "") != "" else "", " (" + p.card_id + ")" if p.get("card_id", "") != "" else ""]
-			"resource_at_least": return p.get("target", "owner").replace("_", " ") + " has " + text("value", p.get("amount", 1)) + "+ resource"
+			"resource_at_least": return _target_text(p.get("target", "owner")) + " has " + _raw_text("value", p.get("amount", 1)) + "+ resource"
 			"card_matches": return ("this card matches " if p.get("target", "event_card") == "self_card" else "event card matches ") + str(p.get("card_type", "")) + (" / " + p.trait if p.get("trait", "") != "" else "") + (" / " + p.card_id if p.get("card_id", "") != "" else "")
 			"top_discard": return "this is the top discard"
 			"reaction_category": return "reaction is " + p.get("category", "")
-			"metric_at_least": return p.get("metric", "hull_damage").replace("_", " ") + " ≥ " + text("value", p.get("amount", 1))
-			"position": return p.get("target", "owner").replace("_", " ") + " is at " + p.get("position", "front")
+			"metric_at_least": return p.get("metric", "hull_damage").replace("_", " ") + " ≥ " + _raw_text("value", p.get("amount", 1))
+			"position": return _target_text(p.get("target", "owner")) + " is at " + p.get("position", "front")
 			"all", "any":
 				var parts: Array = []
-				for child in p.get("items", []): parts.append(text("condition", child))
+				for child in p.get("items", []): parts.append(_raw_text("condition", child))
 				return (" AND " if kind == "all" else " OR ").join(parts) if not parts.is_empty() else "always"
-			"not": return "not (" + text("condition", p.get("condition", {})) + ")"
+			"not": return "not (" + _raw_text("condition", p.get("condition", {})) + ")"
 	if category == "effect":
-		var amount := text("value", p.get("amount", 1))
-		var target: String = p.get("target", "owner").replace("_", " ")
+		var amount := _raw_text("value", p.get("amount", 1))
+		var target: String = "" if p.get("target", "owner") == "chosen_ally" else " → " + _target_text(p.get("target", "owner"))
 		match kind:
-			"attack": return "Attack %s × %s [%s]" % [text("value", p.get("hits", 1)), text("value", p.get("damage", {"kind": "weapon_damage"})), p.get("range", "weapon")] + " → " + {"chosen_enemy": "enemy", "chosen_ally": "fleet target", "all_allies": "all player ships", "all_enemies": "all enemies"}.get(p.get("target", "chosen_enemy"), p.get("target", "chosen_enemy").replace("_", " "))
-			"add_shields": return "+" + amount + " shields → " + target
-			"repair": return "Repair " + amount + " → " + target
-			"recovery": return "Repair/recover " + amount + " → " + target
-			"add_cover": return "+" + amount + " cover → " + target
-			"gain_resource": return "Gain " + amount + " resource → " + target
-			"spend_resource": return "Spend " + amount + " resource → " + target
-			"move": return "Move/swap to " + p.get("destination", "chosen_slot").replace("_", " ") + ("; both gain " + text("value", p.get("guard", 0)) + " shields" if text("value", p.get("guard", 0)) != "0" else "")
-			"swap": return "Swap adjacent ships" + ("; both gain " + text("value", p.get("guard", 0)) + " shields" if text("value", p.get("guard", 0)) != "0" else "")
+			"attack": return "Attack %s × %s [%s]" % [_raw_text("value", p.get("hits", 1)), _raw_text("value", p.get("damage", {"kind": "weapon_damage"})), p.get("range", "weapon")] + ("" if p.get("target", "chosen_enemy") in ["chosen_enemy", "chosen_ally"] else " → " + _target_text(p.get("target", "chosen_enemy")))
+			"add_shields": return "+" + amount + " shields" + target
+			"repair": return "Repair " + amount + target
+			"recovery": return "Repair/recover " + amount + target
+			"add_cover": return "+" + amount + " cover" + ("" if p.get("target", "source_slot") == "source_slot" else target)
+			"gain_resource": return "Gain " + amount + " resource" + target
+			"spend_resource": return "Spend " + amount + " resource" + target
+			"move": return "Move/swap" + ("" if p.get("destination", "chosen_slot") == "chosen_slot" else " to " + p.destination) + ("; both gain " + _raw_text("value", p.get("guard", 0)) + " shields" if _raw_text("value", p.get("guard", 0)) != "0" else "")
+			"swap": return "Swap adjacent ships" + ("; both gain " + _raw_text("value", p.get("guard", 0)) + " shields" if _raw_text("value", p.get("guard", 0)) != "0" else "")
 			"draw": return "Draw " + amount
 			"discard": return "Discard " + amount + " from hand"
-			"scry": return "Scry " + text("value", p.get("look", 3)) + ", take " + text("value", p.get("take", 1)) + "; order top/discard"
+			"scry": return "Scry " + _raw_text("value", p.get("look", 3)) + ", take " + _raw_text("value", p.get("take", 1)) + "; order top/discard"
 			"stun": return "Stun one visible reaction until fleet phase ends"
 			"confuse": return "Confuse: replace a visible stance"
-			"add_persistence": return "+" + amount + " persistence → " + target
+			"add_persistence": return "+" + amount + " persistence" + ("" if p.get("target", "self_card") == "self_card" else target)
 			"gain_mana": return "Gain " + amount + " temporary mana"
 			"swap_ends": return "Swap frontmost and rearmost allies"
 			"rear_to_front": return "Move rearmost ally to front"
 	if category == "modifier":
-		if kind == "weapon_range": return "Weapon range → " + p.get("range", "Long") + " / " + p.get("target", "owner").replace("_", " ")
-		return ("−" if kind == "cost" else "+") + text("value", p.get("amount", 1)) + " " + ("first-hit damage" if kind == "attack_damage" else kind.replace("_", " ")) + " → " + p.get("target", "owner").replace("_", " ") + (" (" + p.card_type + ")" if p.get("card_type", "") != "" else "")
+		if kind == "weapon_range": return "Weapon range → " + p.get("range", "Long") + " / " + _target_text(p.get("target", "owner"))
+		return ("−" if kind == "cost" else "+") + _raw_text("value", p.get("amount", 1)) + " " + ("first-hit damage" if kind == "attack_damage" else kind.replace("_", " ")) + ("" if p.get("target", "owner") in ["fleet", "self_card"] else " → " + _target_text(p.get("target", "owner"))) + (" (" + p.card_type + ")" if p.get("card_type", "") != "" else "")
 	if category == "cost":
-		return "Spend " + text("value", p.get("amount", 2)) + " personal resource"
+		return "Spend " + _raw_text("value", p.get("amount", 2)) + " personal resource"
 	return ""

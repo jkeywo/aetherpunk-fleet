@@ -917,10 +917,10 @@ func _show_boosts() -> void:
 	for option in _boost_options():
 		var check := CheckBox.new()
 		check.text = option.title
-		check.tooltip_text = Rules.rule_text(option.rule)
+		check.tooltip_text = Rules.rule_text(option.rule, str(state.ships[state.card(selected_uid).owner].name))
 		check.button_pressed = selected_boosts.has(option.key)
 		column.add_child(check)
-		_plain_label(column, Rules.rule_text(option.rule), 13).custom_minimum_size.x = 590
+		_plain_label(column, Rules.rule_text(option.rule, str(state.ships[state.card(selected_uid).owner].name)), 13).custom_minimum_size.x = 590
 		check.toggled.connect(func(enabled):
 			if enabled and not selected_boosts.has(option.key): selected_boosts.append(option.key)
 			elif not enabled: selected_boosts.erase(option.key)

@@ -17,12 +17,15 @@ func _run() -> void:
 	var doc:=neutral(true)
 	card_def(doc,"broadside").cost=1
 	card_def(doc,"broadside").rules[0].effects=[attack(4)]
+	card_def(doc,"brace").rules[1] = rule("bonus", "adjacent_card_played", [{"kind":"add_shields", "target":"event_actor", "amount":0}], "adjacent")
 	await open_battle(doc)
 	var b=current_scene
 	expect(b.get_node_or_null("%PlayButton")==null and b.get_node_or_null("%ManoeuvreButton")==null,"Confirmation/manoeuvre buttons remain.")
 	var face=field_key(b,"broadside")
+	expect("Kestrel" in face.labels.rules.text and "chosen enemy" not in face.labels.rules.text, "Card rules did not name the owning ship or omit default attack target.")
 	expect(face.get_theme_stylebox("normal").border_color==Color(b.state.ships[1].color),"Card border does not use owning ship colour.")
 	expect("Mana cost: 1" in face._get_tooltip(Vector2(140,20)) and "Attack" in face._get_tooltip(Vector2(20,20)),"Cost/type icon tooltips incorrect.")
+	expect("that card's owner" in field_key(b,"brace").labels.rules.text, "Adjacent-card response retained event actor wording.")
 	await flush()
 	var rich=face.labels.rules.get_node_or_null("KeywordText")
 	expect(rich!=null and rich.icon_keys.has("attack"),"Inline keyword renderer missing.")

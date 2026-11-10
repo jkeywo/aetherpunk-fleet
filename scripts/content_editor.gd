@@ -564,7 +564,6 @@ func _live_preview() -> void:
 		var source: Dictionary = entry
 		if _kind() == "captains":
 			_label(preview_form, entry.name + " / Tier " + str(entry.tier), 18)
-			_label(preview_form, R.rule_text(entry.passive), 12)
 			var index := Catalog.index_by_id(draft.cards, entry.card)
 			if index < 0: _label(preview_form, "Choose an existing captain card pair."); return
 			source = draft.cards[index]
@@ -573,6 +572,7 @@ func _live_preview() -> void:
 			if assignment.captain == source.owner: preview_owner = assignment.ship
 		var owner_index := Catalog.index_by_id(draft.ships, preview_owner)
 		var owner: Dictionary = draft.ships[owner_index] if owner_index >= 0 else entry
+		if _kind() == "captains": _label(preview_form, R.rule_text(entry.passive, owner.name), 12)
 		var face := CardFace.new()
 		face.custom_minimum_size = Vector2(270, 340)
 		preview_form.add_child(face)
@@ -602,7 +602,7 @@ func _live_preview() -> void:
 		circle.configure(contents, preview_expanded, data, {}, preview_slot)
 		for point in Geometry.neighbours(preview_slot, preview_expanded):
 			_menu(preview_form, Geometry.SLOT_NAMES[point], [""] + R.TYPES, preview_tags.get(point, ""), func(value): preview_tags[point] = value; _live_preview())
-		_preview_conditions(source, contents, data)
+		_preview_conditions(source, contents, data, str(owner.name))
 	else:
 		_menu(preview_form, "Preview position", Geometry.POSITIONS, preview_position, func(value): preview_position = value; _live_preview())
 		var view := Formation.new()
@@ -634,15 +634,15 @@ func _live_preview() -> void:
 			stance["uid"] = 0
 			stance["owner_name"] = entry.name
 			row.configure([stance])
-			_label(preview_form, "Default: " + Catalog.effects_text(entry.default_action), 12)
+			_label(preview_form, "Default: " + Catalog.effects_text(entry.default_action, entry.name), 12)
 		else:
 			_label(preview_form, "Resource / " + entry.resource.name, 15)
-			for rule in entry.resource.rules: _label(preview_form, R.rule_text(rule), 12)
+			for rule in entry.resource.rules: _label(preview_form, R.rule_text(rule, entry.name), 12)
 	var errors := Catalog.validate(draft)
 	if not errors.is_empty(): _label(preview_form, "Draft validation: " + str(errors[0]), 12).modulate = Color("#ff927f")
 
 
-func _preview_conditions(source: Dictionary, contents: Array, cards: Dictionary) -> void:
+func _preview_conditions(source: Dictionary, contents: Array, cards: Dictionary, owner_name: String) -> void:
 	var valid := Catalog.validate(draft).is_empty()
 	if not valid: return
 	var sim = State.new(0, draft)
@@ -661,7 +661,7 @@ func _preview_conditions(source: Dictionary, contents: Array, cards: Dictionary)
 		else: sim.circle[slot] = uid; sim.play_order.append(uid)
 	var ctx := {"state": sim, "uid": incoming, "owner": 0, "slot": preview_slot, "event": {"kind": "on_play", "uid": incoming, "actor": 0, "card": sim.card(incoming)}, "proposed_uid": incoming, "proposed_slot": preview_slot}
 	for rule in source.rules:
-		_label(preview_form, ("ACTIVE / " if R.condition(rule.get("conditions", {"kind": "always"}), ctx) else "Inactive / ") + R.rule_text(rule), 12)
+		_label(preview_form, ("ACTIVE / " if R.condition(rule.get("conditions", {"kind": "always"}), ctx) else "Inactive / ") + R.rule_text(rule, owner_name), 12)
 
 
 func _id(entries: Array, prefix: String) -> String:
