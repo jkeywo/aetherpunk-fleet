@@ -62,4 +62,25 @@ func configure(data: Dictionary, enemy: bool = false) -> void:
 	tooltip_text = "%s\nHull %d / %d\n%s" % [name_label.text, hull, maximum, data.get("role", "Leviathan")]
 	tooltip_text += "\nArmour %d / Shields %d\nWeapon %d %s" % [data.get("armour", 0), data.get("guard", 0), weapon.damage, weapon.range]
 	if enemy: tooltip_text += "\nDefault if not activated: " + data.get("default_text", "None")
-	else: tooltip_text += "\nLevel %d / Captain %s\n%s %d/%d" % [data.get("level", 1), data.get("captain", {}).get("name", "Unassigned"), data.get("resource_name", "Charge"), data.get("resource", 0), data.get("resource_capacity", 6)]
+	else:
+		tooltip_text += "\nLevel %d / Captain %s\n%s %d/%d" % [data.get("level", 1), data.get("captain", {}).get("name", "Unassigned"), data.get("resource_name", "Charge"), data.get("resource", 0), data.get("resource_capacity", 6)]
+		var mechanism: String = data.get("mechanic_text", "")
+		if mechanism.is_empty() and data.get("resource") is Dictionary:
+			mechanism = "\n".join(data.resource.get("rules", []).map(func(rule): return preload("res://scripts/rules/rule_registry.gd").rule_text(rule, data.name)))
+		tooltip_text += "\n\nUnique mechanic / " + str(data.get("resource_name", "Charge")) + "\n" + (mechanism if not mechanism.is_empty() else "No personal-resource rules configured.") + "\nResources persist between rounds; defeat resets them to zero."
+
+
+func _make_custom_tooltip(for_text: String) -> Object:
+	var panel := PanelContainer.new()
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 10)
+	panel.add_child(margin)
+	var label := Label.new()
+	label.set_meta("plain_text", true)
+	label.custom_minimum_size.x = 440
+	label.size.x = 440
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 14)
+	label.text = for_text
+	margin.add_child(label)
+	return panel

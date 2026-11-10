@@ -30,7 +30,7 @@ func _run() -> void:
 	expect(not Catalog.validate(bad).is_empty(), "Negative armour accepted.")
 	bad = fixture.duplicate(true)
 	bad.cards[0].rules = [bad.cards[0].rules[0]]
-	expect(not Catalog.validate(bad).is_empty(), "New one-rule card accepted.")
+	expect(Catalog.validate(bad).is_empty(), "Simple one-rule starter card rejected.")
 	bad = fixture.duplicate(true)
 	bad.setup.fleet[0].captain = bad.setup.fleet[1].captain
 	expect(not Catalog.validate(bad).is_empty(), "Duplicate captain accepted.")

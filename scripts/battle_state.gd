@@ -88,6 +88,7 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 	definitions = Catalog.compile(document)
 	for i in definitions.ships.size():
 		var ship: Dictionary = definitions.ships[i].duplicate(true)
+		ship["mechanic_text"] = "\n".join(ship.resource.rules.map(func(rule): return Rules.rule_text(rule, ship.name)))
 		ship["resource_name"] = ship.resource.name
 		ship["resource_capacity"] = int(ship.resource.capacity)
 		ship["resource"] = 0

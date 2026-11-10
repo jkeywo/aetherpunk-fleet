@@ -1203,28 +1203,6 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
-				},
-				{
-					"id": "bonus",
-					"trigger": {
-						"kind": "adjacent_card_played",
-						"subject": "adjacent"
-					},
-					"conditions": {
-						"kind": "always"
-					},
-					"costs": [],
-					"effects": [
-						{
-							"kind": "add_shields",
-							"target": "event_actor",
-							"amount": 2
-						}
-					],
-					"modifiers": [],
-					"limit": "once_per_action",
-					"optional": false,
-					"zone": "circle"
 				}
 			]
 		},
@@ -1258,11 +1236,6 @@
 							"kind": "add_shields",
 							"target": "chosen_ally",
 							"amount": 4
-						},
-						{
-							"kind": "add_cover",
-							"target": "source_slot",
-							"amount": 2
 						}
 					],
 					"modifiers": [],
@@ -1324,7 +1297,7 @@
 							"kind": "move",
 							"target": "owner",
 							"destination": "chosen_slot",
-							"guard": 2
+							"guard": 0
 						}
 					],
 					"modifiers": [],
@@ -1421,6 +1394,29 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "adjacent_cover",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Guard"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
 				}
 			]
 		},
@@ -1495,6 +1491,31 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "formation_bonus",
+					"trigger": {
+						"kind": "passive",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Manoeuvre",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [],
+					"modifiers": [
+						{
+							"kind": "attack_damage",
+							"target": "self_card",
+							"amount": 2,
+							"card_type": ""
+						}
+					],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
 				}
 			]
 		},
@@ -1558,6 +1579,29 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "adjacent_shields",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Guard"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "event_actor",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
 				}
 			]
 		},
@@ -1599,31 +1643,6 @@
 						}
 					],
 					"modifiers": [],
-					"limit": "once_per_action",
-					"optional": false,
-					"zone": "circle"
-				},
-				{
-					"id": "bonus",
-					"trigger": {
-						"kind": "passive",
-						"subject": "owner"
-					},
-					"conditions": {
-						"kind": "adjacent",
-						"card_type": "Manoeuvre",
-						"minimum": 1
-					},
-					"costs": [],
-					"effects": [],
-					"modifiers": [
-						{
-							"kind": "attack_damage",
-							"target": "self_card",
-							"amount": 2,
-							"card_type": ""
-						}
-					],
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
@@ -1830,6 +1849,28 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "discard_charge",
+					"trigger": {
+						"kind": "discarded",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "any"
 				}
 			]
 		},
@@ -1891,6 +1932,27 @@
 							"damage": 3,
 							"hits": 1,
 							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "reload",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "draw",
+							"amount": 1
 						}
 					],
 					"modifiers": [],
@@ -1960,6 +2022,31 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "crossfire",
+					"trigger": {
+						"kind": "passive",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Attack",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [],
+					"modifiers": [
+						{
+							"kind": "attack_damage",
+							"target": "self_card",
+							"amount": 1,
+							"card_type": ""
+						}
+					],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
 				}
 			]
 		},
@@ -1999,30 +2086,6 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
-				},
-				{
-					"id": "bonus",
-					"trigger": {
-						"kind": "on_play",
-						"subject": "self_card"
-					},
-					"conditions": {
-						"kind": "adjacent",
-						"card_type": "Guard",
-						"minimum": 1
-					},
-					"costs": [],
-					"effects": [
-						{
-							"kind": "add_cover",
-							"target": "source_slot",
-							"amount": 2
-						}
-					],
-					"modifiers": [],
-					"limit": "once_per_action",
-					"optional": false,
-					"zone": "circle"
 				}
 			]
 		},
@@ -2055,7 +2118,24 @@
 						{
 							"kind": "draw",
 							"amount": 2
-						},
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "discard",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
 						{
 							"kind": "discard",
 							"amount": 1
@@ -2065,28 +2145,6 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
-				},
-				{
-					"id": "bonus",
-					"trigger": {
-						"kind": "discarded",
-						"subject": "self_card"
-					},
-					"conditions": {
-						"kind": "always"
-					},
-					"costs": [],
-					"effects": [
-						{
-							"kind": "gain_resource",
-							"target": "owner",
-							"amount": 1
-						}
-					],
-					"modifiers": [],
-					"limit": "once_per_action",
-					"optional": false,
-					"zone": "any"
 				}
 			]
 		},
@@ -2120,7 +2178,7 @@
 							"kind": "swap",
 							"first": "owner",
 							"second": "chosen_ally",
-							"guard": 2
+							"guard": 0
 						}
 					],
 					"modifiers": [],
@@ -2206,7 +2264,24 @@
 							"target": "adjacent_cards",
 							"amount": 2,
 							"card_type": "Attack"
-						},
+						}
+					],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "adjacent_discount",
+					"trigger": {
+						"kind": "passive",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [],
+					"modifiers": [
 						{
 							"kind": "cost",
 							"target": "adjacent_cards",
@@ -2278,6 +2353,29 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "adjacent_repair",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Support"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "repair",
+							"target": "event_actor",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
 				}
 			]
 		},
@@ -2341,6 +2439,29 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "adjacent_shields",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Attack"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "event_actor",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
 				}
 			]
 		},
@@ -2380,30 +2501,6 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
-				},
-				{
-					"id": "bonus",
-					"trigger": {
-						"kind": "on_play",
-						"subject": "self_card"
-					},
-					"conditions": {
-						"kind": "adjacent",
-						"card_type": "Support",
-						"minimum": 1
-					},
-					"costs": [],
-					"effects": [
-						{
-							"kind": "gain_resource",
-							"target": "owner",
-							"amount": 1
-						}
-					],
-					"modifiers": [],
-					"limit": "once_per_action",
-					"optional": false,
-					"zone": "circle"
 				}
 			]
 		},
@@ -2437,7 +2534,7 @@
 							"kind": "move",
 							"target": "owner",
 							"destination": "chosen_slot",
-							"guard": 1
+							"guard": 0
 						}
 					],
 					"modifiers": [],
@@ -2529,6 +2626,27 @@
 						{
 							"kind": "gain_resource",
 							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "reload",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "draw",
 							"amount": 1
 						}
 					],

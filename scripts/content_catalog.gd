@@ -214,8 +214,8 @@ static func validate(source: Variant) -> Array:
 			for r in card.rules:
 				if r is Dictionary and r.get("zone", "circle") not in ["circle", "hand", "discard", "discard_top", "any"]:
 					errors.append("Card " + id + ": use a card zone (circle, hand, discard, discard_top, any).")
-		if not card.get("legacy_import", false) and (not card.get("rules") is Array or card.rules.size() < 2 or card.rules.size() > 3):
-			errors.append("Card " + id + ": author 2–3 rule blocks including On Play.")
+		if not card.get("legacy_import", false) and (not card.get("rules") is Array or card.rules.size() < 1 or card.rules.size() > 3):
+			errors.append("Card " + id + ": author 1–3 rule blocks including On Play.")
 	for id in ships:
 		var ship: Dictionary = ships[id]
 		if not ship.get("role") is String or not ship.get("color") is String: errors.append("Ship " + id + ": configure role text and colour.")

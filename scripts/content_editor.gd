@@ -394,9 +394,9 @@ func _card_form(form: Node, entry: Dictionary) -> void:
 			_dirty()
 			_live_preview())
 	if entry.get("legacy_import", false):
-		_label(form, "Imported rule count preserved. New cards use 2–3 blocks.", 12).modulate = Color("#e8bd77")
-		_button(form, "Adopt 2–3-block card convention", func(): entry.erase("legacy_import"); _dirty(); _rebuild_form(); _live_preview())
-	_rules_list(form, entry.rules, "RULE BLOCKS / 2–3 total, including On Play", "circle")
+		_label(form, "Imported rule count preserved. New cards use 1–3 blocks.", 12).modulate = Color("#e8bd77")
+		_button(form, "Adopt 1–3-block card convention", func(): entry.erase("legacy_import"); _dirty(); _rebuild_form(); _live_preview())
+	_rules_list(form, entry.rules, "RULE BLOCKS / 1–3 total, including On Play; starter 1, upgrades 2/3, captain = tier", "circle")
 
 
 func _unit_form(form: Node, entry: Dictionary) -> void:
@@ -614,6 +614,7 @@ func _live_preview() -> void:
 		data["resource_name"] = entry.get("resource", {}).get("name", "")
 		data["resource_capacity"] = entry.get("resource", {}).get("capacity", 0)
 		data["resource"] = 0
+		if _kind() == "ships": data["mechanic_text"] = "\n".join(entry.resource.rules.map(func(rule): return R.rule_text(rule, entry.name)))
 		if _kind() == "ships" and Catalog.validate(draft).is_empty():
 			var sim = State.new(0, draft)
 			for unit_data in sim.board_snapshot().ships:
@@ -691,7 +692,11 @@ func _new_entry(kind: String) -> void:
 			for i in (2 if level == "two" else 3):
 				var rule := R.rule("turn_start", [{"kind": "gain_resource", "target": "owner", "amount": 1}], "ship")
 				rule.trigger.subject = "owner"
-				entry.levels[level].append({"id": level + "_" + str(i), "name": "New " + level + " branch " + str(i + 1), "card": card_id, "blocks": "three_" + str(i), "rule": rule, "passive": _new_passive("ship")})
+				var upgrade_id := _id(draft.cards, id + "_" + level + "_" + str(i))
+				var upgrade := _new_card(upgrade_id, id, 2 if level == "two" else 3)
+				upgrade.name = "New Level %d Card %d" % [2 if level == "two" else 3, i + 1]
+				draft.cards.append(upgrade)
+				entry.levels[level].append({"id": level + "_" + str(i), "name": "New " + level + " branch " + str(i + 1), "card": upgrade_id, "blocks": "three_" + str(i), "rule": rule, "passive": _new_passive("ship")})
 	else:
 		entry = {"id": id, "name": "New Enemy", "hull": 30, "armour": 0, "weapon": {"damage": 4, "range": "Long"}, "default_action": [{"kind": "attack", "target": "chosen_ally", "damage": 2, "hits": 1, "range": "weapon"}], "stances": [{"id": "strike", "name": "Strike", "reactions": [], "effects": [{"kind": "attack", "target": "chosen_ally", "damage": 4, "hits": 1, "range": "weapon"}]}], "stance_loadout": [{"stance": "strike", "count": 3}]}
 	draft[kind].append(entry)
@@ -699,12 +704,19 @@ func _new_entry(kind: String) -> void:
 	_refresh()
 
 
-func _new_card(id: String, owner: String) -> Dictionary:
+func _new_card(id: String, owner: String, ability_count: int = 1) -> Dictionary:
 	var play := R.rule("on_play", [{"kind": "add_shields", "target": "owner", "amount": 2}])
 	play.id = "play"
-	var extra := R.rule("discarded", [{"kind": "gain_resource", "target": "owner", "amount": 1}], "any")
-	extra.id = "discard"
-	return {"id": id, "name": "New Card", "owner": owner, "type": "Support", "traits": [], "cost": 1, "pays": 1, "positions": Geometry.POSITIONS.duplicate(), "rules": [play, extra]}
+	var rules: Array = [play]
+	if ability_count >= 2:
+		var cover := R.rule("on_play", [{"kind": "add_cover", "target": "source_slot", "amount": 2}])
+		cover.id = "cover"
+		rules.append(cover)
+	if ability_count >= 3:
+		var persistence := R.rule("on_play", [{"kind": "add_persistence", "target": "self_card", "amount": 1}])
+		persistence.id = "persistence"
+		rules.append(persistence)
+	return {"id": id, "name": "New Card", "owner": owner, "type": "Support", "traits": [], "cost": 1, "pays": 1, "positions": Geometry.POSITIONS.duplicate(), "rules": rules}
 
 
 func _new_passive(zone: String) -> Dictionary:

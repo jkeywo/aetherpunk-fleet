@@ -56,8 +56,8 @@ func _run() -> void:
 	expect(b.state.monster_hull==66 and b.state.discard.size()==1,"Native target click did not automatically play card.")
 	expect(b.deck_count_label.text==str(b.state.deck.size()) and b.discard_count_label.text=="1","Live piles incorrect after payment.")
 	# Mark a retained hand card, then verify automatic cleanup/refill and counts.
-	var marked: int=b.state.hand[0]
 	var marked_face: Control=b.hand_view.get_children()[0]
+	var marked: int=marked_face.get_meta("uid")
 	var right := InputEventMouseButton.new()
 	right.button_index=MOUSE_BUTTON_RIGHT
 	right.pressed=true

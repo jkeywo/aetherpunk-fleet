@@ -272,7 +272,17 @@ func _render() -> void:
 	for child in hand_view.get_children():
 		hand_view.remove_child(child)
 		child.queue_free()
-	for uid in state.hand:
+	var ordered_hand: Array = state.hand.duplicate()
+	ordered_hand.sort_custom(func(a, b):
+		var first: Dictionary = state.card(a)
+		var second: Dictionary = state.card(b)
+		if first.owner != second.owner: return first.owner < second.owner
+		var first_type: int = Rules.TYPES.find(first.type)
+		var second_type: int = Rules.TYPES.find(second.type)
+		if first_type != second_type: return first_type < second_type
+		if first.name != second.name: return first.name.naturalnocasecmp_to(second.name) < 0
+		return a < b)
+	for uid in ordered_hand:
 		if pending_play and (uid == selected_uid or payment.has(uid)):
 			continue
 		var face := CardFace.new()
