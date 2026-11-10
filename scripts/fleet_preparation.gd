@@ -27,6 +27,8 @@ var encounter: Label
 var fleet_scroll: ScrollContainer
 var deck_preview: VBoxContainer
 var deck_cards: HBoxContainer
+var ship_dialog: AcceptDialog
+var ship_comparison: HBoxContainer
 var captain_dialog: AcceptDialog
 var captain_comparison: HBoxContainer
 var upgrade_dialog: AcceptDialog
@@ -180,6 +182,7 @@ func _render() -> void:
 	var options: Array = []
 	for entry in draft.ships: options.append({"label":entry.name,"value":entry.id})
 	_menu(inspector,"Airship",options,slot.ship,_change.bind(selected_ship,"ship"),"ship_"+str(selected_ship))
+	_button(inspector, "Compare ships", _show_ships)
 	options=[]
 	for entry in draft.captains: options.append({"label":entry.name+" · Tier "+str(entry.tier),"value":entry.id,"tooltip":Rules.rule_text(entry.passive, ship.name)})
 	_menu(inspector,"Captain",options,slot.captain,_change.bind(selected_ship,"captain"),"captain_"+str(selected_ship))
@@ -599,3 +602,75 @@ func _assign_captain(id: String) -> void:
 	if Catalog.index_by_id(draft.captains, id) < 0: return
 	_change(id, selected_ship, "captain")
 	_show_captains()
+
+
+func _show_ships() -> void:
+	if is_instance_valid(ship_dialog):
+		ship_dialog.hide()
+		ship_dialog.queue_free()
+	ship_dialog = AcceptDialog.new()
+	ship_dialog.name = "ShipComparison"
+	ship_dialog.get_ok_button().text = "Close"
+	add_child(ship_dialog)
+	var slot: Dictionary = draft.setup.fleet[selected_ship]
+	ship_dialog.title = slot.position.capitalize() + " / Compare ships"
+	var viewer_size := Vector2i(minf(1180, get_viewport_rect().size.x * 0.94), minf(700, get_viewport_rect().size.y * 0.88))
+	var body := VBoxContainer.new()
+	body.custom_minimum_size.x = viewer_size.x - 40
+	ship_dialog.add_child(body)
+	var caption := Label.new()
+	caption.text = "Base stats exclude captains and upgrades. Starter cards contribute two copies.\nShips already in your fleet swap slots. Captains and level choices stay with their slots."
+	caption.add_theme_font_size_override("font_size", 13)
+	body.add_child(caption)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(scroll)
+	ship_comparison = HBoxContainer.new()
+	ship_comparison.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ship_comparison.alignment = BoxContainer.ALIGNMENT_CENTER
+	ship_comparison.add_theme_constant_override("separation", 14)
+	scroll.add_child(ship_comparison)
+	var visible_count := clampi(draft.ships.size(), 1, 3)
+	var width: float = minf(370, floor((viewer_size.x - 60 - 14 * (visible_count - 1)) / visible_count))
+	for ship in draft.ships:
+		var column := VBoxContainer.new()
+		column.custom_minimum_size.x = width
+		column.set_meta("ship_id", ship.id)
+		ship_comparison.add_child(column)
+		var assigned := -1
+		for i in draft.setup.fleet.size():
+			if draft.setup.fleet[i].ship == ship.id: assigned = i
+		var current: bool = assigned == selected_ship
+		var position_name: String = draft.setup.fleet[assigned].position.capitalize() if assigned >= 0 else ""
+		var title := _label(column, ship.name, 21)
+		title.set_meta("plain_text", true)
+		title.custom_minimum_size.y = 36
+		title.modulate = Color(ship.color)
+		var assigned_label := _label(column, "SELECTED / " + position_name if current else ("In fleet / " + position_name if assigned >= 0 else "Available"), 13)
+		assigned_label.custom_minimum_size.y = 30
+		assigned_label.modulate = Color("#91c8ad") if current else Color("#e8bd77")
+		var stats := _label(column, "%s\nHull %d / Armour %d\nWeapon %d / %s\n%s capacity %d" % [ship.role, ship.hull, ship.armour, ship.weapon.damage, ship.weapon.range, ship.resource.name, ship.resource.capacity], 14)
+		stats.custom_minimum_size.y = 84
+		stats.set_meta("ship_stats", ship.id)
+		var face := CardFace.new()
+		face.custom_minimum_size = Vector2(width, 240)
+		face.toggle_mode = false
+		face.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		face.configure(Catalog.present_card(draft.cards[Catalog.index_by_id(draft.cards, ship.starter)], selected_ship, ship.name), ship)
+		face.set_meta("card_id", ship.starter)
+		face.set_meta("copies", 2)
+		column.add_child(face)
+		var choose := _button(column, "Selected" if current else ("Swap with " + position_name if assigned >= 0 else "Choose for " + slot.position.capitalize()), _choose_ship.bind(ship.id))
+		choose.set_meta("choose_ship", ship.id)
+		choose.disabled = current
+		_label(column, "UNIQUE MECHANIC / " + ship.resource.name, 12).modulate = Color("#91b9c6")
+		var mechanism: Array = ship.resource.rules.duplicate() + ship.rules.duplicate()
+		var explanation := _label(column, "\n".join(mechanism.map(func(rule): return Rules.rule_text(rule, ship.name))) if not mechanism.is_empty() else "No unique mechanism configured.", 12)
+		explanation.set_meta("ship_mechanism", ship.id)
+	ship_dialog.popup_centered(viewer_size)
+
+
+func _choose_ship(id: String) -> void:
+	if Catalog.index_by_id(draft.ships, id) < 0: return
+	_change(id, selected_ship, "ship")
+	_show_ships()
