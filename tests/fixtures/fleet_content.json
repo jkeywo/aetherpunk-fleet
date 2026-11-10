@@ -1,0 +1,3021 @@
+{
+	"version": 3,
+	"ships": [
+		{
+			"id": "bastion",
+			"name": "Bastion",
+			"role": "BULWARK",
+			"hull": 28,
+			"color": "#d8b477",
+			"armour": 2,
+			"weapon": {
+				"damage": 4,
+				"range": "Short"
+			},
+			"resource": {
+				"name": "Resolve",
+				"capacity": 6,
+				"rules": [
+					{
+						"id": "gain",
+						"trigger": {
+							"kind": "armour_absorbed",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [],
+						"effects": [
+							{
+								"kind": "gain_resource",
+								"target": "owner",
+								"amount": 1
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "automatic_spend",
+						"trigger": {
+							"kind": "on_play",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "card_matches",
+							"target": "event_card",
+							"card_type": "Guard"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "add_shields",
+								"target": "owner",
+								"amount": 3
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "optional_boost",
+						"trigger": {
+							"kind": "on_play",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "add_cover",
+								"target": "source_slot",
+								"amount": 2
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": true,
+						"zone": "ship"
+					}
+				]
+			},
+			"starter": "brace",
+			"rules": [],
+			"levels": {
+				"two": [
+					{
+						"id": "defence",
+						"name": "Bastion Plating",
+						"card": "escort",
+						"blocks": "artillery",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "repaired",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "assault",
+						"name": "Vanguard Drive",
+						"card": "advance",
+						"blocks": "bulwark",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "moved",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				],
+				"three": [
+					{
+						"id": "bulwark",
+						"name": "Citadel",
+						"card": "resonant_bulwark",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "cover_absorbed",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "artillery",
+						"name": "Dreadnought",
+						"card": "ramming_prow",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "hull_damaged",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 2,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "conductor",
+						"name": "Aegis Network",
+						"card": "anchor_field",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "turn_start",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "mana_capacity",
+									"target": "fleet",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				]
+			}
+		},
+		{
+			"id": "kestrel",
+			"name": "Kestrel",
+			"role": "GUNSHIP",
+			"hull": 20,
+			"color": "#79b9d0",
+			"armour": 0,
+			"weapon": {
+				"damage": 5,
+				"range": "Long"
+			},
+			"resource": {
+				"name": "Momentum",
+				"capacity": 6,
+				"rules": [
+					{
+						"id": "gain",
+						"trigger": {
+							"kind": "moved",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [],
+						"effects": [
+							{
+								"kind": "gain_resource",
+								"target": "owner",
+								"amount": 1
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "automatic_spend",
+						"trigger": {
+							"kind": "attack_started",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "card_matches",
+							"target": "event_card",
+							"card_type": "Attack"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "add_shields",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "optional_boost",
+						"trigger": {
+							"kind": "on_play",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "attack",
+								"target": "chosen_enemy",
+								"damage": 3,
+								"hits": 1,
+								"range": "weapon"
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": true,
+						"zone": "ship"
+					}
+				]
+			},
+			"starter": "broadside",
+			"rules": [],
+			"levels": {
+				"two": [
+					{
+						"id": "defence",
+						"name": "Heavy Batteries",
+						"card": "salvo",
+						"blocks": "artillery",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "repaired",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "assault",
+						"name": "Interceptor Fins",
+						"card": "strafe",
+						"blocks": "bulwark",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "moved",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				],
+				"three": [
+					{
+						"id": "bulwark",
+						"name": "Resonance Cannon",
+						"card": "arc_echo",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "cover_absorbed",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "artillery",
+						"name": "Storm Chaser",
+						"card": "convergence_bolt",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "hull_damaged",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 2,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "conductor",
+						"name": "Cyclone Array",
+						"card": "cyclone_salvo",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "turn_start",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "mana_capacity",
+									"target": "fleet",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				]
+			}
+		},
+		{
+			"id": "lamplighter",
+			"name": "Lamplighter",
+			"role": "TENDER",
+			"hull": 18,
+			"color": "#91c8ad",
+			"armour": 1,
+			"weapon": {
+				"damage": 3,
+				"range": "Long"
+			},
+			"resource": {
+				"name": "Aether",
+				"capacity": 6,
+				"rules": [
+					{
+						"id": "gain",
+						"trigger": {
+							"kind": "repaired",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [],
+						"effects": [
+							{
+								"kind": "gain_resource",
+								"target": "owner",
+								"amount": 1
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "automatic_spend",
+						"trigger": {
+							"kind": "on_play",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "card_matches",
+							"target": "event_card",
+							"card_type": "Support"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "draw",
+								"amount": 1
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "optional_boost",
+						"trigger": {
+							"kind": "on_play",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "add_cover",
+								"target": "source_slot",
+								"amount": 2
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": true,
+						"zone": "ship"
+					}
+				]
+			},
+			"starter": "patch",
+			"rules": [],
+			"levels": {
+				"two": [
+					{
+						"id": "defence",
+						"name": "Signal Workshop",
+						"card": "relay",
+						"blocks": "artillery",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "repaired",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "assault",
+						"name": "Rescue Rigging",
+						"card": "tow",
+						"blocks": "bulwark",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "moved",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				],
+				"three": [
+					{
+						"id": "bulwark",
+						"name": "Mana Conductor",
+						"card": "aether_conduit",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "cover_absorbed",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "artillery",
+						"name": "Salvage Master",
+						"card": "rescue_winch",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "hull_damaged",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 2,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "conductor",
+						"name": "Storm Reader",
+						"card": "storm_lens",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "turn_start",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "mana_capacity",
+									"target": "fleet",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				]
+			}
+		}
+	],
+	"captains": [
+		{
+			"id": "iona",
+			"name": "Iona Vale",
+			"tier": 1,
+			"card": "field_orders",
+			"passive": {
+				"id": "captain_passive",
+				"trigger": {
+					"kind": "passive",
+					"subject": "owner"
+				},
+				"conditions": {
+					"kind": "always"
+				},
+				"costs": [],
+				"effects": [],
+				"modifiers": [
+					{
+						"kind": "repair_amount",
+						"target": "owner",
+						"amount": 1,
+						"card_type": ""
+					}
+				],
+				"limit": "once_per_action",
+				"optional": false,
+				"zone": "captain"
+			}
+		},
+		{
+			"id": "voss",
+			"name": "Voss Kade",
+			"tier": 2,
+			"card": "evasive_orders",
+			"passive": {
+				"id": "captain_passive",
+				"trigger": {
+					"kind": "passive",
+					"subject": "owner"
+				},
+				"conditions": {
+					"kind": "always"
+				},
+				"costs": [],
+				"effects": [],
+				"modifiers": [
+					{
+						"kind": "resource_capacity",
+						"target": "owner",
+						"amount": 2,
+						"card_type": ""
+					}
+				],
+				"limit": "once_per_action",
+				"optional": false,
+				"zone": "captain"
+			}
+		},
+		{
+			"id": "rook",
+			"name": "Rook Ash",
+			"tier": 3,
+			"card": "command_barrage",
+			"passive": {
+				"id": "captain_passive",
+				"trigger": {
+					"kind": "passive",
+					"subject": "owner"
+				},
+				"conditions": {
+					"kind": "always"
+				},
+				"costs": [],
+				"effects": [],
+				"modifiers": [
+					{
+						"kind": "attack_damage",
+						"target": "owner",
+						"amount": 2,
+						"card_type": ""
+					}
+				],
+				"limit": "once_per_action",
+				"optional": false,
+				"zone": "captain"
+			}
+		}
+	],
+	"cards": [
+		{
+			"id": "brace",
+			"name": "Brace for Impact",
+			"owner": "bastion",
+			"type": "Guard",
+			"traits": [],
+			"cost": 1,
+			"pays": 2,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "owner",
+							"amount": 6
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "event_actor",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "escort",
+			"name": "Escort Screen",
+			"owner": "bastion",
+			"type": "Guard",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "chosen_ally",
+							"amount": 4
+						},
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "repaired",
+						"subject": "owner"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "advance",
+			"name": "Shield Advance",
+			"owner": "bastion",
+			"type": "Manoeuvre",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "move",
+							"target": "owner",
+							"destination": "chosen_slot",
+							"guard": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Attack",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": {
+								"kind": "weapon_damage",
+								"target": "owner"
+							},
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "resonant_bulwark",
+			"name": "Resonant Bulwark",
+			"owner": "bastion",
+			"type": "Guard",
+			"traits": [],
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "owner",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "hull_damaged",
+						"subject": "adjacent"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "event_actor",
+							"amount": 3
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "ramming_prow",
+			"name": "Ramming Prow",
+			"owner": "bastion",
+			"type": "Attack",
+			"traits": [],
+			"cost": 2,
+			"pays": 2,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": {
+								"kind": "sum",
+								"values": [
+									{
+										"kind": "weapon_damage",
+										"target": "owner"
+									},
+									3
+								]
+							},
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Guard",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "anchor_field",
+			"name": "Anchor Field",
+			"owner": "bastion",
+			"type": "Support",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 4
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Guard",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_persistence",
+							"target": "self_card",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "broadside",
+			"name": "Broadside",
+			"owner": "kestrel",
+			"type": "Attack",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": {
+								"kind": "weapon_damage",
+								"target": "owner"
+							},
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "passive",
+						"subject": "owner"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Manoeuvre",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [],
+					"modifiers": [
+						{
+							"kind": "attack_damage",
+							"target": "self_card",
+							"amount": 2,
+							"card_type": ""
+						}
+					],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "salvo",
+			"name": "Piercing Salvo",
+			"owner": "kestrel",
+			"type": "Attack",
+			"traits": [],
+			"cost": 3,
+			"pays": 2,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": {
+								"kind": "sum",
+								"values": [
+									{
+										"kind": "weapon_damage",
+										"target": "owner"
+									},
+									5
+								]
+							},
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "discarded",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "any"
+				}
+			]
+		},
+		{
+			"id": "strafe",
+			"name": "Strafing Pass",
+			"owner": "kestrel",
+			"type": "Manoeuvre",
+			"traits": [],
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "move",
+							"target": "owner",
+							"destination": "chosen_slot",
+							"guard": 0
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Attack",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 3,
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "arc_echo",
+			"name": "Arc Echo",
+			"owner": "kestrel",
+			"type": "Attack",
+			"traits": [],
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 2,
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "shields_added",
+						"subject": "adjacent"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 2,
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "convergence_bolt",
+			"name": "Convergence Bolt",
+			"owner": "kestrel",
+			"type": "Attack",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 3,
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Support",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 3,
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "cyclone_salvo",
+			"name": "Cyclone Salvo",
+			"owner": "kestrel",
+			"type": "Attack",
+			"traits": [],
+			"cost": 2,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 3,
+							"hits": 3,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "patch",
+			"name": "Emergency Patch",
+			"owner": "lamplighter",
+			"type": "Support",
+			"traits": [],
+			"cost": 1,
+			"pays": 2,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "repair",
+							"target": "chosen_ally",
+							"amount": 4
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Guard",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "relay",
+			"name": "Signal Relay",
+			"owner": "lamplighter",
+			"type": "Support",
+			"traits": [],
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "draw",
+							"amount": 2
+						},
+						{
+							"kind": "discard",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "discarded",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "any"
+				}
+			]
+		},
+		{
+			"id": "tow",
+			"name": "Towline Manoeuvre",
+			"owner": "lamplighter",
+			"type": "Manoeuvre",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "swap",
+							"first": "owner",
+							"second": "chosen_ally",
+							"guard": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "moved",
+						"subject": "adjacent"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "repair",
+							"target": "event_actor",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "aether_conduit",
+			"name": "Aether Conduit",
+			"owner": "lamplighter",
+			"type": "Support",
+			"traits": [],
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "owner",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "passive",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [],
+					"modifiers": [
+						{
+							"kind": "attack_damage",
+							"target": "adjacent_cards",
+							"amount": 2,
+							"card_type": "Attack"
+						},
+						{
+							"kind": "cost",
+							"target": "adjacent_cards",
+							"amount": 1,
+							"card_type": ""
+						}
+					],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "rescue_winch",
+			"name": "Rescue Winch",
+			"owner": "lamplighter",
+			"type": "Support",
+			"traits": [],
+			"cost": 2,
+			"pays": 2,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "recovery",
+							"target": "chosen_ally",
+							"amount": 4
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "revived",
+						"subject": "allied"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "storm_lens",
+			"name": "Storm Lens",
+			"owner": "lamplighter",
+			"type": "Support",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "scry",
+							"look": 3,
+							"take": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Support",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_persistence",
+							"target": "self_card",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "field_orders",
+			"name": "Field Orders",
+			"owner": "iona",
+			"type": "Guard",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "chosen_ally",
+							"amount": 4
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Support",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "evasive_orders",
+			"name": "Evasive Orders",
+			"owner": "voss",
+			"type": "Manoeuvre",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "move",
+							"target": "owner",
+							"destination": "chosen_slot",
+							"guard": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Support",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "command_barrage",
+			"name": "Command Barrage",
+			"owner": "rook",
+			"type": "Attack",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": {
+								"kind": "weapon_damage",
+								"target": "owner"
+							},
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Support",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		}
+	],
+	"leviathans": [
+		{
+			"id": "stormmaw",
+			"name": "Stormmaw",
+			"hull": 70,
+			"armour": 2,
+			"weapon": {
+				"damage": 6,
+				"range": "Long"
+			},
+			"default_action": [
+				{
+					"kind": "attack",
+					"target": "chosen_ally",
+					"damage": 3,
+					"hits": 1,
+					"range": "Long"
+				}
+			],
+			"stances": [
+				{
+					"id": "stance_1",
+					"name": "Buffeting Wings / Rending Bite",
+					"reactions": [
+						{
+							"id": "wings",
+							"name": "Buffeting Wings",
+							"category": "Disruption",
+							"conditions": {
+								"kind": "all",
+								"items": [
+									{
+										"kind": "card_matches",
+										"target": "event_card",
+										"trait": "Movement"
+									}
+								]
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "chosen_ally",
+									"damage": 3,
+									"hits": 1,
+									"range": "Long"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 7,
+							"hits": 1,
+							"range": "Long"
+						}
+					]
+				},
+				{
+					"id": "stance_2",
+					"name": "Violent Recoil / Forked Lightning",
+					"reactions": [
+						{
+							"id": "recoil",
+							"name": "Violent Recoil",
+							"category": "Retaliation",
+							"conditions": {
+								"kind": "all",
+								"items": [
+									{
+										"kind": "metric_at_least",
+										"metric": "hull_damage",
+										"amount": 8
+									}
+								]
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "chosen_ally",
+									"damage": 4,
+									"hits": 1,
+									"range": "Long"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 4,
+							"hits": 1,
+							"range": "Long"
+						}
+					]
+				},
+				{
+					"id": "stance_3",
+					"name": "Predator’s Lunge / Storm Front",
+					"reactions": [
+						{
+							"id": "lunge",
+							"name": "Predator’s Lunge",
+							"category": "Retaliation",
+							"conditions": {
+								"kind": "all",
+								"items": [
+									{
+										"kind": "card_matches",
+										"target": "event_card",
+										"trait": "Attack"
+									},
+									{
+										"kind": "any",
+										"items": [
+											{
+												"kind": "position",
+												"target": "event_actor",
+												"position": "front"
+											}
+										]
+									}
+								]
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "chosen_ally",
+									"damage": 4,
+									"hits": 1,
+									"range": "Long"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "all_allies",
+							"damage": 3,
+							"hits": 1,
+							"range": "Long"
+						},
+						{
+							"kind": "swap_ends",
+							"fallback_damage": 0
+						}
+					]
+				},
+				{
+					"id": "stance_4",
+					"name": "Aether Scent / Hunting Dive",
+					"reactions": [
+						{
+							"id": "scent",
+							"name": "Aether Scent",
+							"category": "Retaliation",
+							"conditions": {
+								"kind": "all",
+								"items": [
+									{
+										"kind": "metric_at_least",
+										"metric": "healed",
+										"amount": 1
+									}
+								]
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "chosen_ally",
+									"damage": 3,
+									"hits": 1,
+									"range": "Long"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 6,
+							"hits": 1,
+							"range": "Long"
+						},
+						{
+							"kind": "rear_to_front"
+						}
+					]
+				},
+				{
+					"id": "stance_5",
+					"name": "Gathering Static / Rending Bite",
+					"reactions": [
+						{
+							"id": "static",
+							"name": "Gathering Static",
+							"category": "Retaliation",
+							"conditions": {
+								"kind": "all",
+								"items": [
+									{
+										"kind": "metric_at_least",
+										"metric": "printed_cost",
+										"amount": 2
+									}
+								]
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "all_allies",
+									"damage": 2,
+									"hits": 1,
+									"range": "Long"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 7,
+							"hits": 1,
+							"range": "Long"
+						}
+					]
+				},
+				{
+					"id": "stance_6",
+					"name": "Tail Sweep / Forked Lightning",
+					"reactions": [
+						{
+							"id": "tail",
+							"name": "Tail Sweep",
+							"category": "Disruption",
+							"conditions": {
+								"kind": "all",
+								"items": [
+									{
+										"kind": "card_matches",
+										"target": "event_card",
+										"trait": "Guard"
+									}
+								]
+							},
+							"effects": [
+								{
+									"kind": "swap_ends",
+									"fallback_damage": 3
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 4,
+							"hits": 1,
+							"range": "Long"
+						}
+					]
+				}
+			],
+			"stance_loadout": [
+				{
+					"stance": "stance_1",
+					"count": 1
+				},
+				{
+					"stance": "stance_2",
+					"count": 1
+				},
+				{
+					"stance": "stance_3",
+					"count": 1
+				},
+				{
+					"stance": "stance_4",
+					"count": 1
+				},
+				{
+					"stance": "stance_5",
+					"count": 1
+				},
+				{
+					"stance": "stance_6",
+					"count": 1
+				}
+			]
+		},
+		{
+			"id": "storm_ray",
+			"name": "Storm Ray",
+			"hull": 20,
+			"armour": 1,
+			"weapon": {
+				"damage": 4,
+				"range": "Short"
+			},
+			"default_action": [
+				{
+					"kind": "attack",
+					"target": "chosen_ally",
+					"damage": 2,
+					"hits": 1,
+					"range": "Short"
+				}
+			],
+			"stances": [
+				{
+					"id": "strike",
+					"name": "Hunting Pass",
+					"reactions": [
+						{
+							"id": "counter",
+							"name": "Type Counter",
+							"category": "Retaliation",
+							"conditions": {
+								"kind": "card_matches",
+								"target": "event_card",
+								"card_type": "Attack"
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "chosen_ally",
+									"damage": 2,
+									"hits": 1,
+									"range": "Short"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 4,
+							"hits": 1,
+							"range": "Short"
+						}
+					]
+				}
+			],
+			"stance_loadout": [
+				{
+					"stance": "strike",
+					"count": 3
+				}
+			]
+		},
+		{
+			"id": "needlewing",
+			"name": "Needlewing",
+			"hull": 12,
+			"armour": 0,
+			"weapon": {
+				"damage": 3,
+				"range": "Long"
+			},
+			"default_action": [
+				{
+					"kind": "attack",
+					"target": "chosen_ally",
+					"damage": 1,
+					"hits": 1,
+					"range": "Long"
+				}
+			],
+			"stances": [
+				{
+					"id": "strike",
+					"name": "Hunting Pass",
+					"reactions": [
+						{
+							"id": "counter",
+							"name": "Type Counter",
+							"category": "Retaliation",
+							"conditions": {
+								"kind": "card_matches",
+								"target": "event_card",
+								"card_type": "Attack"
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "chosen_ally",
+									"damage": 2,
+									"hits": 1,
+									"range": "Long"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 3,
+							"hits": 2,
+							"range": "Long"
+						}
+					]
+				}
+			],
+			"stance_loadout": [
+				{
+					"stance": "strike",
+					"count": 2
+				}
+			]
+		}
+	],
+	"setup": {
+		"fleet": [
+			{
+				"ship": "bastion",
+				"captain": "iona",
+				"level": 2,
+				"level_2": "defence",
+				"level_3": "",
+				"position": "front"
+			},
+			{
+				"ship": "kestrel",
+				"captain": "rook",
+				"level": 2,
+				"level_2": "assault",
+				"level_3": "",
+				"position": "upper"
+			},
+			{
+				"ship": "lamplighter",
+				"captain": "voss",
+				"level": 2,
+				"level_2": "assault",
+				"level_3": "",
+				"position": "rear"
+			}
+		],
+		"enemies": [
+			{
+				"enemy": "stormmaw",
+				"position": "front"
+			},
+			{
+				"enemy": "storm_ray",
+				"position": "upper"
+			},
+			{
+				"enemy": "needlewing",
+				"position": "rear"
+			}
+		],
+		"fixed_hand": true,
+		"opening_hand": [
+			"brace",
+			"broadside",
+			"broadside",
+			"strafe",
+			"patch",
+			"tow",
+			"field_orders"
+		],
+		"basic_actions": {
+			"repair": 2,
+			"revive_threshold": 4
+		},
+		"mana_capacity": 1,
+		"mana_reward": 1,
+		"retain_threshold": 2
+	}
+}

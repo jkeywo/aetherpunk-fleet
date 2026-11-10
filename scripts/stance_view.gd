@@ -24,7 +24,7 @@ func configure(stance: Dictionary) -> void:
 	title.text = "STANCE / " + stance.get("name", "Untitled")
 	var lines: Array = []
 	for rule in stance.get("reactions", []):
-		lines.append(rule.name + ": " + Catalog.trigger_text(rule.trigger) + " → " + Catalog.effects_text(rule.effects))
+		lines.append(rule.name + ": " + preload("res://scripts/rules/rule_registry.gd").text("condition", rule.get("condition", {"kind":"always"})) + " → " + Catalog.effects_text(rule.effects))
 	lines.append("Enemy phase: " + Catalog.effects_text(stance.get("effects", [])))
 	rules.text = "\n".join(lines)
 	tooltip_text = title.text + "\n" + rules.text + "\nNext stance is hidden."

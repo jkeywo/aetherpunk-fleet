@@ -1,42 +1,21 @@
-extends "res://tests/support/v2_test.gd"
+extends "res://tests/support/v3_test.gd"
 var beats: Array = []
-var hull_before_reaction := -1
-
-
-func on_beat(kind: String) -> void:
-	beats.append(kind)
-	if kind == "reaction_triggered":
-		for widget in current_scene.allies.widgets.values():
-			if widget.get_meta("ship_index", -1) == 0:
-				hull_before_reaction = int(widget.bar.value)
-
-
 func _run() -> void:
-	await open_battle()
-	var battle = current_scene
-	battle.feedback.beat_started.connect(on_beat)
-	stage_card(battle, "advance", 0)
-	choose_first_targets(battle)
-	await pay_with(battle, "tow")
-	battle.get_node("%PlayButton").pressed.emit()
-	expect(battle.busy and battle.get_node("%EndPhaseButton").disabled, "Feedback input lock missing.")
-	battle.get_node("%PlayButton").pressed.emit()
-	battle.get_node("%EndPhaseButton").pressed.emit()
-	expect(battle.state.monster_hull == 66 and battle.state.round_number == 1, "Repeated input resolved twice.")
-	await battle.resolution_finished
-	expect(hull_before_reaction == 28 and battle.state.ships[0].hull == 25, "Reaction damage appeared before announcement.")
-	expect(beats.find("movement") < beats.find("reaction_triggered") and beats.find("stance_changed") > beats.find("reaction_triggered"), "Feedback stage order incorrect.")
-	expect(not battle.busy and not battle.feedback.running, "Feedback did not unlock.")
-	expect(not battle.feedback.banner.visible and battle.circle_view.contents[0] >= 0, "Feedback ended with stale overlay or missing card.")
+	var doc := neutral()
+	card_def(doc, "brace").rules[0].effects = [attack(6), {"kind":"add_shields","target":"owner","amount":2}]
+	doc.leviathans[0].stances[0].reactions = [{"id":"counter","name":"Counter","category":"Retaliation","conditions":{"kind":"always"},"effects":[attack(5,1,"Long","chosen_ally")]}]
+	await open_battle(doc)
+	var b = current_scene
+	b.feedback.beat_started.connect(func(kind): beats.append(kind))
+	stage_card(b,"brace",0)
+	b.get_node("%PlayButton").pressed.emit()
+	expect(b.busy and b.get_node("%EndPhaseButton").disabled, "Playback did not lock input.")
+	b.get_node("%PlayButton").pressed.emit()
+	await b.resolution_finished
+	expect(b.state.monster_hull == 64 and b.state.ships[0].hull == 25, "Feedback changed resolution or repeated action.")
+	expect(beats.has("damage") and beats.has("guard") and beats.has("reaction_triggered"), "Damage/shields/reaction beats missing.")
+	expect(beats.find("reaction_triggered") < beats.find("stance_changed"), "Replacement shown before reaction.")
+	expect(not b.busy and not b.feedback.banner.visible, "Feedback did not unlock.")
 	await flush()
-	expect(battle.feedback.overlay.get_child_count() == 1, "Transient animation nodes leaked.")
-	stage_card(battle, "brace", 1)
-	await pay_with(battle, "escort")
-	battle.get_node("%PlayButton").pressed.emit()
-	battle.get_node("%GearButton").pressed.emit()
-	battle.menu.id_pressed.emit(2)
-	await scene_changed
-	expect(current_scene.name == "MainMenu" and not paused, "Leaving during playback failed.")
-	await flush()
-	expect(current_scene.name == "MainMenu", "Abandoned playback changed scenes.")
+	expect(b.feedback.overlay.get_child_count() == 1, "Animation nodes leaked.")
 	done("Combat feedback")

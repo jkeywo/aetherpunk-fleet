@@ -85,7 +85,10 @@ func play(events: Array, battle_view: Control) -> void:
 				var cause: String = event.get("source_event", "effect")
 				if source_uid >= 0:
 					_message("CHAIN / " + view.state.card(source_uid).name + " → " + view.state.card(event.uid).name + "\n" + cause.to_upper() + " / " + event.title, Color("#9ce6b7"))
-					await view.circle_view.animate_chain(source_uid, event.uid, cause, _time(0.55))
+					if view.circle_view.contents.has(source_uid) and view.circle_view.contents.has(event.uid):
+						await view.circle_view.animate_chain(source_uid, event.uid, cause, _time(0.55))
+					else:
+						await _pause(0.28)
 				else:
 					_message("CARD TRIGGER / " + event.title, Color("#9ce6b7"))
 					await _pause(0.28)
@@ -93,8 +96,22 @@ func play(events: Array, battle_view: Control) -> void:
 				await _apply_board(event.board)
 				_message(event.title, Color("#d6adee"))
 				await _pause(0.35)
+			"resource":
+				await _apply_board(event.board)
+				var unit := _unit(event.target)
+				if unit != null: await _popup("%+d %s" % [event.amount, event.title], _visible_position(unit.global_position), Color("#d6adee"), 0.30)
+			"cover":
+				await _apply_board(event.board)
+				var point: int = event.position
+				var formation_view: Control = view.enemies if point >= 4 else view.allies
+				var widget: Control = formation_view.widgets.get(point % 4)
+				if widget != null: await _popup("%+d COVER" % event.amount, _visible_position(widget.global_position), Color("#8bd8ff"), 0.28)
+			"mana", "persistence", "stunned", "confused", "ship_rule":
+				await _apply_board(event.board)
+				_message(event.get("title", event.kind.replace("_", " ").capitalize()), Color("#d6adee"))
+				await _pause(0.22)
 			"destroyed":
-				_message("SHIP LOST / " + event.title, Color("#ff927f"))
+				_message(("ENEMY DOWN / " if event.get("enemy", false) else "SHIP LOST / ") + event.title, Color("#ff927f"))
 				await _pause(0.25)
 				await _apply_board(event.board)
 		view._show_piles(event.board)
@@ -144,10 +161,10 @@ func _stat_change(event: Dictionary) -> void:
 	var text := ""
 	if event.kind == "damage":
 		text = "-%d HULL" % amount if amount > 0 else "BLOCKED"
-		if event.blocked > 0:
-			text += "\n-%d GUARD" % event.blocked
-			if amount == 0:
-				tint = Color("#8bd8ff")
+		if event.get("hit_total", 1) > 1: text = "%d/%d · " % [event.hit_index, event.hit_total] + text
+		if event.get("blocked", 0) > 0:
+			text += "\nC%d A%d S%d" % [event.get("cover_absorbed", 0), event.get("armour_absorbed", 0), event.get("shields_absorbed", 0)]
+			if amount == 0: tint = Color("#8bd8ff")
 		unit.bar.value += amount
 	elif event.kind == "repair":
 		tint = Color("#9ce6b7")
@@ -155,12 +172,12 @@ func _stat_change(event: Dictionary) -> void:
 		unit.bar.value -= amount
 	else:
 		tint = Color("#8bd8ff")
-		text = "%+d GUARD" % amount
+		text = "%+d SHIELDS" % amount
 	var tween := create_tween().set_parallel(true)
 	unit.self_modulate = tint
 	tween.tween_property(unit, "self_modulate", Color.WHITE, _time(0.32))
 	if event.kind != "guard":
-		var final_value: int = event.board.monster_hull if event.target < 0 else event.board.ships[event.target].hull
+		var final_value: int = event.board.enemies[-1 - event.target].hull if event.target < 0 else event.board.ships[event.target].hull
 		tween.tween_property(unit.bar, "value", final_value, _time(0.28))
 	await _popup(text, _visible_position(unit.global_position + Vector2(5, 0)), tint, 0.40)
 

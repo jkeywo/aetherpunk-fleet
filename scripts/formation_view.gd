@@ -27,7 +27,9 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 	for point in 4:
 		var id: int = -1
 		if is_enemy:
-			if point == int(board.get("enemy_position", 0)) and int(board.get("monster_hull", 0)) > 0:
+			if board.has("enemy_formation"):
+				id = int(board.enemy_formation[point])
+			elif point == int(board.get("enemy_position", 0)) and int(board.get("monster_hull", 0)) > 0:
 				id = 0
 		else:
 			id = board.get("formation", [-1, -1, -1, -1])[point]
@@ -35,17 +37,21 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 		if id >= 0:
 			widget = Unit.new()
 			add_child(widget)
-			var data: Dictionary = monster.duplicate(true) if is_enemy else board.ships[id].duplicate(true)
-			if is_enemy:
+			var data: Dictionary = (board.enemies[id].duplicate(true) if board.has("enemies") else monster.duplicate(true)) if is_enemy else board.ships[id].duplicate(true)
+			if is_enemy and not board.has("enemies"):
 				data["max_hull"] = monster.get("hull", 1)
 				data["hull"] = board.monster_hull
 			widget.configure(data, is_enemy)
-			widget.set_meta("ship_index", -1 if is_enemy else id)
+			widget.set_meta("ship_index", -1 - id if is_enemy else id)
+			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
+			if cover_amount > 0: widget.hull_label.text += "  C" + str(cover_amount)
+			widget.tooltip_text += "\nSlot cover: " + str(cover_amount)
 			if not is_enemy:
 				_wire_target(widget, id)
 		else:
 			widget = Button.new()
-			widget.text = Geometry.POSITION_NAMES[point] + "\nEmpty"
+			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
+			widget.text = Geometry.POSITION_NAMES[point] + "\nEmpty" + (" / Cover " + str(cover_amount) if cover_amount > 0 else "")
 			widget.modulate = Color("#506977")
 			add_child(widget)
 		widget.pressed.connect(func(): position_selected.emit(point))

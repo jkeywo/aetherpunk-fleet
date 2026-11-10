@@ -1,0 +1,50 @@
+# Composable combat rules
+
+`scripts/rules/rule_registry.gd` registers six component families: triggers, conditions, costs, effects, modifiers, and calculated values. Selector fields are typed by each chunk. Group selectors can be narrowed with an effect's `filter` condition; `event_target` identifies the candidate unit while filtering. Card type, trait, and ID filters remain separate.
+
+Each entry owns its stable ID, typed fields/defaults, compatible target/zone/context metadata, generated description, and handler. Add a code chunk once, then combine it in cards, ship resources, upgrades, captains, and enemy stances. No content-name dispatch or executable strings are used.
+
+## Rule data
+
+```json
+{
+  "id": "adjacent_attack_protection",
+  "zone": "circle",
+  "trigger": { "kind": "adjacent_card_played", "card_type": "Attack", "subject": "adjacent" },
+  "conditions": { "all": [
+    { "kind": "resource_at_least", "target": "owner", "amount": 2 }
+  ] },
+  "costs": [{ "kind": "ship_resource", "target": "owner", "amount": 2 }],
+  "effects": [{ "kind": "add_shields", "target": "event_actor", "amount": 3 }],
+  "modifiers": [],
+  "limit": "once_per_action",
+  "optional": false
+}
+```
+
+New cards have exactly one primary type (Attack, Guard, Manoeuvre, Support) and 2–3 blocks, including On Play. `zone` controls card activity: circle, hand, discard, discard_top, or any exposed zone. Ship/captain/upgrade blocks use their corresponding context and are inactive while their owner is defeated. A passive trigger uses modifiers; event triggers use effects and optional resource costs. Automatic responses use owner, event, and group selectors; explicit ally/circle/stance/reaction choices belong to pending On Play rules and boosts. Reactive attacks inherit the action's chosen enemy, falling back to the first legal enemy when none was chosen. Incompatible contexts fail validation.
+
+Conditions accept registered `all`/`any`/`not` chunks or their object shorthand. Values accept nonnegative constants or registered calculations: weapon damage (including upgrades), resource totals, missing hull, adjacent matches, sum, product, min, and max. Arithmetic is bounded to 0–99999, with a nesting limit of 16.
+
+Modifier amounts add to their named statistic; cost amounts are discounts floored at zero. Weapon range selects Short or Long. Fleet mana modifiers target `fleet`. Damage can target the owning unit or a card domain explicitly; attack_damage applies on the first hit, per_hit_damage on every hit. The rule's conditions provide scope. For candidate-sensitive filtering, use the effect's group filter or a modifier's card_type/trait fields.
+
+## Event and queue contracts
+
+- Events carry kind, actor, target, physical card UID, card definition, position, amount, metrics, and causal ancestry. Damage separates cover absorption, armour mitigation, shield absorption, and actual hull loss. Repair events report actual restoration and identify the repairing actor separately from the recipient.
+- Card UIDs distinguish physical copies sharing a design ID. A source key includes its UID/rule ID or ship/rule index. Rule usage is marked when queued. Default limits are once per physical rule per completed action; per-turn and per-hit variants are explicit. A rule cannot re-enter its own causal ancestry.
+- Queue ordering is deterministic: owning On Play blocks and their ordered effects, allied FIFO event chains, committed payment discards and their FIFO chains, then one reaction per enemy in formation order. Main On Play conditions evaluate when their block runs, allowing earlier movement to change position checks. Event-response eligibility is latched when queued; affordability is checked before execution.
+- Optional boosts reserve personal resources before automatic rules evaluate. Pending UI actions remain detached until Resolve. A cancelled draft emits no game events.
+- Freeze eligible visible stance UIDs at Resolve. Replacing a card removes its eligibility even if a one-card deck immediately reveals the same physical UID. Enemy-phase activations likewise use a frozen row; replacements never add activations.
+- Mandatory discard and scry hold the remaining queue and causal context. Resuming a decision keeps usage and ancestry. Automatic circle cleanup emits no committed-discard event.
+- A killing hit removes the defeated enemy's contributions immediately, but the remaining allied effects and payment responses finish before victory is reported. Fleet destruction ends the encounter.
+- Previews clone world state, snapshots, and RNG. Hidden operations are marked uncertain and do not reveal identities or consume live RNG. Preview state is never committed.
+
+## Extending a mechanic
+
+1. Register a stable chunk ID with typed parameter fields and compatible targets.
+2. Supply its generated description and handler. Keep the primitive reusable; data supplies content-specific numbers and conditions.
+3. Use the existing executor/event protocol for state changes and feedback. Decision effects return control with a pending context and resume the same queue.
+4. The generic Spec/Rule editors render the registry schema. Add no card-specific forms.
+5. Extend registry checks and behavior regressions. Test public preview parity, causal limits, and physical card conservation where relevant.
+
+`content_v2.gd` and `content_legacy.gd` are import adapters and immutable-fixture validators. They do not execute live battle abilities. Migration preserves legacy target patterns and adjacent pair swaps through registered parameters/selectors; new enemy content uses deterministic matching-position targeting.

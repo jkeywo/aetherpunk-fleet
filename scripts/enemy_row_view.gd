@@ -1,0 +1,72 @@
+extends Control
+signal card_selected(uid: int)
+const Catalog = preload("res://scripts/content_catalog.gd")
+const Rules = preload("res://scripts/rules/rule_registry.gd")
+var buttons: Array = []
+var row: Array = []
+var selected := -1
+
+
+func _ready() -> void:
+	resized.connect(_arrange)
+
+
+func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) -> void:
+	row = cards.duplicate(true)
+	selected = highlighted
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	buttons.clear()
+	for index in (1 if row.size() == 1 and size.x < 400 else 3):
+		var button := Button.new()
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.clip_text = true
+		button.add_theme_font_size_override("font_size", 11)
+		add_child(button)
+		buttons.append(button)
+		if index >= row.size():
+			button.text = "ENEMY ROW / Empty\nNo additional physical cards available"
+			button.disabled = true
+			continue
+		var stance: Dictionary = row[index]
+		var lines: Array = []
+		for reaction in stance.get("reactions", []):
+			var key := str(stance.uid) + "/" + str(reaction.id)
+			lines.append(("STUNNED / " if stunned.has(key) else "React / ") + Rules.text("condition", reaction.conditions) + " → " + Catalog.effects_text(reaction.effects))
+		lines.append("Act / " + Catalog.effects_text(stance.get("effects", [])))
+		var margin := MarginContainer.new()
+		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 8)
+		button.add_child(margin)
+		var column := VBoxContainer.new()
+		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		margin.add_child(column)
+		var heading := Label.new()
+		heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		heading.add_theme_font_size_override("font_size", 11)
+		heading.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		heading.text = "%d / %s · %s" % [index + 1, stance.get("owner_name", "Enemy"), stance.name]
+		column.add_child(heading)
+		var body := Label.new()
+		body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		body.add_theme_font_size_override("font_size", 10)
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body.max_lines_visible = 5
+		body.text = "\n".join(lines)
+		column.add_child(body)
+		button.tooltip_text = "%s / %s\n" % [stance.get("owner_name", "Enemy"), stance.name]
+		for reaction in stance.get("reactions", []):
+			button.tooltip_text += reaction.name + " [" + reaction.get("category", "") + "]\n" + Rules.text("condition", reaction.conditions) + " → " + Catalog.effects_text(reaction.effects) + "\n"
+		button.tooltip_text += "Enemy phase: " + Catalog.effects_text(stance.get("effects", [])) + "\nReplacements remain hidden until revealed."
+		button.set_meta("stance_uid", stance.uid)
+		button.pressed.connect(func(): card_selected.emit(stance.uid))
+		if highlighted == stance.uid: button.modulate = Color("#f6d491")
+	_arrange()
+
+
+func _arrange() -> void:
+	for index in buttons.size():
+		buttons[index].position = Vector2(index * size.x / maxf(1, buttons.size()), 0)
+		buttons[index].size = Vector2(size.x / maxf(1, buttons.size()) - 5, size.y)

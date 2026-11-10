@@ -28,7 +28,7 @@ func _ready() -> void:
 	resized.connect(_arrange)
 
 
-func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictionary = {}, selected_slot: int = -1, contributors: Array = [], details: Dictionary = {}) -> void:
+func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictionary = {}, selected_slot: int = -1, contributors: Array = [], details: Dictionary = {}, persistence: Dictionary = {}) -> void:
 	expanded = is_expanded
 	selected = selected_slot
 	contents = circle.duplicate()
@@ -70,8 +70,10 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 			var caption: String = card.get("pending_status", "BONUS" if provides else "In play")
 			if count > 0:
 				caption = ("BONUS · " if provides else "") + "◆ %d used" % count
+			if persistence.has(uid): caption += " · P" + str(persistence[uid])
 			button.text = card.name + "\n" + caption
 			button.tooltip_text = card.name + "\n" + card.get("effect", "")
+			if persistence.has(uid): button.tooltip_text += "\nPersistence %d: remove one at cleanup and keep this card for the next round." % persistence[uid]
 			if card.has("pending_status"):
 				button.tooltip_text += "\n" + card.pending_status + ". Click hand cards to discard as payment. Resolve Card commits; Cancel Play returns all cards."
 			button.modulate = Color("#b7d2e6")
@@ -167,7 +169,7 @@ func _draw_pulse() -> void:
 	var direction := (receiver.get_rect().get_center() - source.get_rect().get_center()).normalized()
 	var start := _edge_point(source, direction)
 	var finish := _edge_point(receiver, -direction)
-	var tint: Color = {"damage": Color("#ffb17d"), "guard": Color("#8bd8ff"), "repair": BONUS_COLOR}.get(pulse_event, Color("#d6adee"))
+	var tint: Color = {"damage": Color("#ffb17d"), "hull_damaged": Color("#ffb17d"), "guard": Color("#8bd8ff"), "shields_added": Color("#8bd8ff"), "repair": BONUS_COLOR, "repaired": BONUS_COLOR}.get(pulse_event, Color("#d6adee"))
 	var glow := tint
 	glow.a = 0.25 + sin(pulse_progress * PI) * 0.45
 	link_overlay.draw_rect(source.get_rect().grow(-2), glow, false, 4, true)

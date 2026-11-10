@@ -1,188 +1,127 @@
-extends "res://tests/support/v2_test.gd"
-
-
+extends "res://tests/support/v3_test.gd"
 func _run() -> void:
-	var b = State.new(7, fixture)
-	expect(b.init_error == "" and b.formation == [0, 1, -1, 2], "Starting diamond assignment incorrect.")
-	var attack := uid_for(b, "broadside")
+	_payment()
+	_damage()
+	_persistence_and_mana()
+	_order_and_chains()
+	done("Combat rules v3")
+
+func _payment() -> void:
+	var doc := neutral()
+	card_def(doc, "broadside").cost = 2
+	card_def(doc, "broadside").rules[0].effects = [attack(7)]
+	var b = State.new(7, doc)
+	var uid := uid_for(b, "broadside")
 	var payer := uid_for(b, "brace")
-	var initial: Array = b.hand.duplicate()
-	expect(b.play(attack, []) != "", "Unpaid card accepted.")
-	expect(b.play(attack, [attack]) != "", "Card paid for itself.")
-	expect(b.play(attack, [payer, payer]) != "", "Duplicate payment accepted.")
-	expect(b.play(attack, [999]) != "", "Missing payment accepted.")
-	expect(b.hand == initial and b.monster_hull == 70, "Rejected action mutated state.")
-	var rng_before: int = b.rng.state
-	var preview: Dictionary = b.preview(attack, [payer], -1, -1, 0)
-	expect(preview.ok and "70 → 61" in preview.text, "Known damage preview incorrect.")
-	expect(b.rng.state == rng_before and b.hand == initial, "Preview changed RNG or hand.")
-	expect(b.play(attack, [payer], -1, -1, 0) == "", "Valid attack rejected.")
-	expect(b.monster_hull == 61 and b.circle[0] == attack and not b.discard.has(attack), "Played card did not remain in circle.")
-	expect(b.discard == [payer] and conserved(b), "Payment conservation incorrect.")
-	expect(b.play(uid_for(b, "escort"), [], 1, -1, 0) != "", "Occupied slot accepted.")
+	var original := JSON.stringify(b.board_snapshot())
+	expect(b.play(uid, []) != "", "Unpaid card accepted.")
+	expect(b.play(uid, [uid]) != "" and b.play(uid, [payer, payer]) != "", "Self/duplicate payment accepted.")
+	expect(b.play(uid, [999]) != "" and JSON.stringify(b.board_snapshot()) == original, "Rejected payment mutated state.")
+	var seed: int = b.rng.state
+	var preview: Dictionary = b.preview(uid, [payer], -1, -1, 0)
+	expect(preview.ok and "70 → 63" in preview.text and b.rng.state == seed, "Damage preview wrong or consumed RNG.")
+	expect(b.play(uid, [payer], -1, -1, 0) == "" and b.monster_hull == 63, "Paid attack failed.")
+	expect(b.circle[0] == uid and b.discard == [payer] and conserved(b), "Played/payment card locations wrong.")
+	expect(b.play(uid_for(b, "strafe"), [], -1, -1, 0) != "", "Occupied circle slot accepted.")
+	b = State.new(7, doc)
+	b.mana = 1
+	uid = uid_for(b, "broadside")
+	expect(b.validate(uid, [], -1, -1, 0, {"crystals": 2}) != "", "Overspent crystals.")
+	expect(b.play(uid, [uid_for(b, "strafe")], -1, -1, 0, {"crystals": 1}) == "" and b.mana == 0, "Mixed card/crystal payment failed.")
+	expect(conserved(b), "Crystal payment lost a card.")
 
-	b = State.new(7, fixture)
-	expect(b.play(-1, [uid_for(b, "escort")], 12) == "", "Move into empty adjacent slot failed.")
-	expect(b.formation == [-1, 1, 0, 2] and b.ships[0].hull == 25, "Movement or reaction incorrect.")
-	expect(b.stance_index != 0 and b.play_order.is_empty(), "Basic action did not advance stance, or occupied circle.")
-	b = State.new(7, fixture)
-	expect(b.play(uid_for(b, "brace"), [uid_for(b, "tow")], -1, -1, 0) == "", "Brace failed.")
-	expect(b.ships[0].guard == 8, "Guard amount incorrect.")
-	b.end_phase()
-	expect(b.ships[0].hull == 28 and b.ships[0].guard == 0, "Guard block/expiry incorrect.")
-	expect(b.phase == "refresh" and b.round_number == 2 and b.circle.all(func(uid): return uid < 0), "Circle cleanup/round incorrect.")
-	expect(b.refresh([]) == "" and b.hand.size() == 7 and conserved(b), "Retain/refill incorrect.")
-	_test_geometry()
-	_test_circle()
-	_test_chains()
-	_test_death()
-	_test_reactions_and_healing()
-	done("Diamond combat rules")
-
-
-func _test_geometry() -> void:
-	expect(Geometry.neighbours(0).size() == 2, "Original circle degree incorrect.")
-	expect(Geometry.neighbours(0, true).size() == 5 and Geometry.neighbours(0, true).has(1), "Original links lost at expansion.")
-	expect(Geometry.neighbours(4, true).size() == 4, "Centre should have four neighbours.")
-	for corner in range(5, 9):
-		expect(Geometry.neighbours(corner, true).size() == 2, "Corner should have two neighbours.")
-	expect(Geometry.unit_neighbours(0) == [1, 2] and not Geometry.unit_neighbours(0).has(3), "Formation links incorrect.")
-
-
-func _test_circle() -> void:
+func _damage() -> void:
 	var doc := neutral()
+	card_def(doc, "broadside").rules[0].effects = [attack(4, 3)]
 	var b = State.new(1, doc)
-	all_in_hand(b)
-	for slot in 9:
-		expect(b.play(b.hand[0], [], -1, -1, slot) == "", "Free circle placement failed.")
-		expect(b.expanded == (slot >= 3), "Expansion occurred at wrong occupancy.")
-	expect(b.validate(b.hand[0], []) != "", "Full circle allowed another card.")
-	expect(conserved(b), "Circle placements lost cards.")
-	expect(b.play(-1, [b.hand[0]], 12) == "", "Full circle blocked a basic manoeuvre.")
-	b.end_phase()
-	expect(not b.expanded and b.play_order.is_empty() and b.used_triggers.is_empty(), "Circle did not contract and reset.")
-	expect(conserved(b), "Circle cleanup lost cards.")
-	var extra: Array = b.hand.slice(0, maxi(0, b.hand.size() - 7))
-	expect(b.refresh(extra) == "" and b.hand.size() == 7, "Refresh failed after large hand.")
-
-	doc = neutral()
-	card_def(doc, "salvo").tags = ["Movement"]
-	doc.leviathans[0].stances[0].reactions = [{"id": "r", "name": "Test reaction", "trigger": {"kind": "tag", "tag": "Movement"}, "effects": []}]
+	b.enemies[0].armour = 2
+	b.enemies[0].guard = 2
+	b.cover[4] = 3
+	b.play(uid_for(b, "broadside"), [], -1, -1, 0)
+	# First hit: C3, A1. Second: A2 S2. Third: A2 hull2.
+	expect(b.monster_hull == 68 and b.enemies[0].guard == 0 and b.cover[4] == 0, "Cover → armour → shields → hull per-hit order wrong.")
+	var hits: Array = b.feedback_events.filter(func(e): return e.kind == "damage")
+	expect(hits.size() == 3 and hits[0].cover_absorbed == 3 and hits[0].armour_absorbed == 1 and hits[1].shields_absorbed == 2, "Per-hit metrics incorrect.")
+	var r := R.rule("passive")
+	r.id = "bonus"
+	r.modifiers = [{"kind": "attack_damage", "target": "self_card", "amount": 2}]
+	card_def(doc, "broadside").rules[1] = r
 	b = State.new(1, doc)
-	for key in ["advance", "tow", "escort"]:
-		b.play(uid_for(b, key), [], -1, -1, b.first_slot())
-	b.play(uid_for(b, "salvo"), [], -1, -1, 3)
-	var kinds: Array = b.feedback_events.map(func(event): return event.kind)
-	expect(kinds.find("circle_expanded") >= 0 and kinds.find("circle_expanded") < kinds.find("reaction_triggered"), "Expansion must precede enemy reaction.")
-	expect(kinds.count("reaction_triggered") == 1 and kinds.count("stance_changed") == 1, "Single stance chained to the same action.")
-
-
-func _test_chains() -> void:
-	var doc := neutral()
-	var host := card_def(doc, "advance")
-	var echo := card_def(doc, "tow")
-	host.triggers = [trigger("echo", "damage", [{"kind": "damage_monster", "amount": 1}])]
-	echo.effects = [{"kind": "damage_monster", "amount": 1}]
-	echo.triggers = [trigger("echo", "damage", [{"kind": "damage_monster", "amount": 1}])]
-	var b = State.new(2, doc)
-	b.play(uid_for(b, "advance"), [], -1, -1, 0)
-	b.play(uid_for(b, "tow"), [], -1, -1, 1)
-	expect(b.monster_hull == 67 and b.used_triggers.size() == 2, "Finite chained triggers incorrect.")
-	expect(b.history.filter(func(line): return line.begins_with("Card trigger:")).size() == 2, "Trigger fired repeatedly in a cycle.")
-	b.play(uid_for(b, "escort"), [], -1, -1, 2)
-	expect(b.used_triggers.size() == 2, "A trigger fired again on another card this turn.")
-
-	doc = neutral()
-	host = card_def(doc, "advance")
-	host.modifiers = [{"stat": "cost", "amount": 2, "tag": "", "condition": {"tag": "", "min": 0}},
-		{"stat": "damage", "amount": 2, "tag": "", "condition": {"tag": "", "min": 0}}]
-	echo = card_def(doc, "tow")
-	echo.cost = 2
-	echo.effects = [{"kind": "damage_monster", "amount": 3}]
-	echo.on_play = [{"condition": {"tag": "Attack", "min": 1}, "effects": [{"kind": "damage_monster", "amount": 4}]}]
+	b.enemies[0].armour = 2
+	b.play(uid_for(b, "broadside"), [], -1, -1, 0)
+	expect(b.monster_hull == 62, "Generic bonus applied to every hit instead of first hit.")
+	card_def(doc, "broadside").rules[1].modifiers[0].kind = "per_hit_damage"
 	b = State.new(1, doc)
-	b.play(uid_for(b, "advance"), [], -1, -1, 0)
-	var uid := uid_for(b, "tow")
-	expect(b.effective_cost(uid, 1) == 0 and b.effective_cost(uid, 2) == 2, "Adjacency cost modifier incorrect.")
-	var quote: Dictionary = b.preview(uid, [], -1, -1, 1)
-	expect(quote.ok and "70 → 59" in quote.text, "Bonus preview incorrect.")
-	b.play(uid, [], -1, -1, 1)
-	expect(b.monster_hull == 59, "Conditional and ongoing damage bonuses incorrect.")
-
+	b.enemies[0].armour = 2
+	b.play(uid_for(b, "broadside"), [], -1, -1, 0)
+	expect(b.monster_hull == 58, "Explicit per-hit bonus did not apply to every hit.")
+	doc = neutral(true)
+	card_def(doc, "broadside").rules[0].effects = [attack(10, 3)]
+	b = State.new(1, doc)
+	b.enemies[0].hull = 3
+	b.play(uid_for(b, "broadside"), [], -1, -1, 0, {"enemy": -1})
+	expect(b.enemies[0].hull == 0 and b.enemies[1].hull == 20 and b.enemies[2].hull == 12, "Volley retargeted after target defeat.")
+	expect(b.feedback_events.filter(func(e): return e.kind == "damage").size() == 1, "Dead target took remaining hits.")
 	doc = neutral()
-	host = card_def(doc, "advance")
-	host.triggers = [trigger("draw", "played", [{"kind": "draw_discard", "amount": 2, "discard": 2}, {"kind": "damage_monster", "amount": 3}])]
-	b = State.new(3, doc)
-	b.play(uid_for(b, "advance"), [], -1, -1, 0)
-	b.play(uid_for(b, "tow"), [], -1, -1, 1)
-	expect(b.phase == "discard" and b.monster_hull == 70, "Triggered discard did not suspend later effects.")
-	b.discard_for_relay(b.hand[0])
-	expect(b.phase == "discard" and b.monster_hull == 70, "First discard resumed too early.")
-	b.discard_for_relay(b.hand[0])
-	expect(b.phase == "fleet" and b.monster_hull == 67 and b.used_triggers.size() == 1, "Trigger continuation or usage incorrect.")
-	expect(conserved(b), "Paused chain lost card instances.")
+	card_def(doc, "broadside").rules[0].effects = [attack(3, 1, "Short")]
+	b = State.new(1, doc)
+	b.formation = [0, -1, 2, 1]
+	expect(b.play(uid_for(b, "broadside"), [], -1, -1, 0) != "", "Short attack originated from rear.")
+	b = State.new(1, doc)
+	b.enemy_position = 3
+	expect(b.play(uid_for(b, "broadside"), [], -1, -1, 0) != "", "Short attack targeted rear.")
+	card_def(doc, "broadside").rules[0].effects.insert(0, {"kind": "move", "target": "owner", "destination": "chosen_slot", "guard": 0})
+	b = State.new(1, doc)
+	b.formation = [0, -1, 2, 1]
+	expect(b.play(uid_for(b, "broadside"), [], 1, -1, 0) == "" and b.monster_hull == 67, "Move-before-attack did not validate new position.")
 
-	doc = neutral()
-	host = card_def(doc, "brace")
-	host.triggers = [trigger("copy", "damage", [{"kind": "damage_monster", "amount": 1}])]
-	card_def(doc, "broadside").effects = [{"kind": "damage_monster", "amount": 1}]
-	b = State.new(4, doc)
+func _persistence_and_mana() -> void:
+	var b = State.new(1, neutral())
 	all_in_hand(b)
-	b.play(uid_for(b, "brace"), [], -1, -1, 0)
-	b.play(uid_for(b, "brace"), [], -1, -1, 3)
-	b.play(uid_for(b, "escort"), [], -1, -1, 1)
-	b.play(uid_for(b, "patch"), [], -1, -1, 2)
-	b.play(uid_for(b, "broadside"), [], -1, -1, 4)
-	expect(b.monster_hull == 67 and b.used_triggers.size() == 2, "Physical copies did not have independent once-per-turn triggers.")
-
-
-func _test_death() -> void:
-	var doc := neutral()
-	doc.leviathans[0].stances[0].effects = [{"kind": "damage_ship", "target": "upper", "amount": 3}]
-	var b = State.new(1, doc)
-	b.ships[1].hull = 1
+	for point in 9: expect(b.play(b.hand[0], [], -1, -1, point) == "", "Circle placement failed.")
+	expect(b.expanded and conserved(b), "Expansion or conservation failed.")
+	var retained: int = b.circle[8]
+	b.persistence[retained] = 1
+	b.cover[0] = 4
+	b.ships[0].guard = 3
 	b.end_phase()
-	expect(b.formation == [0, -1, -1, 2], "Destroyed unit collapsed the diamond.")
+	expect(b.phase == "refresh" and b.mana == 1 and b.round_number == 2, "Retention mana or turn transition wrong.")
+	expect(b.circle[8] == retained and b.persistence[retained] == 0 and b.expanded, "Last persistence token did not buy an extra round/retain expansion.")
+	expect(b.cover[0] == 0 and b.ships[0].guard == 0 and conserved(b), "Temporary defences did not expire.")
 	b.refresh([])
-	expect(b.play(uid_for(b, "broadside"), []) != "", "Destroyed owner played a card.")
-	expect(b.play(-1, [uid_for(b, "broadside")], 12) == "", "Destroyed owner's card could not pay.")
-	doc = fixture.duplicate(true)
-	var c := card_def(doc, "strafe")
-	c.cost = 0
-	doc.setup.opening_hand[0] = "strafe"
-	b = State.new(1, doc)
-	b.monster_hull = 3
-	b.ships[1].hull = 1
-	b.play(uid_for(b, "strafe"), [], 0, -1, 0)
-	expect(b.outcome == "victory" and b.ships[1].hull == 1, "Lethal action allowed a reaction.")
-
-
-func _test_reactions_and_healing() -> void:
-	var b = State.new(1, fixture)
-	b.stance_index = 3
-	b.ships[1].hull = 18
-	expect(b.play(uid_for(b, "patch"), [uid_for(b, "escort")], 1, -1, 0) == "", "Repair action rejected.")
-	expect(b.ships[1].hull == 17, "Capped repair or healing reaction incorrect.")
-	b = State.new(1, fixture)
-	b.stance_index = 3
-	b.play(uid_for(b, "patch"), [uid_for(b, "escort")], 1, -1, 0)
-	expect(b.ships[1].hull == 20 and b.stance_index == 3, "Zero healing triggered a reaction.")
-	b = State.new(1, fixture)
-	b.formation = [1, 0, -1, 2]
-	expect(b.play(uid_for(b, "salvo"), [uid_for(b, "brace"), uid_for(b, "broadside")]) != "", "Acting-position restriction ignored.")
+	b.end_phase()
+	expect(b.play_order.is_empty() and not b.expanded and not b.persistence.has(retained), "Zero-token card did not leave at following cleanup.")
+	b.refresh([])
+	b.hand = b.hand.slice(0, 1)
+	b.mana = 1
+	b.end_phase()
+	expect(b.mana == 0, "Unused mana carried over or one card earned retention reward.")
 	var doc := neutral()
-	doc.leviathans[0].stances[0].reactions = [
-		{"id": "first", "name": "First", "trigger": {"kind": "tag_position", "tag": "Movement", "positions": ["upper"]}, "effects": [{"kind": "damage_ship", "target": "actor", "amount": 2}]},
-		{"id": "second", "name": "Second", "trigger": {"kind": "tag", "tag": "Movement"}, "effects": [{"kind": "damage_ship", "target": "actor", "amount": 9}]}]
+	doc.setup.mana_capacity = 3
+	doc.setup.mana_reward = 2
 	b = State.new(1, doc)
-	b.play(-1, [uid_for(b, "escort")], 11)
-	expect(b.ships[0].hull == 26, "Final-position trigger or reaction priority incorrect.")
-	expect(b.feedback_events.filter(func(event): return event.kind == "reaction_triggered").size() == 1, "Multiple reactions fired for one action.")
+	b.end_phase()
+	expect(b.mana == 2, "Configured mana generation/capacity ignored.")
+
+func _order_and_chains() -> void:
+	var doc := neutral()
+	card_def(doc, "brace").rules[1] = rule("echo", "hull_damaged", [attack(1)], "adjacent")
+	card_def(doc, "broadside").rules = [rule("play", "on_play", [attack(1)]), rule("echo", "hull_damaged", [attack(1)], "adjacent")]
+	var b = State.new(1, doc)
+	b.play(uid_for(b, "brace"), [], -1, -1, 0)
+	b.play(uid_for(b, "broadside"), [], -1, -1, 1)
+	expect(b.monster_hull == 67, "Finite reciprocal chain failed.")
+	var count: int = b.used_triggers.size()
+	b.play(uid_for(b, "broadside"), [], -1, -1, 3)
+	expect(b.monster_hull == 63 and b.used_triggers.size() <= count + 1, "Card did not refresh its per-action limit or recursive loop ran.")
 	doc = neutral()
-	card_def(doc, "advance").modifiers = [{"stat": "cost", "amount": 2, "tag": "", "condition": {"tag": "", "min": 0}}]
-	card_def(doc, "tow").cost = 2
-	doc.leviathans[0].stances[0].reactions = [{"id": "cost", "name": "Cost", "trigger": {"kind": "cost", "threshold": 2}, "effects": [{"kind": "damage_ship", "target": "actor", "amount": 1}]}]
+	card_def(doc, "broadside").cost = 1
+	card_def(doc, "broadside").rules[0].effects = [attack(2)]
+	card_def(doc, "brace").rules[1] = rule("discard", "discarded", [attack(3)], "self_card", "any")
 	b = State.new(1, doc)
-	b.play(uid_for(b, "advance"), [], -1, -1, 0)
-	b.play(uid_for(b, "tow"), [], -1, -1, 1)
-	expect(b.ships[2].hull == 17, "Discount changed printed-cost reaction eligibility.")
+	b.play(uid_for(b, "broadside"), [uid_for(b, "brace")], -1, -1, 0)
+	var hits: Array = b.feedback_events.filter(func(e): return e.kind == "damage")
+	expect(b.monster_hull == 65 and hits.size() == 2, "Committed mana discard response did not run after card.")
+	var kinds: Array = b.feedback_events.map(func(e): return e.kind)
+	expect(kinds.find("damage") < kinds.find("cards_discarded") and kinds.find("cards_discarded") < kinds.find("card_triggered"), "Payment discard resolved before main effect.")
+	expect(conserved(b), "Discard response broke conservation.")

@@ -2,114 +2,69 @@
 
 Godot 4.7 / GDScript / Compatibility renderer. Open `project.godot` and press **F5**.
 
-## Diamond battle
+The prototype includes a main menu, battle, victory/defeat summaries, and a live content editor. **Start Game**, **Retry Battle**, and editor playtests use the saved project setup. Results and running battles keep detached snapshots.
 
-The battle follows the supplied layout: allied diamond left, enemy diamond right, a magic circle above the fanned shared hand, and deck/discard piles in the lower corners. Front faces the opponent. Each side has **Front, Upper Middle, Lower Middle, Rear** positions. Three allied ships and one leviathan are supported; empty slots persist after movement and destruction.
+## Playing
 
-Drag a hand card onto an empty unlocked circle slot to begin a **pending play**. The card leaves the visible hand and appears on the circle marked **PENDING**, with its payment progress. Clicking another card before placement selects that card instead; payment begins only after placement. Click remaining hand cards to discard them as payment: each animates into the discard pile and contributes its payment value. The pile labels these cards as pending until resolution.
+Drag a card from the shared hand into an empty magic-circle slot. Choose any requested targets, optional resource boosts, then click other hand cards and/or temporary crystals to pay. **Resolve Card** commits the action; **Cancel Play** returns the pending card, payment, crystals, and resource reservations without firing abilities or consuming randomness.
 
-Choose any required target or movement explicitly, then press **Resolve Card**. The button remains disabled until the cost and choices are satisfied. Once fully paid, further payment clicks do not discard extra cards. Printed payment values and excess-payment loss are unchanged.
+The mana cost is locked on placement. Excess payment is lost. Main effects and allied chains finish before payment cards are discarded in click order and their discard abilities resolve. Newly exposed discard-top passives affect subsequent plays. After those chains finish, each represented enemy may react once, in formation order. Replacement stance cards cannot react to the action revealing them, including a one-card deck that replaces itself.
 
-**Cancel Play** returns the pending card and every payment card to their exact original hand order, including after full payment or target selection. Free cards also wait for Resolve and can be cancelled. No damage, guard, healing, movement, draws, card chains, monster reactions, history entries, or RNG changes occur before Resolve. Cancellation is available before resolution; it does not undo a completed action. A pending play must be resolved or cancelled before dragging another card or ending the phase.
+Hover cards, ships, circle slots, and enemy-row cards for complete generated rules. Green **BONUS** marks adjacent contributors; animated links show chained effects. Ships show hull, shields, armour, weapon, and personal resources. Stance cards show reaction conditions and enemy-phase activity.
 
-Available destinations have blue **DROP HERE** outlines; hover turns the destination gold and highlights green **BONUS** sources and links. The preview recalculates adjacency, discounts, conditions, and available payment for that slot. Occupied, locked, unaffordable, and position-restricted destinations reject the drop. Clicking a card and then a circle slot provides an alternative to dragging. Dropping outside or onto an invalid slot leaves combat unchanged. Dragging is unavailable during resolution, mandatory discard, or hand refresh.
+### Fleet and preparation
 
-Hover cards or occupied circle slots for complete rules. **Manoeuvre** starts a pending one-resource action to move into an adjacent empty position or swap with its occupant; click payment cards, choose movement, then Resolve or Cancel Play.
+Each of the three ships has a weapon, armour, and a named resource. Resources start at zero, persist between rounds, and reset on defeat. The initial capacity is six, before authored bonuses. Optional boosts reserve their resource before automatic spending rules evaluate.
 
+Choose a captain, level, and branches in **Editor → Battle Setup**. Captains cannot be assigned twice. Each ship contributes its starter design twice and its captain's design twice. Level 2 and level 3 each add another pair, giving **4 / 6 / 8 physical cards per ship**. Each level-2 branch blocks one different level-3 package; the third level-3 package is available on either path. Tier labels the captain's authored power budget; it does not multiply statistics.
 
-### Basic ship actions
+Initial provisional balance:
 
-Drag a card onto **its own ship** to select a basic repair, or onto an **adjacent living player ship** to select a swap. Confirm with the action button. Each action discards exactly that card, needs no extra payment, and ignores its printed cost, effects, tags, and acting-position restrictions. The card stays out of the circle and cannot fire circle triggers. Basic actions work even with a full circle.
+| Ship | Hull | Armour | Weapon | Resource |
+| --- | ---: | ---: | --- | --- |
+| Bastion | 28 | 2 | 4, Short | Resolve: mitigation and protection |
+| Kestrel | 20 | 0 | 5, Long | Momentum: movement and attacks |
+| Lamplighter | 18 | 1 | 3, Long | Aether: actual repair and support |
 
-- **Repair:** restore 2 hull, capped at maximum. Full-hull ships cannot use this action.
-- **Recover a wreck:** defeated ships appear as recovery targets below the allied diamond. Their own cards add 2 recovery points per action; progress persists between turns. At 4 points they revive with 4 hull (capped at maximum), zero guard, and reset recovery. Use their former position if empty; otherwise use the first empty position in Front / Upper / Lower / Rear order. Defeated ships cannot swap or play cards into the circle.
-- **Swap:** the card's owning ship and target must both be alive and connected by a formation edge. The two ships exchange positions.
+The shipped encounter starts at level 2 with Iona, Rook, and Voss, an 18-card fleet deck, and a fixed seven-card opening. Stormmaw contributes six stance cards, Storm Ray three, and Needlewing two. All balance values are editable.
 
-Repair targets glow green, adjacent swap targets blue, and the hovered/selected target gold. Tooltips and the inspection line show the discarded card, actual healing, recovery progress, revival position, or the reason a target is invalid. Dropping stages its own card as a pending discard. The action button confirms it; Cancel Play returns the card without applying healing, recovery, movement, or reactions. No additional payment is accepted for basic ship actions.
+### Formation, attacks, and basic actions
 
-After each basic action, check the visible monster reaction once. Basic repairs use the Repair tag; swaps use Movement; both have action cost zero for reaction checks. Only actual restored hull counts as healing, so recovery below the revive threshold does not trigger healing reactions. Revival can provoke retaliation immediately. Preview text shows these consequences. The whole fleet being destroyed still ends the battle.
+Both sides use Front, Upper Middle, Lower Middle, and Rear diamond positions. Short attacks cannot originate from Rear or target Rear. Movement earlier in an action changes the legal origin. Enemy attacks choose their matching position, except Rear attacks Front; otherwise they choose the first legal occupied position in Front, Upper, Lower, Rear order.
 
-Edit **Basic repair** and **Revive threshold** in the editor's Battle Setup panel. Both must be positive integers. Saved setups without these fields use 2 and 4. Ordinary repair cards retain their existing living-target rules.
+Each attack locks one target. Hits stop when it dies. Each hit resolves **slot cover → armour → shields → hull**. Armour reduces every hit without being consumed. Generic attack bonuses apply to the first hit; per-hit bonuses are separate chunks. Damage-threshold reactions use actual hull loss. Enemy-phase attacks retain escalation: +1 damage per round after round 3.
 
+Drag a ship's own card onto it for a basic repair, or onto an adjacent living ally to swap. These actions discard the card without paying its printed mana cost or running its On Play rules. Repair restores 2 hull. A defeated ship accumulates recovery and revives with 4 hull when it reaches 4 recovery, occupying its former position if free, otherwise the first empty position. Recovery and movement have appropriate highlights and tooltips. The basic discard and actual repair/revival/movement can trigger authored rules.
 
-### Magic circle
+### Magic circle, persistence, and rounds
 
-The first four slots are North, East, South, and West, connected in a diamond. Filling them unlocks Centre and four outer corners. The fourth card and its complete allied chain resolve using the original graph; expansion happens afterward, before the monster reaction.
+The first four circle slots form a cycle. Filling all four expands it to nine spaces after the allied action. Centre touches all four original spaces; each new corner touches two. Original links remain. Positions never compact.
 
-Expansion keeps the original links. Centre touches all four original slots. Each corner touches its two neighbouring original points. Original slots consequently have five neighbours after expansion. Any empty unlocked slot can receive a card, with a maximum of nine plays resident at once. A full circle still permits manoeuvres and ending the phase.
+Played cards stay active through the enemy phase. At player-turn cleanup, a card starting with persistence loses one token and stays, including when it reaches zero. A card starting cleanup with zero tokens is discarded without On Discard abilities. Retained cards keep their exact positions and adjacency; they do not replay On Play. Expansion lasts until the circle is entirely empty.
 
-Played cards stay in the circle through the enemy phase. They are discarded at the next player-turn start, when the circle contracts and trigger usage resets. Payment cards animate to pending discard when clicked; their discard becomes final when the action resolves. Circle cleanup and payment never fire card triggers. All physical card instances remain conserved across hand, deck, discard, circle, and held payment.
+At **End Fleet Phase**, holding at least two cards earns one temporary mana crystal at the next player turn, subject to capacity (normally one). Unspent crystals expire when ending the fleet phase. Click crystals during pending payment; they provide one mana and cannot satisfy discard effects. Generation and capacity can be modified by rules.
 
-### Conditions, modifiers, and chains
+The three visible enemy cards activate left to right, discarding and replacing each afterward. Multiple cards can activate one enemy repeatedly. Replacements add no activations to that phase. Each surviving enemy that had no activation performs its weaker default action afterward. Defeated enemies' cards leave the shared row and pool.
 
-Cards can have:
+After enemy actions, shields and cover expire, persistence cleanup runs, turn limits reset, and earned mana is granted. Retain your hand, optionally click cards to discard, then refill to seven. These deliberate discards can trigger abilities. Win after defeating all enemies while a ship survives; lose when the fleet is destroyed. Results report surviving ships, remaining hull, and rounds.
 
-- **Conditional on-play effects** enabled by counts of adjacent card tags.
-- **Ongoing neighbour modifiers** adding damage, guard, or healing, or reducing the cost of a neighbouring incoming card. Reductions floor cost at zero; monster reactions that check printed cost use the original value.
-- **Triggered effects** watching neighbouring card plays or card-caused damage, guard, healing, draws, mandatory discards, and movement.
+### Control and hidden information
 
-Resolve the played card first, then process triggered effects in FIFO order, with ties broken by card play order and rule order. Effects can trigger other eligible cards. Each rule on each physical card instance can fire **once per turn**, marked used when queued to prevent loops. Continuous modifiers remain active after triggers are used and do not emit events.
+**Stun** suppresses one selected visible reaction until fleet-phase end; enemy activity continues. **Confuse** discards and replaces one selected row card. **Scry** reveals up to X available deck cards, takes Y into hand, and lets you order the rest back on top or discard them. Mandatory discard and scry suspend the committed queue. Revealed decisions must be completed; Cancel Play cannot undo hidden information.
 
-When a card and destination slot are selected, contributing neighbours have a green **BONUS** badge, a bright border, and a green link to the selected gold slot. Other occupied neighbours remain purple. Hover a bonus source for its cost/damage/guard/healing contribution or the conditional effect it enables. These public bonuses stay visible while payment or target choices are incomplete.
+Previews run the same registered effects on detached state. They show known public effects and mark uncertainty, without consuming live RNG or revealing draw/replacement identities.
 
-As each chained effect resolves, a directional spark travels from the card that caused the event to the reacting card, with both endpoints outlined. Damage links are orange, guard links blue, repair links green, and other event links purple. The chain banner names both cards and the triggering event. Pulses follow the resolution queue, pause with the battle menu, and clear when finished.
+## Content editor and rules
 
-Triggered effects have automatic source/event-actor targets and no new movement prompts. Draw/discard effects pause the queue for player choices, then resume without resetting usage. Circle effects cannot give guard or repairs to defeated ships; basic recovery can revive them. Stored in-circle magic remains until cleanup. Previews simulate public effects without consuming real RNG, drawing hidden card identities, or revealing the next stance.
+**Editor** has searchable Enemies, Ships, Captains, and Cards tabs with New, Duplicate, and Delete. Stable IDs survive renames. Referenced entries cannot be deleted until their loadouts, ownership, or setup references change.
 
-### Enemy stances
+The right panel contains shared in-game previews and Battle Setup. Configure fleet order, captains, levels, legal branches, one to four enemy instances, fixed/random opening hand, mana defaults, and basic-action values. Each enemy contributes editable stance designs with copy counts and has a separate weaker default action.
 
-Each leviathan has a small shuffled stance deck. Only the current stance is visible. It specifies ordered reaction rules and an enemy-phase effect sequence.
+Rules are reusable **code-defined chunks** in `scripts/rules/rule_registry.gd`. Data contains IDs and parameters, never executable scripts. The registry owns typed schemas, validation, editor fields, generated text, and handlers. The generic rule editor combines triggers, boolean conditions, optional resource costs, ordered effects, and passive modifiers. See [docs/RULE_CHUNKS.md](docs/RULE_CHUNKS.md) for authoring and execution details.
 
-After the full allied action and trigger chain, the first qualifying reaction resolves and immediately changes stance. The new stance cannot react to that same action. Ending the phase executes the current stance's activity, then changes stance again. Draw stances without replacement and reshuffle on exhaustion; a single-stance deck can repeat.
+**Save All** validates and writes `data/content.json`. It creates no Git commit. **Revert Unsaved Changes** restores saved content. **Save & Test Battle** saves first, then launches a battle with Return to Editor in its menu and results. Leaving a dirty draft offers Save, Discard, or Cancel. Failed validation/writes preserve the previous save.
 
-Guard absorbs damage before hull and expires after enemy activity. Intent damage still gains one per round beyond round three. A lethal allied action wins before enemy retaliation.
-
-## Example circle opening
-
-The saved setup starts with four example cards plus Broadside, Brace for Impact, and Signal Relay. The fleet still contributes six cards per ship (18 total). Each example replaces one old copy; every original card remains available. The bundled content is now version 2 so these rules are editable immediately.
-
-| Card | Ship | Cost | Circle mechanic |
-| --- | --- | --- | --- |
-| Aether Conduit | Lamplighter | 0 | Gain 2 guard. Neighbouring Attack cards gain +2 damage per damage effect; all neighbouring cards cost 1 less. |
-| Resonant Bulwark | Bastion | 0 | Gain 2 guard. Once per turn, a neighbouring Attack dealing damage gives its acting ship 3 guard. |
-| Arc Echo | Kestrel | 0 | Deal 2 damage. Once per turn, a neighbouring card granting guard makes Arc Echo deal 2 damage. |
-| Convergence Bolt | Kestrel | 1 | Deal 3 damage, plus a separate 3-damage effect if adjacent to a Tactic. |
-
-For each step, drop the card into its slot and press Resolve Card; no payment cards are required for the first four plays:
-
-1. **Aether Conduit → North.** Lamplighter gains 2 guard.
-2. **Resonant Bulwark → East.** Bastion gains 2 guard; its reaction is armed.
-3. **Arc Echo → South.** Deal 2 damage, trigger Bulwark to give Kestrel 3 guard, then trigger Arc Echo for 2 more damage. Stormmaw has 66 hull. Both trigger badges are used for this turn.
-4. **Convergence Bolt → West.** Adjacent Conduit reduces the cost to zero, enables the Tactic condition, and adds 2 to each damage effect: 5 + 5 = 10 damage. Stormmaw has 56 hull and the circle expands.
-5. Optionally play **Broadside → Centre**, paying with **Brace for Impact**. Conduit reduces the cost to 1 and raises damage to 11. The used triggers stay spent. Stormmaw has 45 hull.
-
-These outcomes assume the unmodified opening stance and cards. To compare placement, retry and play Convergence Bolt at South directly after the North Conduit: it costs 1 and deals only 3 damage because the two cards are not adjacent. Hover cards and circle slots for full generated rules. Signal Relay can draw more cards for experimenting with expanded placements; its mandatory discard pauses resolution normally.
-
-
-## Live content editor
-
-Use **Editor** on the main menu. Its tabs create, duplicate, edit, and delete leviathans, ships, and cards. Stable IDs survive renaming, and referenced entries cannot be deleted until their references are changed.
-
-The right inspector switches between:
-
-- **Preview:** shared in-game card/unit/stance widgets, updated directly from unsaved fields. Card previews offer a mini-circle, expanded layout, destination slot, and neighbouring tag controls. Invalid drafts remain visible with validation messages.
-- **Battle Setup:** choose the leviathan, three ships and their distinct positions, the enemy position, and a random or fixed seven-card opening hand.
-
-Leviathans edit named stances, their starting stance, reaction priority and conditions, and enemy-phase activity. Cards edit permitted acting positions, ordered base effects, conditional effects, modifiers, and once-per-turn trigger rules. Ships edit hull, colour, role, and variable card loadouts.
-
-**Save All** validates and writes `data/content.json`; it never creates a Git commit. **Revert Unsaved Changes** restores saved definitions. **Save & Test Battle** launches the saved setup, with Return to Editor in the gear menu and result screen. Editor selection and preview context are remembered in memory.
-
-Leaving the editor or closing the window with a dirty draft offers Save, Discard, and Cancel. Invalid content and failed writes preserve the previous save.
-
-## Content versions
-
-Version 2 defines explicit positions, stances, adjacency conditions, modifiers, and trigger rules. Existing version-1 content is migrated **in memory** and remains unchanged on disk until an explicit Save.
-
-Ranks map as 1 → Front, 2 → both middle positions, 3 → Rear. Existing reaction and intent lists are cycled from their selected starting entries into enough stances to preserve every behaviour. Root ship, card, and leviathan IDs are retained.
-
-`tests/fixtures/gdd_content.json` remains the immutable version-1 fixture. `tests/fixtures/diamond_content.json` freezes the migrated version-2 baseline. Runtime designers can edit project content without changing regression expectations.
-
-Main modules: `content_catalog.gd` (migration/validation/text), `battle_state.gd` (rules), `battle_geometry.gd` (graphs), `battle.gd` (layout/input), `combat_feedback.gd` (animation), and shared `card_face.gd`, `unit_view.gd`, `formation_view.gd`, `circle_view.gd`, and `stance_view.gd`.
+Content version 3 includes progression, captains, composable rules, and the shared enemy deck. Versions 1 and 2 migrate in memory without rewriting files until Save. IDs, imported decks, and supported effects are retained. Imported cards are explicitly flagged if they do not meet the new 2–3-block convention; migration does not invent abilities. The immutable `gdd_content.json`, `diamond_content.json`, and `fleet_content.json` fixtures isolate regressions from live design edits.
 
 ## Verification
 
@@ -117,19 +72,9 @@ With the Godot console executable on PATH:
 
 ```powershell
 godot --headless --path . --editor --import --quit
-godot --headless --path . --script res://tests/battle_rules.gd
-godot --headless --path . --script res://tests/content_rules.gd
-godot --headless --path . --script res://tests/smoke_flow.gd
-godot --headless --path . --script res://tests/combat_feedback.gd
-godot --headless --path . --script res://tests/results_flow.gd
-godot --headless --path . --script res://tests/editor_flow.gd
-godot --headless --path . --script res://tests/circle_examples.gd
-godot --headless --path . --script res://tests/circle_feedback.gd
-godot --headless --path . --script res://tests/drag_drop.gd
-godot --headless --path . --script res://tests/basic_actions.gd
-godot --headless --path . --script res://tests/payment_flow.gd
+./tests/run_tests.ps1 -Godot godot
 ```
 
-Suites cover unchanged payment, guard, repair, conservation, lethal-hit and results rules plus new positions, expansion timing, modifier costs, finite chains, paused discards, independent copies, stance transitions, migration, safe saving, live previews, real playtests, navigation, and animation cancellation. Editor/persistence tests use temporary user-data files and never save project content.
+Tests cover registry metadata/forms/execution, immutable migrations and failed saves, physical pair assembly and branches, resources and boosts, payment cancellation, mana, persistence, armour/multi-hit/range, enemy ownership/replacements/defaults, control effects, hidden decisions, native drag/drop, animated feedback, results/retries, and editor playtests. UI checks use a 1280 × 800 viewport; editor and battle content scroll in smaller windows.
 
-The UI targets 1280 × 800; smaller windows scroll. Multiple enemies, variable fleet sizes, custom scripts, facing/cover bonuses, and campaign progression remain outside this version. No remote or export target is configured.
+Campaign progression, XP, acquisition, production art, and custom content scripts remain outside this prototype.

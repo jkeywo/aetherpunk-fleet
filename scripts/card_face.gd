@@ -19,7 +19,7 @@ func _init() -> void:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 5)
 	margin.add_child(column)
-	for spec in [["numbers", 14], ["owner", 11], ["name", 18], ["positions", 11], ["rules", 13], ["tags", 11]]:
+	for spec in [["numbers", 14], ["owner", 11], ["name", 16], ["positions", 11], ["rules", 11], ["tags", 11]]:
 		var label := Label.new()
 		label.add_theme_font_size_override("font_size", spec[1])
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -43,14 +43,14 @@ func configure(card: Dictionary, owner: Dictionary = {}) -> void:
 	owner_info = owner.duplicate(true)
 	labels.numbers.text = "COST %d     PAYS %d" % [card.get("cost", 0), card.get("pays", 1)]
 	labels.numbers.modulate = Color("#e8bd77")
-	labels.owner.text = str(owner.get("name", "Unassigned")).to_upper()
+	labels.owner.text = str(owner.get("name", "Unassigned")).to_upper() + " · " + str(card.get("type", "")).to_upper()
 	labels.owner.modulate = Color(owner.get("color", "#91c8ad"))
 	labels.name.text = card.get("name", "Untitled card") if not str(card.get("name", "")).strip_edges().is_empty() else "Untitled card"
 	labels.positions.text = card.get("ranks", ", ".join(card.get("positions", [])))
-	labels.rules.text = card.get("effect", "")
+	labels.rules.text = str(card.get("effect", "")).replace(" [once per action]", "")
 	labels.tags.text = card.get("tags", "") if card.get("tags") is String else " · ".join(card.get("tags", []))
 	labels.tags.modulate = Color("#88b5c7")
-	tooltip_text = labels.name.text + "\n" + labels.positions.text + "\n" + labels.rules.text
+	tooltip_text = labels.name.text + "\n" + labels.positions.text + "\n" + str(card.get("effect", ""))
 
 
 func _get_drag_data(_at_position: Vector2) -> Variant:

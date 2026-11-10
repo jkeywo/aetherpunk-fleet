@@ -1,41 +1,43 @@
 extends Control
-## Three-tab editor. All widgets edit a detached draft; only Save writes content.
-
+## Draft-only content authoring. Shared chunk metadata owns all ability forms.
 const Catalog = preload("res://scripts/content_catalog.gd")
+const R = preload("res://scripts/rules/rule_registry.gd")
+const Spec = preload("res://scripts/rules/spec_editor.gd")
+const RuleEditor = preload("res://scripts/rules/rule_editor.gd")
+const State = preload("res://scripts/battle_state.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const CardFace = preload("res://scripts/card_face.gd")
-const FormationView = preload("res://scripts/formation_view.gd")
-const CircleView = preload("res://scripts/circle_view.gd")
-const StanceView = preload("res://scripts/stance_view.gd")
-var preview_form: VBoxContainer
-var inspector_tabs: TabContainer
-var preview_widget: Control
-var preview_slot := 0
-var preview_expanded := false
-var preview_tags: Dictionary = {}
-var preview_position := "front"
-var editing_stance := ""
-const KINDS := ["leviathans", "ships", "cards"]
-const TITLES := ["Leviathans", "Ships", "Cards"]
+const Formation = preload("res://scripts/formation_view.gd")
+const Circle = preload("res://scripts/circle_view.gd")
+const Row = preload("res://scripts/enemy_row_view.gd")
+const Ui = preload("res://scripts/ui_theme.gd")
+const KINDS := ["leviathans", "ships", "captains", "cards"]
+const TITLES := ["Enemies", "Ships", "Captains", "Cards"]
 var draft: Dictionary = {}
 var selected_ids: Dictionary = {}
-var fields: Dictionary = {}
-var effect_controls: Array = []
-var rule_previews: Array = []
-var setup_controls: Dictionary = {}
-var browsers: Dictionary = {}
-var searches: Dictionary = {}
-var forms: Dictionary = {}
-var toolbars: Dictionary = {}
 var tabs: TabContainer
+var inspector_tabs: TabContainer
+var searches: Dictionary = {}
+var browsers: Dictionary = {}
+var forms: Dictionary = {}
+var fields: Dictionary = {}
+var setup_controls: Dictionary = {}
+var preview_form: VBoxContainer
 var setup_form: VBoxContainer
-var dirty_label: Label
+var preview_widget: Control
 var status: RichTextLabel
-var leave_dialog: ConfirmationDialog
+var dirty_label: Label
 var save_button: Button
-var revert_button: Button
 var test_button: Button
-var leave_destination: String = "menu"
+var revert_button: Button
+var leave_dialog: ConfirmationDialog
+var leave_destination := "menu"
+var editing_stance := ""
+var preview_position := "front"
+var preview_expanded := false
+var preview_slot := 0
+var preview_tags: Dictionary = {}
+var _loading := false
 
 
 func _ready() -> void:
@@ -43,758 +45,776 @@ func _ready() -> void:
 	draft = Catalog.migrate(ContentStore.snapshot()) if not ContentStore.saved.is_empty() else Catalog.empty_document()
 	selected_ids = ContentStore.editor_state.get("selected", {}).duplicate()
 	editing_stance = ContentStore.editor_state.get("editing_stance", "")
-	preview_slot = int(ContentStore.editor_state.get("preview_slot", 0))
-	preview_expanded = ContentStore.editor_state.get("preview_expanded", false)
 	preview_position = ContentStore.editor_state.get("preview_position", "front")
+	preview_expanded = ContentStore.editor_state.get("preview_expanded", false)
+	preview_slot = ContentStore.editor_state.get("preview_slot", 0)
 	preview_tags = ContentStore.editor_state.get("preview_tags", {}).duplicate()
-	theme = _editor_theme()
-	_build_ui()
-	tabs.current_tab = clampi(int(ContentStore.editor_state.get("tab", 0)), 0, 2)
-	for kind in KINDS:
-		searches[kind].text = ContentStore.editor_state.get("searches", {}).get(kind, "")
-	_refresh_all()
-	if not ContentStore.last_error.is_empty():
-		_message("Content loading failed. Repair the draft before saving:\n" + ContentStore.last_error, true)
-	elif ContentStore.migration_pending:
-		_message("Version-1 content is loaded in compatibility mode. Save All explicitly upgrades the file to version 2.")
-	else:
-		_message("Choose a tab to edit content. Save All applies the draft to the next battle; Save & Test Battle launches it now.")
-
-
-func _exit_tree() -> void:
-	get_tree().auto_accept_quit = true
+	theme = Ui.make()
+	_build()
+	tabs.current_tab = clampi(ContentStore.editor_state.get("tab", 0), 0, 3)
+	for kind in KINDS: searches[kind].text = ContentStore.editor_state.get("searches", {}).get(kind, "")
+	_refresh()
+	_message("Version 3 / ships, captains, paired upgrades, shared enemy deck, and registered rules." if not ContentStore.migration_pending else "Legacy content migrated in memory. Save All explicitly writes version 3; imported rule counts are flagged.")
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST and is_instance_valid(leave_dialog):
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		leave_destination = "quit"
 		_request_leave()
 
 
-func _editor_theme() -> Theme:
-	var result := Theme.new()
-	result.default_font_size = 15
-	result.set_color("font_color", "Label", Color("#e7ecea"))
-	result.set_font_size("normal_font_size", "RichTextLabel", 14)
-	var normal := _style(Color("#132e3b"), Color("#3f6573"))
-	var hover := _style(Color("#1c3e4d"), Color("#89b6bf"))
-	var focus := _style(Color.TRANSPARENT, Color("#e8bd77"))
-	result.set_stylebox("panel", "PanelContainer", _style(Color("#102632"), Color("#30505c")))
-	for type in ["Button", "OptionButton"]:
-		result.set_stylebox("normal", type, normal)
-		result.set_stylebox("hover", type, hover)
-		result.set_stylebox("pressed", type, hover)
-		result.set_stylebox("focus", type, focus)
-	result.set_stylebox("normal", "LineEdit", normal)
-	result.set_stylebox("focus", "LineEdit", focus)
-	result.set_stylebox("panel", "TabContainer", _style(Color("#0c202b"), Color("#30505c")))
-	result.set_stylebox("tab_selected", "TabBar", hover)
-	result.set_stylebox("tab_unselected", "TabBar", normal)
-	result.set_stylebox("panel", "ItemList", normal)
-	result.set_stylebox("selected", "ItemList", hover)
-	return result
-
-
-func _style(background: Color, border: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(4)
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
-	return style
-
-
-func _box(parent: Node, vertical: bool = true) -> BoxContainer:
-	var box: BoxContainer = VBoxContainer.new() if vertical else HBoxContainer.new()
+func _box(parent: Node, horizontal: bool = false) -> BoxContainer:
+	var box: BoxContainer = HBoxContainer.new() if horizontal else VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 8)
+	box.add_theme_constant_override("separation", 7)
 	parent.add_child(box)
 	return box
 
 
-func _label(parent: Node, text: String, size_value: int = 15) -> Label:
+func _label(parent: Node, text: String, size_value: int = 13) -> Label:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", size_value)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if parent is HBoxContainer: label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.add_theme_font_size_override("font_size", size_value)
 	parent.add_child(label)
 	return label
 
 
-func _button(parent: Node, text: String, callback: Callable) -> Button:
+func _button(parent: Node, text: String, action: Callable) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.pressed.connect(callback)
 	parent.add_child(button)
+	button.pressed.connect(action)
 	return button
 
 
-func _row(parent: Node, caption: String) -> HBoxContainer:
-	var row := _box(parent, false) as HBoxContainer
-	var label := _label(row, caption, 14)
-	label.custom_minimum_size.x = 130
-	label.size_flags_horizontal = Control.SIZE_FILL
-	return row
-
-
-func _line(parent: Node, caption: String, value: String, callback: Callable, key: String = "") -> LineEdit:
-	var control := LineEdit.new()
-	control.text = value
-	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_row(parent, caption).add_child(control)
-	control.text_changed.connect(callback)
-	if not key.is_empty():
-		fields[key] = control
-	return control
-
-
-func _number(parent: Node, caption: String, value: int, callback: Callable, key: String = "", minimum: int = 0) -> SpinBox:
-	var control := SpinBox.new()
-	control.min_value = minimum
-	control.max_value = 9999
-	control.allow_greater = true
-	control.step = 1
-	control.value = value
-	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_row(parent, caption).add_child(control)
-	control.value_changed.connect(func(number): callback.call(int(number)))
-	if not key.is_empty():
-		fields[key] = control
-	return control
-
-
-func _check(parent: Node, caption: String, value: bool, callback: Callable, key: String = "") -> CheckBox:
-	var control := CheckBox.new()
-	control.text = caption
-	control.button_pressed = value
-	parent.add_child(control)
-	control.toggled.connect(callback)
-	if not key.is_empty():
-		fields[key] = control
-	return control
-
-
-func _dropdown(parent: Node, caption: String, options: Array, value: String, callback: Callable, key: String = "") -> OptionButton:
-	var control := OptionButton.new()
-	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	control.fit_to_longest_item = false
-	var selected := -1
-	for option in options:
-		control.add_item(option.label)
-		control.set_item_metadata(control.item_count - 1, option.value)
-		if option.value == value:
-			selected = control.item_count - 1
-	if selected < 0:
-		control.add_item("Choose…" if value.is_empty() else "Missing: " + value)
-		selected = control.item_count - 1
-		control.set_item_metadata(selected, value)
-	control.select(selected)
-	_row(parent, caption).add_child(control)
-	control.item_selected.connect(func(index): callback.call(control.get_item_metadata(index)))
-	if not key.is_empty():
-		fields[key] = control
-	return control
-
-
-func _clear(parent: Node) -> void:
-	for child in parent.get_children():
-		parent.remove_child(child)
+func _clear(node: Node) -> void:
+	for child in node.get_children():
+		node.remove_child(child)
 		child.queue_free()
 
 
-func _build_ui() -> void:
-	var background := ColorRect.new()
-	background.color = Color("#07121b")
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(background)
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(scroll)
+func _build() -> void:
+	var bg := ColorRect.new()
+	bg.color = Color("#07121b")
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
 	var margin := MarginContainer.new()
-	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	margin.custom_minimum_size.x = 1100
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 16)
-	scroll.add_child(margin)
-	var layout := _box(margin)
-	layout.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var header := _box(layout, false)
-	_label(header, "CONTENT EDITOR", 24)
-	dirty_label = _label(header, "Saved", 14)
-	dirty_label.custom_minimum_size.x = 125
-	dirty_label.size_flags_horizontal = Control.SIZE_FILL
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 16)
+	add_child(margin)
+	var outer := _box(margin)
+	var header := _box(outer, true)
+	var title := _label(header, "CONTENT EDITOR", 24)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dirty_label = _label(header, "", 13)
+	dirty_label.custom_minimum_size.x = 120
+	dirty_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	dirty_label.modulate = Color("#e8bd77")
 	save_button = _button(header, "Save All", _save)
 	revert_button = _button(header, "Revert Unsaved Changes", _revert)
 	test_button = _button(header, "Save & Test Battle", _test_battle)
 	_button(header, "Main Menu", _request_menu)
 	status = RichTextLabel.new()
-	status.custom_minimum_size.y = 55
-	status.bbcode_enabled = false
-	layout.add_child(status)
-	var workspace := _box(layout, false)
-	workspace.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	workspace.custom_minimum_size.y = 560
+	status.custom_minimum_size.y = 44
+	status.fit_content = false
+	status.scroll_active = true
+	status.selection_enabled = true
+	outer.add_child(status)
+	var split := HSplitContainer.new()
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.split_offset = 880
+	outer.add_child(split)
 	tabs = TabContainer.new()
 	tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	workspace.add_child(tabs)
-	for index in KINDS.size():
-		var kind: String = KINDS[index]
-		var page := HBoxContainer.new()
-		page.name = TITLES[index]
-		page.add_theme_constant_override("separation", 12)
-		tabs.add_child(page)
-		var browser := _box(page)
-		browser.custom_minimum_size.x = 205
-		browser.size_flags_horizontal = Control.SIZE_FILL
+	tabs.custom_minimum_size.x = 560
+	split.add_child(tabs)
+	for i in KINDS.size():
+		var kind: String = KINDS[i]
+		var panel := HSplitContainer.new()
+		panel.name = TITLES[i]
+		panel.split_offset = 205
+		tabs.add_child(panel)
+		var list_panel := PanelContainer.new()
+		panel.add_child(list_panel)
+		var list := _box(list_panel)
 		var search := LineEdit.new()
-		search.placeholder_text = "Search " + kind
-		browser.add_child(search)
+		search.placeholder_text = "Search " + TITLES[i].to_lower()
+		list.add_child(search)
 		searches[kind] = search
-		var list := ItemList.new()
-		list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		list.custom_minimum_size = Vector2(205, 350)
-		browser.add_child(list)
-		browsers[kind] = list
-		search.text_changed.connect(func(_text): _refresh_browser(kind))
-		list.item_selected.connect(func(item): _select_entry(kind, list.get_item_metadata(item)))
-		var actions := _box(browser, false)
-		toolbars[kind] = {
-			"new": _button(actions, "New", _new_entry.bind(kind)),
-			"duplicate": _button(actions, "Duplicate", _duplicate_entry.bind(kind)),
-			"delete": _button(actions, "Delete", _delete_entry.bind(kind))}
-		for button in toolbars[kind].values():
-			button.add_theme_font_size_override("font_size", 13)
-		var form_scroll := ScrollContainer.new()
-		form_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		form_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		form_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		page.add_child(form_scroll)
-		var form := _box(form_scroll)
-		form.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		search.text_changed.connect(func(_value): _refresh_list(kind))
+		var entries := ItemList.new()
+		entries.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		entries.custom_minimum_size.x = 190
+		list.add_child(entries)
+		browsers[kind] = entries
+		entries.item_selected.connect(func(index):
+			selected_ids[kind] = entries.get_item_metadata(index)
+			_rebuild_form()
+			_live_preview())
+		var tools := _box(list, true)
+		_button(tools, "New", _new_entry.bind(kind))
+		_button(tools, "Duplicate", _duplicate_entry.bind(kind))
+		_button(tools, "Delete", _delete_entry.bind(kind))
+		var form_panel := PanelContainer.new()
+		panel.add_child(form_panel)
+		var scroll := ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		form_panel.add_child(scroll)
+		var form := _box(scroll)
+		form.custom_minimum_size.x = 330
 		forms[kind] = form
-	tabs.tab_changed.connect(func(_index): _rebuild_form())
+	tabs.tab_changed.connect(func(_index): _rebuild_form(); _live_preview())
 	inspector_tabs = TabContainer.new()
-	inspector_tabs.custom_minimum_size.x = 330
-	workspace.add_child(inspector_tabs)
-	var preview_scroll := ScrollContainer.new()
-	preview_scroll.name = "Preview"
-	preview_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	inspector_tabs.add_child(preview_scroll)
-	preview_form = _box(preview_scroll) as VBoxContainer
-	preview_form.custom_minimum_size.x = 305
-	var setup_panel := PanelContainer.new()
-	setup_panel.name = "Battle Setup"
-	inspector_tabs.add_child(setup_panel)
-	var setup_scroll := ScrollContainer.new()
-	setup_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	setup_panel.add_child(setup_scroll)
-	setup_form = _box(setup_scroll) as VBoxContainer
-	setup_form.custom_minimum_size.x = 285
+	inspector_tabs.custom_minimum_size.x = 315
+	split.add_child(inspector_tabs)
+	for title_text in ["Preview", "Battle Setup"]:
+		var panel := PanelContainer.new()
+		panel.name = title_text
+		inspector_tabs.add_child(panel)
+		var scroll := ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		panel.add_child(scroll)
+		var column := _box(scroll) as VBoxContainer
+		column.custom_minimum_size.x = 280
+		if title_text == "Preview": preview_form = column
+		else: setup_form = column
 	leave_dialog = ConfirmationDialog.new()
-	leave_dialog.title = "Unsaved changes"
-	leave_dialog.dialog_text = "Save changes before returning to the main menu?"
-	leave_dialog.get_ok_button().text = "Save & Leave"
-	leave_dialog.add_button("Discard", false, "discard")
-	leave_dialog.confirmed.connect(func():
-		if _save():
-			_go_menu())
-	leave_dialog.custom_action.connect(func(action):
-		if action == "discard":
-			leave_dialog.hide()
-			_go_menu())
+	leave_dialog.title = "Unsaved content"
+	leave_dialog.ok_button_text = "Save"
+	leave_dialog.cancel_button_text = "Cancel"
+	leave_dialog.add_button("Discard", true, "discard")
 	add_child(leave_dialog)
+	leave_dialog.confirmed.connect(func(): if _save(): _leave())
+	leave_dialog.custom_action.connect(func(action): if action == "discard": _leave())
 
 
-func _kind() -> String:
-	return KINDS[tabs.current_tab]
+func _kind() -> String: return KINDS[maxi(0, tabs.current_tab)]
+func selected_entry() -> Dictionary:
+	var kind := _kind()
+	var index := Catalog.index_by_id(draft[kind], selected_ids.get(kind, ""))
+	return draft[kind][index] if index >= 0 else {}
 
 
-func selected_entry(kind: String = "") -> Dictionary:
-	if kind.is_empty():
-		kind = _kind()
-	var index := Catalog.index_by_id(draft[kind], str(selected_ids.get(kind, "")))
-	return {} if index < 0 else draft[kind][index]
-
-
-func _refresh_all() -> void:
-	for kind in KINDS:
-		if Catalog.index_by_id(draft[kind], str(selected_ids.get(kind, ""))) < 0:
-			selected_ids[kind] = "" if draft[kind].is_empty() else draft[kind][0].id
-		_refresh_browser(kind)
+func _refresh() -> void:
+	for kind in KINDS: _refresh_list(kind)
 	_rebuild_form()
 	_build_setup()
-	_dirty_changed()
+	_live_preview()
+	_dirty()
 
 
-func _refresh_browser(kind: String) -> void:
+func _refresh_list(kind: String) -> void:
 	var list: ItemList = browsers[kind]
 	list.clear()
-	var query: String = searches[kind].text.to_lower()
+	var filter: String = searches[kind].text.to_lower()
 	for entry in draft[kind]:
-		if not query.is_empty() and not (str(entry.name) + " " + str(entry.id)).to_lower().contains(query):
-			continue
+		if filter != "" and not (filter in str(entry.name).to_lower() or filter in str(entry.id).to_lower()): continue
 		list.add_item(entry.name)
 		list.set_item_metadata(list.item_count - 1, entry.id)
-		list.set_item_tooltip(list.item_count - 1, entry.id)
-		if entry.id == selected_ids.get(kind, ""):
-			list.select(list.item_count - 1)
-	toolbars[kind]["duplicate"].disabled = selected_entry(kind).is_empty()
-	toolbars[kind].delete.disabled = selected_entry(kind).is_empty()
+		if selected_ids.get(kind, "") == entry.id: list.select(list.item_count - 1)
+	if list.get_selected_items().is_empty() and list.item_count > 0:
+		list.select(0)
+		selected_ids[kind] = list.get_item_metadata(0)
 
 
-func _select_entry(kind: String, id: String) -> void:
-	selected_ids[kind] = id
-	_rebuild_form()
-
-
-func _rebuild_form() -> void:
-	var kind := _kind()
-	var form: VBoxContainer = forms[kind]
-	_clear(form)
-	fields.clear()
-	effect_controls.clear()
-	rule_previews.clear()
-	var entry := selected_entry(kind)
-	if entry.is_empty():
-		_label(form, "Choose an entry, or use New to create one.")
-		_update_preview()
-		return
-	_label(form, str(entry.id), 12).modulate = Color("#80a7b7")
-	_line(form, "Name", entry.name, func(value): _edit_value(entry, "name", value), "name")
-	if kind == "ships":
-		_ship_form(form, entry)
-	elif kind == "cards":
-		_card_form(form, entry)
-	else:
-		_leviathan_form(form, entry)
-	_update_preview()
-
-
-func _edit_value(entry: Dictionary, key: String, value: Variant) -> void:
+func _edit(entry: Dictionary, key: String, value: Variant) -> void:
 	entry[key] = value
-	_dirty_changed()
-	_update_preview()
-	if key == "name":
-		_refresh_browser(_kind())
-		_build_setup()
-		_refresh_behavior_names()
+	_dirty()
+	_live_preview()
 
 
-func _dirty_changed() -> void:
+func _dirty() -> void:
 	dirty_label.text = "Unsaved changes" if is_dirty() else "Saved"
-	dirty_label.modulate = Color("#e8bd77") if is_dirty() else Color("#9ce6b7")
 
 
 func is_dirty() -> bool:
-	return ContentStore.migration_pending or JSON.stringify(draft) != JSON.stringify(Catalog.migrate(ContentStore.saved))
+	return ContentStore.migration_pending or JSON.stringify(Catalog.normalized(draft)) != JSON.stringify(Catalog.normalized(ContentStore.saved))
 
 
-func _options(kind: String) -> Array:
-	var options: Array = []
+func _row(parent: Node, caption: String) -> HBoxContainer:
+	var row := _box(parent, true) as HBoxContainer
+	var label := _label(row, caption)
+	label.custom_minimum_size.x = 128
+	label.size_flags_horizontal = Control.SIZE_FILL
+	return row
+
+
+func _line(parent: Node, caption: String, entry: Dictionary, key: String, field_key: String = "") -> LineEdit:
+	var edit := LineEdit.new()
+	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edit.text = str(entry.get(key, ""))
+	_row(parent, caption).add_child(edit)
+	edit.text_changed.connect(func(value): _edit(entry, key, value))
+	if field_key != "": fields[field_key] = edit
+	return edit
+
+
+func _number(parent: Node, caption: String, initial: int, update: Callable, field_key: String = "", minimum: int = 0, maximum: int = 9999) -> SpinBox:
+	var spin := SpinBox.new()
+	spin.min_value = minimum
+	spin.max_value = maximum
+	spin.value = initial
+	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_row(parent, caption).add_child(spin)
+	spin.value_changed.connect(func(value): update.call(int(value)))
+	if field_key != "": fields[field_key] = spin
+	return spin
+
+
+func _options(kind: String, owner: String = "") -> Array:
+	var result: Array = []
 	for entry in draft[kind]:
-		options.append({"value": entry.id, "label": "%s (%s)" % [entry.name, entry.id]})
-	return options
+		if owner == "" or entry.get("owner", "") == owner:
+			result.append({"value": entry.id, "label": entry.name})
+	return result
 
 
-func _ship_form(form: VBoxContainer, entry: Dictionary) -> void:
-	_line(form, "Role", entry.role, func(value): _edit_value(entry, "role", value), "role")
-	_number(form, "Maximum hull", int(entry.hull), func(value): _edit_value(entry, "hull", value), "hull", 1)
-	var color := ColorPickerButton.new()
-	color.color = Color(entry.color)
-	color.custom_minimum_size = Vector2(120, 34)
-	color.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_row(form, "Colour").add_child(color)
-	color.color_changed.connect(func(value): _edit_value(entry, "color", "#" + value.to_html(false)))
-	fields["color"] = color
-	_label(form, "CARD LOADOUT / copies contributed to the shared deck", 13)
-	var owned: Array = []
-	for card in draft.cards:
-		if card.owner == entry.id:
-			owned.append(card.id)
-			var count := 0
-			for slot in entry.loadout:
-				if slot.card == card.id:
-					count = int(slot.count)
-			_number(form, card.name, count, func(value): _set_count(entry, card.id, value), "copies_" + card.id)
-	for slot in entry.loadout.duplicate(true):
-		if not owned.has(slot.card):
-			_label(form, "Invalid loadout reference: " + slot.card, 13).modulate = Color("#ff927f")
-			_button(form, "Remove " + slot.card, func():
-				_set_count(entry, slot.card, 0)
-				_rebuild_form())
-	if owned.is_empty():
-		_label(form, "Create cards owned by this ship in the Cards tab.")
+func _menu(parent: Node, caption: String, values: Array, initial: Variant, update: Callable, field_key: String = "") -> OptionButton:
+	var menu := OptionButton.new()
+	menu.fit_to_longest_item = false
+	menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_row(parent, caption).add_child(menu)
+	for item in values:
+		var value: Variant = item.value if item is Dictionary else item
+		var title: String = item.label if item is Dictionary else str(item).capitalize()
+		menu.add_item(title)
+		menu.set_item_metadata(menu.item_count - 1, value)
+		if value == initial: menu.select(menu.item_count - 1)
+	menu.item_selected.connect(func(index): update.call(menu.get_item_metadata(index)))
+	if field_key != "": fields[field_key] = menu
+	return menu
 
 
-func _set_count(ship: Dictionary, card_id: String, count: int) -> void:
-	var replacement: Array = []
-	var existing := false
-	for slot in ship.loadout:
-		if slot.card != card_id:
-			replacement.append(slot)
-		else:
-			existing = true
-			if count > 0:
-				replacement.append({"card": card_id, "count": count})
-	if count > 0 and not existing:
-		replacement.append({"card": card_id, "count": count})
-	ship.loadout = replacement
-	_dirty_changed()
-	_build_setup()
-
-
-func _card_form(form: VBoxContainer, entry: Dictionary) -> void:
-	_dropdown(form, "Owning ship", _options("ships"), entry.owner, func(value): _edit_value(entry, "owner", value), "owner")
-	_number(form, "Cost", int(entry.cost), func(value): _edit_value(entry, "cost", value), "cost")
-	_number(form, "Payment value", int(entry.pays), func(value): _edit_value(entry, "pays", value), "pays", 1)
-	_label(form, "Acting positions", 14)
-	var ranks := _box(form, false)
-	for point in Geometry.POSITIONS:
-		_check(ranks, point, entry.positions.has(point), func(checked): _toggle_value(entry.positions, point, checked), "position_" + point)
-	var tags := _box(form, false)
-	for tag in Catalog.TAGS:
-		_check(tags, tag, entry.tags.has(tag), func(checked): _toggle_value(entry.tags, tag, checked), "tag_" + tag)
-	_effects_form(form, entry.effects, "card")
-	var preview := _label(form, Catalog.effects_text(entry.effects), 14)
-	preview.modulate = Color("#e8bd77")
-	fields["preview"] = preview
-	_circle_rules_form(form, entry)
-
-
-func _toggle_value(items: Array, value: Variant, enabled: bool) -> void:
-	if enabled and not items.has(value):
-		items.append(value)
-	elif not enabled:
-		items.erase(value)
-	_dirty_changed()
-	_update_preview()
-
-
-func _leviathan_form(form: VBoxContainer, entry: Dictionary) -> void:
-	_number(form, "Maximum hull", int(entry.hull), func(value): _edit_value(entry, "hull", value), "hull", 1)
-	var options: Array = []
-	for stance in entry.stances:
-		options.append({"value": stance.id, "label": stance.name})
-	_dropdown(form, "Starting stance", options, entry.starting_stance, func(value): _edit_value(entry, "starting_stance", value), "starting_stance")
-	if Catalog.index_by_id(entry.stances, editing_stance) < 0:
-		editing_stance = entry.starting_stance
-	_dropdown(form, "Editing stance", options, editing_stance, func(value): editing_stance = value; _rebuild_form.call_deferred(), "editing_stance")
-	var tools := _box(form, false)
-	_button(tools, "New Stance", _new_stance.bind(entry))
-	_button(tools, "Duplicate", _duplicate_stance.bind(entry))
-	_button(tools, "Delete", _delete_stance.bind(entry))
-	var stance: Dictionary = entry.stances[Catalog.index_by_id(entry.stances, editing_stance)]
-	_line(form, "Stance name", stance.name, func(value): _edit_value(stance, "name", value), "stance_name")
-	_label(form, "REACTIONS / first match fires, then changes stance", 13)
-	_button(form, "Add Reaction", _add_behavior.bind(stance, "reactions"))
-	for index in stance.reactions.size():
-		var rule: Dictionary = stance.reactions[index]
-		var panel := PanelContainer.new()
-		form.add_child(panel)
-		var content := _box(panel)
-		var row := _box(content, false)
-		_label(row, rule.id, 12)
-		_button(row, "↑", _move_behavior.bind(stance, "reactions", index, -1))
-		_button(row, "↓", _move_behavior.bind(stance, "reactions", index, 1))
-		_button(row, "Remove", _remove_behavior.bind(stance, "reactions", index))
-		_line(content, "Name", rule.name, func(value): _edit_value(rule, "name", value))
-		_trigger_form(content, rule.trigger)
-		_effects_form(content, rule.effects, "reaction")
-	_label(form, "ENEMY-PHASE ACTIVITY / then changes stance", 13)
-	_effects_form(form, stance.effects, "intent")
-
-
-func _refresh_behavior_names() -> void:
-	if _kind() != "leviathans":
-		return
-	var entry := selected_entry()
-	for key in ["starting_stance", "editing_stance"]:
-		if fields.has(key):
-			var control: OptionButton = fields[key]
-			for index in control.item_count:
-				var found := Catalog.index_by_id(entry.stances, control.get_item_metadata(index))
-				if found >= 0:
-					control.set_item_text(index, entry.stances[found].name)
-
-
-func _trigger_form(parent: Node, trigger: Dictionary) -> void:
-	var options: Array = []
-	for kind in Catalog.TRIGGERS:
-		options.append({"value": kind, "label": {"tag": "Action has tag", "damage": "Leviathan damage threshold",
-			"tag_position": "Action tag + final actor position", "healed": "Hull restored threshold", "cost": "Printed cost threshold"}[kind]})
-	_dropdown(parent, "Trigger", options, trigger.kind, func(value):
-		trigger.clear()
-		trigger["kind"] = value
-		if value in ["tag", "tag_position"]:
-			trigger["tag"] = "Attack"
-		if value == "tag_position":
-			trigger["positions"] = ["front"]
-		if value in ["damage", "healed", "cost"]:
-			trigger["threshold"] = 1
-		_dirty_changed()
-		_rebuild_form.call_deferred())
-	if trigger.kind in ["tag", "tag_position"]:
-		var tags: Array = []
-		for tag in Catalog.TAGS:
-			tags.append({"value": tag, "label": tag})
-		_dropdown(parent, "Required tag", tags, trigger.tag, func(value): _edit_value(trigger, "tag", value))
-	if trigger.kind == "tag_position":
-		for point in Geometry.POSITIONS:
-			_check(parent, point, trigger.positions.has(point), func(value): _toggle_value(trigger.positions, point, value))
-	if trigger.kind in ["damage", "healed", "cost"]:
-		_number(parent, "Threshold", int(trigger.threshold), func(value): _edit_value(trigger, "threshold", value))
-	var preview := _label(parent, Catalog.trigger_text(trigger), 12)
-	preview.modulate = Color("#e8bd77")
-	rule_previews.append({"label": preview, "kind": "trigger", "value": trigger})
-
-
-func _effects_form(parent: Node, effects: Array, context: String) -> void:
-	var title := _box(parent, false)
-	_label(title, "ORDERED EFFECTS", 13)
-	var kinds: Array = Catalog.TRIGGER_EFFECTS if context == "trigger" else (Catalog.CARD_EFFECTS if context == "card" else Catalog.MONSTER_EFFECTS)
-	_button(title, "Add Effect", func():
-		effects.append(Catalog.new_effect(kinds[0]))
-		_dirty_changed()
+func _rules_list(parent: Node, rules: Array, title: String, zone: String) -> void:
+	var heading := _box(parent, true)
+	_label(heading, title, 14)
+	_button(heading, "Add Rule", func():
+		var rule := R.rule("on_play" if zone == "circle" else "turn_start", [{"kind": "gain_resource", "target": "owner", "amount": 1}], zone)
+		rule.id = _id(rules, "rule")
+		if zone != "circle": rule.trigger.subject = "owner"
+		rules.append(rule)
+		_dirty()
 		_rebuild_form())
-	for index in effects.size():
-		var effect: Dictionary = effects[index]
-		var panel := PanelContainer.new()
-		parent.add_child(panel)
-		var content := _box(panel)
-		var options: Array = []
-		for kind in kinds:
-			options.append({"value": kind, "label": Catalog.EFFECT_NAMES[kind]})
-		var kind_input := _dropdown(content, "Effect " + str(index + 1), options, effect.kind, func(value):
-			effects[index] = Catalog.new_effect(value)
-			_dirty_changed()
-			_rebuild_form.call_deferred())
-		var actions := _box(content, false)
-		var up := _button(actions, "Move Up", _move_effect.bind(effects, index, -1))
-		var down := _button(actions, "Move Down", _move_effect.bind(effects, index, 1))
-		up.disabled = index == 0
-		down.disabled = index == effects.size() - 1
-		var remove := _button(actions, "Remove", func():
-			effects.remove_at(index)
-			_dirty_changed()
-			_rebuild_form())
-		var controls := {"kind": kind_input, "up": up, "down": down, "remove": remove}
-		if effect.kind in ["guard", "damage_ship"] or (context == "trigger" and effect.kind == "repair"):
-			var targets: Array = ["actor", "event_actor"] if context == "trigger" else (["actor", "ally"] if effect.kind == "guard" else ["front", "rear", "upper", "lower", "sides", "ends", "all"])
-			if context == "reaction":
-				targets.append_array(["actor", "repaired"])
-			var target_options: Array = []
-			for target in targets:
-				target_options.append({"value": target, "label": Catalog.TARGET_NAMES[target]})
-			controls["target"] = _dropdown(content, "Target", target_options, effect.get("target", "actor"), func(value):
-				_edit_value(effect, "target", value)
-				_rebuild_form.call_deferred())
-		if effect.has("amount"):
-			controls["amount"] = _number(content, "Amount" if effect.kind != "swap_ends" else "Lone-ship damage", int(effect.amount), func(value): _edit_value(effect, "amount", value))
-		if effect.kind == "draw_discard":
-			controls["discard"] = _number(content, "Then discard", int(effect.discard), func(value): _edit_value(effect, "discard", value))
-		if effect.kind == "guard" and effect.get("target") == "ally":
-			_check(content, "Exclude the acting ship", effect.get("exclude_actor", false), func(value): _edit_value(effect, "exclude_actor", value))
-		effect_controls.append(controls)
-		var preview := _label(content, Catalog.effects_text([effect]), 12)
-		preview.modulate = Color("#80a7b7")
-		rule_previews.append({"label": preview, "kind": "effects", "value": [effect]})
+	for index in rules.size():
+		var column := _panel(parent)
+		_tools(column, rules, index)
+		var editor := RuleEditor.new()
+		column.add_child(editor)
+		editor.configure(rules[index])
+		editor.changed.connect(func(): _dirty(); _live_preview())
 
 
-func _move_effect(effects: Array, index: int, direction: int) -> void:
-	var destination := index + direction
-	if destination < 0 or destination >= effects.size():
-		return
-	var effect: Dictionary = effects[index]
-	effects.remove_at(index)
-	effects.insert(destination, effect)
-	_dirty_changed()
+func _tools(parent: Node, list: Array, index: int) -> void:
+	var tools := _box(parent, true)
+	_button(tools, "↑", _move.bind(list, index, -1))
+	_button(tools, "↓", _move.bind(list, index, 1))
+	_button(tools, "Remove", func(): list.remove_at(index); _dirty(); _rebuild_form(); _live_preview())
+
+
+func _move(list: Array, index: int, delta: int) -> void:
+	var destination := index + delta
+	if destination < 0 or destination >= list.size(): return
+	var entry: Variant = list[index]
+	list.remove_at(index)
+	list.insert(destination, entry)
+	_dirty()
 	_rebuild_form()
-
-
-func _move_behavior(entry: Dictionary, list_name: String, index: int, direction: int) -> void:
-	var destination := index + direction
-	if destination < 0 or destination >= entry[list_name].size():
-		return
-	var behavior: Dictionary = entry[list_name][index]
-	entry[list_name].remove_at(index)
-	entry[list_name].insert(destination, behavior)
-	_dirty_changed()
-	_rebuild_form()
-
-
-func _add_behavior(entry: Dictionary, list_name: String) -> void:
-	var id := _new_id(entry[list_name], "reaction" if list_name == "reactions" else "intent")
-	var behavior := {"id": id, "name": "New " + ("Reaction" if list_name == "reactions" else "Intent"),
-		"effects": [{"kind": "damage_ship", "target": "front", "amount": 3}]}
-	if list_name == "reactions":
-		behavior["trigger"] = {"kind": "tag", "tag": "Movement"}
-	entry[list_name].append(behavior)
-	_dirty_changed()
-	_rebuild_form()
-
-
-func _remove_behavior(entry: Dictionary, list_name: String, index: int) -> void:
-	entry[list_name].remove_at(index)
-	_dirty_changed()
-	_rebuild_form()
-
-
-func _update_preview() -> void:
-	for preview in rule_previews:
-		if is_instance_valid(preview.label):
-			preview.label.text = Catalog.trigger_text(preview.value) if preview.kind == "trigger" else Catalog.effects_text(preview.value)
-	if fields.has("preview") and is_instance_valid(fields.preview):
-		fields.preview.text = Catalog.effects_text(selected_entry().effects)
 	_live_preview()
+
+
+func _panel(parent: Node) -> VBoxContainer:
+	var panel := PanelContainer.new()
+	parent.add_child(panel)
+	return _box(panel) as VBoxContainer
+
+
+func _effects(parent: Node, list: Array, title: String = "ORDERED EFFECTS") -> void:
+	var heading := _box(parent, true)
+	_label(heading, title, 14)
+	_button(heading, "Add Effect", func(): list.append(R.fresh("effect", "attack")); _dirty(); _rebuild_form())
+	for index in list.size():
+		var column := _panel(parent)
+		_tools(column, list, index)
+		var editor := Spec.new()
+		column.add_child(editor)
+		editor.configure("effect", list[index])
+		editor.changed.connect(func(): _dirty(); _live_preview())
+
+
+func _rebuild_form() -> void:
+	if not is_instance_valid(tabs): return
+	fields.clear()
+	var form: VBoxContainer = forms[_kind()]
+	_clear(form)
+	var entry := selected_entry()
+	if entry.is_empty(): _label(form, "Create or select content."); return
+	_label(form, entry.id, 12).modulate = Color("#80a7b7")
+	_line(form, "Name", entry, "name", "name")
+	match _kind():
+		"cards": _card_form(form, entry)
+		"ships": _ship_form(form, entry)
+		"captains":
+			_number(form, "Tier", entry.tier, func(value): _edit(entry, "tier", value), "tier", 1, 3)
+			_menu(form, "Card pair", _options("cards", entry.id), entry.card, func(value): _edit(entry, "card", value), "captain_card")
+			_label(form, "PASSIVE / one registered rule block", 14)
+			var editor := RuleEditor.new()
+			form.add_child(editor)
+			editor.configure(entry.passive)
+			editor.changed.connect(func(): _dirty(); _live_preview())
+		"leviathans": _enemy_form(form, entry)
+
+
+func _card_form(form: Node, entry: Dictionary) -> void:
+	_menu(form, "Owning source", _options("ships") + _options("captains"), entry.owner, func(value): _edit(entry, "owner", value), "owner")
+	_menu(form, "Primary type", R.TYPES, entry.type, func(value): _edit(entry, "type", value), "type")
+	_number(form, "Mana cost", entry.cost, func(value): _edit(entry, "cost", value), "cost")
+	_number(form, "Mana produced", entry.pays, func(value): _edit(entry, "pays", value), "pays", 1)
+	var traits := LineEdit.new()
+	traits.text = ", ".join(entry.traits)
+	traits.placeholder_text = "Traits, separated by commas"
+	_row(form, "Traits").add_child(traits)
+	traits.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	traits.text_changed.connect(func(value):
+		var values: Array = []
+		for item in value.split(","):
+			if item.strip_edges() != "": values.append(item.strip_edges())
+		_edit(entry, "traits", values))
+	var points := _box(form, true)
+	for point in Geometry.POSITIONS:
+		var check := CheckBox.new()
+		check.text = point
+		check.button_pressed = entry.positions.has(point)
+		points.add_child(check)
+		fields["position_" + point] = check
+		check.toggled.connect(func(enabled):
+			if enabled and not entry.positions.has(point): entry.positions.append(point)
+			elif not enabled: entry.positions.erase(point)
+			_dirty()
+			_live_preview())
+	if entry.get("legacy_import", false):
+		_label(form, "Imported rule count preserved. New cards use 2–3 blocks.", 12).modulate = Color("#e8bd77")
+		_button(form, "Adopt 2–3-block card convention", func(): entry.erase("legacy_import"); _dirty(); _rebuild_form(); _live_preview())
+	_rules_list(form, entry.rules, "RULE BLOCKS / 2–3 total, including On Play", "circle")
+
+
+func _unit_form(form: Node, entry: Dictionary) -> void:
+	_number(form, "Maximum hull", entry.hull, func(value): _edit(entry, "hull", value), "hull", 1)
+	_number(form, "Armour per hit", entry.armour, func(value): _edit(entry, "armour", value), "armour")
+	_number(form, "Weapon damage", entry.weapon.damage, func(value): _edit(entry.weapon, "damage", value), "weapon_damage")
+	_menu(form, "Weapon range", ["Short", "Long"], entry.weapon.range, func(value): _edit(entry.weapon, "range", value), "weapon_range")
+
+
+func _ship_form(form: Node, entry: Dictionary) -> void:
+	_line(form, "Role", entry, "role", "role")
+	_unit_form(form, entry)
+	var colour := ColorPickerButton.new()
+	colour.color = Color(entry.color)
+	colour.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_row(form, "Colour").add_child(colour)
+	colour.color_changed.connect(func(value): _edit(entry, "color", value.to_html()))
+	_menu(form, "Starter pair", _options("cards", entry.id), entry.starter, func(value): _edit(entry, "starter", value), "starter")
+	if entry.has("legacy_loadout"):
+		_label(form, "Imported loadout retained until you adopt pair progression.", 12)
+		for slot in entry.legacy_loadout:
+			_number(form, slot.card, slot.count, func(value): _edit(slot, "count", value), "", 1)
+		_button(form, "Use paired level progression", func(): entry.erase("legacy_loadout"); _dirty(); _rebuild_form(); _build_setup())
+	_line(form, "Resource name", entry.resource, "name", "resource_name")
+	_number(form, "Resource capacity", entry.resource.capacity, func(value): _edit(entry.resource, "capacity", value), "resource_capacity", 1)
+	_rules_list(form, entry.resource.rules, "RESOURCE GAIN / AUTOMATIC SPEND / OPTIONAL BOOSTS", "ship")
+	_rules_list(form, entry.rules, "BASE SHIP RULES", "ship")
+	for tier in ["two", "three"]:
+		_label(form, "LEVEL " + ("2 / two choices" if tier == "two" else "3 / three choices"), 17)
+		for package in entry.levels[tier]:
+			var panel := _panel(form)
+			_line(panel, "Branch name", package, "name")
+			_label(panel, "Stable branch ID: " + package.id, 12)
+			_menu(panel, "Card pair", _options("cards", entry.id), package.card, func(value): _edit(package, "card", value))
+			if tier == "two":
+				var choices: Array = []
+				for other in entry.levels.three: choices.append({"value": other.id, "label": other.name})
+				_menu(panel, "Blocks level 3", choices, package.blocks, func(value): _edit(package, "blocks", value))
+			for key in ["rule", "passive"]:
+				_label(panel, "SPECIAL RULE" if key == "rule" else "PASSIVE UPGRADE", 13)
+				var editor := RuleEditor.new()
+				panel.add_child(editor)
+				editor.configure(package[key])
+				editor.changed.connect(func(): _dirty(); _live_preview())
+
+
+func _enemy_form(form: Node, entry: Dictionary) -> void:
+	_unit_form(form, entry)
+	_effects(form, entry.default_action, "WEAKER DEFAULT ACTION / if no activation this phase")
+	_label(form, "SHARED DECK CONTRIBUTION / physical copies", 14)
+	for stance in entry.stances:
+		var count := 0
+		for slot in entry.stance_loadout:
+			if slot.stance == stance.id: count = slot.count
+		_number(form, stance.name, count, func(value):
+			var index := -1
+			for i in entry.stance_loadout.size():
+				if entry.stance_loadout[i].stance == stance.id: index = i
+			if value == 0 and index >= 0: entry.stance_loadout.remove_at(index)
+			elif index >= 0: entry.stance_loadout[index].count = value
+			elif value > 0: entry.stance_loadout.append({"stance": stance.id, "count": value})
+			_dirty(); _live_preview())
+	if Catalog.index_by_id(entry.stances, editing_stance) < 0: editing_stance = entry.stances[0].id
+	var choices: Array = []
+	for stance in entry.stances: choices.append({"value": stance.id, "label": stance.name})
+	_menu(form, "Editing stance", choices, editing_stance, func(value): editing_stance = value; _rebuild_form(); _live_preview(), "editing_stance")
+	var tools := _box(form, true)
+	_button(tools, "New Stance", _new_stance.bind(entry))
+	_button(tools, "Duplicate Stance", _duplicate_stance.bind(entry))
+	_button(tools, "Delete Stance", _delete_stance.bind(entry))
+	var stance: Dictionary = entry.stances[Catalog.index_by_id(entry.stances, editing_stance)]
+	_line(form, "Stance name", stance, "name", "stance_name")
+	var add := _box(form, true)
+	_label(add, "REACTIONS / first matching rule per enemy", 14)
+	_button(add, "Add Reaction", func():
+		stance.reactions.append({"id": _id(stance.reactions, "reaction"), "name": "New Reaction", "category": "Retaliation", "conditions": {"kind": "card_matches", "target": "event_card", "card_type": "Attack"}, "effects": [{"kind": "attack", "target": "chosen_ally", "damage": 2, "hits": 1, "range": "weapon"}]})
+		_dirty(); _rebuild_form())
+	for index in stance.reactions.size():
+		var reaction: Dictionary = stance.reactions[index]
+		var column := _panel(form)
+		_tools(column, stance.reactions, index)
+		_line(column, "Name", reaction, "name")
+		_line(column, "Category", reaction, "category")
+		var spec := Spec.new()
+		column.add_child(spec)
+		spec.configure("condition", reaction.conditions)
+		spec.changed.connect(func(): _dirty(); _live_preview())
+		_effects(column, reaction.effects)
+	_effects(form, stance.effects, "ENEMY-PHASE ACTIVATION")
 
 
 func _build_setup() -> void:
 	_clear(setup_form)
 	setup_controls.clear()
-	_label(setup_form, "BATTLE SETUP", 18)
-	_label(setup_form, "Used by Start Game, Retry, and editor playtests.", 13).modulate = Color("#80a7b7")
-	setup_controls["leviathan"] = _dropdown(setup_form, "Leviathan", _options("leviathans"), draft.setup.leviathan, func(value): _edit_value(draft.setup, "leviathan", value))
-	while draft.setup.ships.size() < 3:
-		draft.setup.ships.append("")
-	for rank in 3:
-		setup_controls["ship_" + str(rank)] = _dropdown(setup_form, "Ship " + str(rank + 1), _options("ships"), draft.setup.ships[rank], func(value):
-			draft.setup.ships[rank] = value
-			_dirty_changed()
-			_build_setup.call_deferred())
-	var point_options: Array = []
-	for point in Geometry.POSITIONS:
-		point_options.append({"value": point, "label": point})
-	for index in 3:
-		setup_controls["point_" + str(index)] = _dropdown(setup_form, "Ship %d position" % (index + 1), point_options, draft.setup.positions[index], func(value): draft.setup.positions[index] = value; _dirty_changed())
-	setup_controls["enemy_point"] = _dropdown(setup_form, "Enemy position", point_options, draft.setup.enemy_position, func(value): draft.setup.enemy_position = value; _dirty_changed())
-	_label(setup_form, "BASIC ACTIONS / discard the dragged card", 14)
-	var basic := Catalog.basic_rules(draft)
-	setup_controls["basic_repair"] = _number(setup_form, "Basic repair", basic.repair, func(value): _set_basic_rule("repair", value))
-	setup_controls["revive_threshold"] = _number(setup_form, "Revive threshold", basic.revive_threshold, func(value): _set_basic_rule("revive_threshold", value))
-	setup_controls["fixed_hand"] = _check(setup_form, "Use fixed opening hand", draft.setup.fixed_hand, func(value):
-		draft.setup.fixed_hand = value
-		_dirty_changed()
-		_build_setup.call_deferred())
+	_label(setup_form, "BATTLE PREPARATION", 17)
+	for i in draft.setup.fleet.size():
+		var slot: Dictionary = draft.setup.fleet[i]
+		var panel := _panel(setup_form)
+		_label(panel, "SHIP " + str(i + 1), 14)
+		setup_controls["ship_" + str(i)] = _menu(panel, "Ship", _options("ships"), slot.ship, func(value): slot.ship = value; _repair_branch(slot); _dirty(); _build_setup.call_deferred())
+		setup_controls["captain_" + str(i)] = _menu(panel, "Captain", _options("captains"), slot.captain, func(value): _edit(slot, "captain", value))
+		setup_controls["level_" + str(i)] = _number(panel, "Level", slot.level, func(value): slot.level = value; _repair_branch(slot); _dirty(); _build_setup.call_deferred(), "", 1, 3)
+		setup_controls["point_" + str(i)] = _menu(panel, "Position", Geometry.POSITIONS, slot.position, func(value): _edit(slot, "position", value))
+		var index := Catalog.index_by_id(draft.ships, slot.ship)
+		if index >= 0:
+			var ship: Dictionary = draft.ships[index]
+			if slot.level >= 2:
+				var values: Array = []
+				for package in ship.levels.two: values.append({"value": package.id, "label": package.name})
+				setup_controls["l2_" + str(i)] = _menu(panel, "Level 2", values, slot.level_2, func(value): slot.level_2 = value; _repair_branch(slot); _dirty(); _build_setup.call_deferred())
+			if slot.level >= 3:
+				var blocked := ""
+				var branch := Catalog.index_by_id(ship.levels.two, slot.level_2)
+				if branch >= 0: blocked = ship.levels.two[branch].blocks
+				var values: Array = []
+				for package in ship.levels.three:
+					if package.id != blocked: values.append({"value": package.id, "label": package.name})
+				setup_controls["l3_" + str(i)] = _menu(panel, "Level 3", values, slot.level_3, func(value): _edit(slot, "level_3", value))
+			_label(panel, "Deck: " + ("imported loadout" if ship.has("legacy_loadout") else str(2 + int(slot.level) * 2) + " cards / pairs include captain"), 12)
+	_label(setup_form, "ENEMY DIAMOND / 1–4 instances", 15)
+	for i in draft.setup.enemies.size():
+		var slot: Dictionary = draft.setup.enemies[i]
+		var panel := _panel(setup_form)
+		setup_controls["enemy_" + str(i)] = _menu(panel, "Enemy", _options("leviathans"), slot.enemy, func(value): _edit(slot, "enemy", value))
+		setup_controls["enemy_point_" + str(i)] = _menu(panel, "Position", Geometry.POSITIONS, slot.position, func(value): _edit(slot, "position", value))
+		_button(panel, "Remove Enemy", func(): if draft.setup.enemies.size() > 1: draft.setup.enemies.remove_at(i); _dirty(); _build_setup())
+	var add := _button(setup_form, "Add Enemy", func():
+		var used: Array = draft.setup.enemies.map(func(slot): return slot.position)
+		for point in Geometry.POSITIONS:
+			if not used.has(point):
+				draft.setup.enemies.append({"enemy": draft.leviathans[0].id, "position": point})
+				break
+		_dirty(); _build_setup())
+	add.disabled = draft.setup.enemies.size() >= 4 or draft.leviathans.is_empty()
+	_label(setup_form, "MANA / BASIC ACTIONS", 15)
+	for key in ["mana_capacity", "mana_reward", "retain_threshold"]:
+		setup_controls[key] = _number(setup_form, key.replace("_", " ").capitalize(), int(draft.setup[key]), func(value): _edit(draft.setup, key, value), "", 1 if key == "retain_threshold" else 0)
+	for key in ["repair", "revive_threshold"]:
+		setup_controls["basic_" + key] = _number(setup_form, key.replace("_", " ").capitalize(), int(draft.setup.basic_actions[key]), func(value): _edit(draft.setup.basic_actions, key, value), "", 1)
+	var fixed := CheckBox.new()
+	fixed.text = "Fixed seven-card opening hand"
+	fixed.button_pressed = draft.setup.fixed_hand
+	setup_form.add_child(fixed)
+	setup_controls.fixed_hand = fixed
+	fixed.toggled.connect(func(value): draft.setup.fixed_hand = value; _dirty(); _build_setup.call_deferred())
 	if draft.setup.fixed_hand:
-		_label(setup_form, "Choose exactly seven cards; copy counts must exist in the selected fleet deck.", 13)
-		var options: Array = []
-		var added: Array = []
-		for ship in draft.ships:
-			if not draft.setup.ships.has(ship.id):
-				continue
-			for slot in ship.loadout:
-				var index := Catalog.index_by_id(draft.cards, slot.card)
-				if index >= 0 and not added.has(slot.card):
-					options.append({"value": slot.card, "label": draft.cards[index].name})
-					added.append(slot.card)
-		while draft.setup.opening_hand.size() < 7:
-			draft.setup.opening_hand.append("")
-		for index in 7:
-			setup_controls["opening_" + str(index)] = _dropdown(setup_form, "Card " + str(index + 1), options, draft.setup.opening_hand[index], func(value):
-				draft.setup.opening_hand[index] = value
-				_dirty_changed())
+		while draft.setup.opening_hand.size() < 7: draft.setup.opening_hand.append("")
+		for i in 7:
+			setup_controls["opening_" + str(i)] = _menu(setup_form, "Card " + str(i + 1), _options("cards"), draft.setup.opening_hand[i], func(value): draft.setup.opening_hand[i] = value; _dirty())
+	_label(setup_form, "Shared enemy row draws three physical cards. More contributed copies mean more activation opportunities. Save validates pair ownership, counts, positions, and all references.", 12)
+
+
+func _repair_branch(slot: Dictionary) -> void:
+	var index := Catalog.index_by_id(draft.ships, slot.ship)
+	if index < 0: return
+	var ship: Dictionary = draft.ships[index]
+	if slot.level < 2: slot.level_2 = ""; slot.level_3 = ""; return
+	if Catalog.index_by_id(ship.levels.two, slot.level_2) < 0: slot.level_2 = ship.levels.two[0].id
+	if slot.level < 3: slot.level_3 = ""; return
+	var blocked: String = ship.levels.two[Catalog.index_by_id(ship.levels.two, slot.level_2)].blocks
+	if Catalog.index_by_id(ship.levels.three, slot.level_3) < 0 or slot.level_3 == blocked:
+		for package in ship.levels.three:
+			if package.id != blocked: slot.level_3 = package.id; break
+
+
+func _live_preview() -> void:
+	if not is_instance_valid(preview_form): return
+	_clear(preview_form)
+	var entry := selected_entry()
+	if entry.is_empty(): _label(preview_form, "Select content to preview."); return
+	_label(preview_form, "LIVE / UNSAVED DRAFT", 13).modulate = Color("#d6adee")
+	if _kind() == "cards" or _kind() == "captains":
+		var source: Dictionary = entry
+		if _kind() == "captains":
+			_label(preview_form, entry.name + " / Tier " + str(entry.tier), 18)
+			_label(preview_form, R.rule_text(entry.passive), 12)
+			var index := Catalog.index_by_id(draft.cards, entry.card)
+			if index < 0: _label(preview_form, "Choose an existing captain card pair."); return
+			source = draft.cards[index]
+		var owner_index := Catalog.index_by_id(draft.ships, source.owner)
+		var owner: Dictionary = draft.ships[owner_index] if owner_index >= 0 else entry
+		var face := CardFace.new()
+		face.custom_minimum_size = Vector2(270, 340)
+		preview_form.add_child(face)
+		face.configure(Catalog.present_card(source), owner)
+		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		preview_widget = face
+		_label(preview_form, "Full generated rules are available in the tooltip.", 12)
+		var expanded_check := CheckBox.new()
+		expanded_check.text = "Expanded adjacency context"
+		expanded_check.button_pressed = preview_expanded
+		preview_form.add_child(expanded_check)
+		expanded_check.toggled.connect(func(value): preview_expanded = value; preview_slot = mini(preview_slot, 3); _live_preview())
+		var slots: Array = []
+		for point in (9 if preview_expanded else 4): slots.append({"value": point, "label": Geometry.SLOT_NAMES[point]})
+		_menu(preview_form, "Preview slot", slots, preview_slot, func(value): preview_slot = value; _live_preview())
+		var contents: Array = [-1, -1, -1, -1, -1, -1, -1, -1, -1]
+		var data: Dictionary = {0: Catalog.present_card(source)}
+		contents[preview_slot] = 0
+		for point in Geometry.neighbours(preview_slot, preview_expanded):
+			var type: String = preview_tags.get(point, "")
+			if type != "":
+				contents[point] = point + 1
+				data[point + 1] = {"name": type, "type": type, "effect": "", "rules": [], "traits": []}
+		var circle := Circle.new()
+		circle.custom_minimum_size.y = 200
+		preview_form.add_child(circle)
+		circle.configure(contents, preview_expanded, data, {}, preview_slot)
+		for point in Geometry.neighbours(preview_slot, preview_expanded):
+			_menu(preview_form, Geometry.SLOT_NAMES[point], [""] + R.TYPES, preview_tags.get(point, ""), func(value): preview_tags[point] = value; _live_preview())
+		_preview_conditions(source, contents, data)
 	else:
-		_label(setup_form, "Draw seven cards from the shuffled fleet deck.", 13)
-	_label(setup_form, "Save writes data/content.json. It does not create a Git commit.", 12).modulate = Color("#80a7b7")
+		_menu(preview_form, "Preview position", Geometry.POSITIONS, preview_position, func(value): preview_position = value; _live_preview())
+		var view := Formation.new()
+		view.custom_minimum_size.y = 250
+		preview_form.add_child(view)
+		var data := entry.duplicate(true)
+		data["max_hull"] = maxi(1, int(entry.hull))
+		data["guard"] = 0
+		data["resource_name"] = entry.get("resource", {}).get("name", "")
+		data["resource_capacity"] = entry.get("resource", {}).get("capacity", 0)
+		data["resource"] = 0
+		if _kind() == "ships" and Catalog.validate(draft).is_empty():
+			var sim = State.new(0, draft)
+			for unit_data in sim.board_snapshot().ships:
+				if unit_data.id == entry.id: data = unit_data.duplicate(true)
+		var point := Geometry.POSITIONS.find(preview_position)
+		var board := {"ships": [data], "enemies": [data], "formation": [-1, -1, -1, -1], "enemy_formation": [-1, -1, -1, -1], "enemy_position": point, "monster_hull": entry.hull, "cover": [0, 0, 0, 0, 0, 0, 0, 0]}
+		board.formation[point] = 0
+		board.enemy_formation[point] = 0
+		view.configure(board, _kind() == "leviathans", entry)
+		preview_widget = view
+		if _kind() == "leviathans":
+			var index := Catalog.index_by_id(entry.stances, editing_stance)
+			if index < 0: index = 0
+			var row := Row.new()
+			row.custom_minimum_size.y = 110
+			preview_form.add_child(row)
+			var stance: Dictionary = entry.stances[index].duplicate(true)
+			stance["uid"] = 0
+			stance["owner_name"] = entry.name
+			row.configure([stance])
+			_label(preview_form, "Default: " + Catalog.effects_text(entry.default_action), 12)
+		else:
+			_label(preview_form, "Resource / " + entry.resource.name, 15)
+			for rule in entry.resource.rules: _label(preview_form, R.rule_text(rule), 12)
+	var errors := Catalog.validate(draft)
+	if not errors.is_empty(): _label(preview_form, "Draft validation: " + str(errors[0]), 12).modulate = Color("#ff927f")
 
 
-func _new_id(entries: Array, prefix: String) -> String:
-	var index := 1
-	while Catalog.index_by_id(entries, prefix + "_" + str(index)) >= 0:
+func _preview_conditions(source: Dictionary, contents: Array, cards: Dictionary) -> void:
+	var valid := Catalog.validate(draft).is_empty()
+	if not valid: return
+	var sim = State.new(0, draft)
+	if sim.init_error != "": return
+	sim.circle.fill(-1)
+	sim.play_order.clear()
+	sim.expanded = preview_expanded
+	var incoming := -1
+	for slot in contents.size():
+		if contents[slot] < 0: continue
+		var virtual: Dictionary = source.duplicate(true) if slot == preview_slot else {"id": "preview_" + str(slot), "name": cards[contents[slot]].name, "owner": "", "type": cards[contents[slot]].type, "traits": [], "cost": 0, "pays": 1, "positions": Geometry.POSITIONS.duplicate(), "rules": []}
+		var uid: int = sim.card_keys.size()
+		sim.card_keys.append(virtual.id)
+		sim.definitions.cards[virtual.id] = Catalog.present_card(virtual, 0)
+		if slot == preview_slot: incoming = uid
+		else: sim.circle[slot] = uid; sim.play_order.append(uid)
+	var ctx := {"state": sim, "uid": incoming, "owner": 0, "slot": preview_slot, "event": {"kind": "on_play", "uid": incoming, "actor": 0, "card": sim.card(incoming)}, "proposed_uid": incoming, "proposed_slot": preview_slot}
+	for rule in source.rules:
+		_label(preview_form, ("ACTIVE / " if R.condition(rule.get("conditions", {"kind": "always"}), ctx) else "Inactive / ") + R.rule_text(rule), 12)
+
+
+func _id(entries: Array, prefix: String) -> String:
+	var candidate := prefix
+	var index := 2
+	while Catalog.index_by_id(entries, candidate) >= 0:
+		candidate = prefix + "_" + str(index)
 		index += 1
-	return prefix + "_" + str(index)
+	return candidate
 
 
 func _new_entry(kind: String) -> void:
-	var id := _new_id(draft[kind], kind.trim_suffix("s"))
+	var id := _id(draft[kind], {"ships": "ship", "captains": "captain", "cards": "card", "leviathans": "enemy"}[kind])
 	var entry: Dictionary
-	match kind:
-		"ships":
-			entry = {"id": id, "name": "New Ship", "role": "SUPPORT", "hull": 20, "color": "#91c8ad", "loadout": []}
-		"cards":
-			entry = {"id": id, "name": "New Card", "owner": "" if draft.ships.is_empty() else draft.ships[0].id,
-				"cost": 1, "pays": 1, "positions": Geometry.POSITIONS.duplicate(), "tags": ["Attack"], "effects": [{"kind": "damage_monster", "amount": 4}], "on_play": [], "modifiers": [], "triggers": []}
-		_:
-			entry = {"id": id, "name": "New Leviathan", "hull": 70, "starting_stance": "stance_1",
-				"stances": [{"id": "stance_1", "name": "Hunting", "reactions": [],
-				"effects": [{"kind": "damage_ship", "target": "front", "amount": 7}]}]}
+	if kind == "cards":
+		if draft.ships.is_empty(): _message("Create a ship first.", true); return
+		entry = _new_card(id, draft.ships[0].id)
+	elif kind == "captains":
+		var card_id := _id(draft.cards, id + "_orders")
+		draft.cards.append(_new_card(card_id, id))
+		entry = {"id": id, "name": "New Captain", "tier": 1, "card": card_id, "passive": _new_passive("captain")}
+	elif kind == "ships":
+		var card_id := _id(draft.cards, id + "_starter")
+		draft.cards.append(_new_card(card_id, id))
+		entry = {"id": id, "name": "New Ship", "role": "SPECIALIST", "color": "#91c8ad", "hull": 20, "armour": 0, "weapon": {"damage": 4, "range": "Long"}, "resource": {"name": "Charge", "capacity": 6, "rules": []}, "starter": card_id, "rules": [], "levels": {"two": [], "three": []}}
+		for level in ["two", "three"]:
+			for i in (2 if level == "two" else 3):
+				var rule := R.rule("turn_start", [{"kind": "gain_resource", "target": "owner", "amount": 1}], "ship")
+				rule.trigger.subject = "owner"
+				entry.levels[level].append({"id": level + "_" + str(i), "name": "New " + level + " branch " + str(i + 1), "card": card_id, "blocks": "three_" + str(i), "rule": rule, "passive": _new_passive("ship")})
+	else:
+		entry = {"id": id, "name": "New Enemy", "hull": 30, "armour": 0, "weapon": {"damage": 4, "range": "Long"}, "default_action": [{"kind": "attack", "target": "chosen_ally", "damage": 2, "hits": 1, "range": "weapon"}], "stances": [{"id": "strike", "name": "Strike", "reactions": [], "effects": [{"kind": "attack", "target": "chosen_ally", "damage": 4, "hits": 1, "range": "weapon"}]}], "stance_loadout": [{"stance": "strike", "count": 3}]}
 	draft[kind].append(entry)
 	selected_ids[kind] = id
-	searches[kind].text = ""
-	_refresh_all()
+	_refresh()
+
+
+func _new_card(id: String, owner: String) -> Dictionary:
+	var play := R.rule("on_play", [{"kind": "add_shields", "target": "owner", "amount": 2}])
+	play.id = "play"
+	var extra := R.rule("discarded", [{"kind": "gain_resource", "target": "owner", "amount": 1}], "any")
+	extra.id = "discard"
+	return {"id": id, "name": "New Card", "owner": owner, "type": "Support", "traits": [], "cost": 1, "pays": 1, "positions": Geometry.POSITIONS.duplicate(), "rules": [play, extra]}
+
+
+func _new_passive(zone: String) -> Dictionary:
+	var rule := R.rule("passive", [], zone)
+	rule.id = "passive"
+	rule.modifiers = [{"kind": "armour", "target": "owner", "amount": 1}]
+	return rule
 
 
 func _duplicate_entry(kind: String) -> void:
-	var source := selected_entry(kind)
-	if source.is_empty():
-		return
-	var entry := source.duplicate(true)
-	entry.id = _new_id(draft[kind], source.id + "_copy")
-	entry.name += " Copy"
-	if kind == "ships":
+	var entry := selected_entry()
+	if entry.is_empty(): return
+	var copy := entry.duplicate(true)
+	copy.id = _id(draft[kind], entry.id + "_copy")
+	copy.name += " Copy"
+	if kind in ["ships", "captains"]:
 		var mapping: Dictionary = {}
-		for card in draft.cards.duplicate(true):
-			if card.owner == source.id:
-				var copy: Dictionary = card.duplicate(true)
-				copy.id = _new_id(draft.cards, card.id + "_copy")
-				copy.owner = entry.id
-				mapping[card.id] = copy.id
-				draft.cards.append(copy)
-		for slot in entry.loadout:
-			slot.card = mapping.get(slot.card, slot.card)
-	draft[kind].append(entry)
-	selected_ids[kind] = entry.id
-	searches[kind].text = ""
-	_refresh_all()
+		for card in draft.cards.duplicate():
+			if card.owner != entry.id: continue
+			var card_copy: Dictionary = card.duplicate(true)
+			card_copy.id = _id(draft.cards, card.id + "_copy")
+			card_copy.name += " Copy"
+			card_copy.owner = copy.id
+			mapping[card.id] = card_copy.id
+			draft.cards.append(card_copy)
+		if kind == "ships":
+			copy.starter = mapping.get(copy.starter, copy.starter)
+			for tier in ["two", "three"]:
+				for package in copy.levels[tier]: package.card = mapping.get(package.card, package.card)
+			for slot in copy.get("legacy_loadout", []): slot.card = mapping.get(slot.card, slot.card)
+		else: copy.card = mapping.get(copy.card, copy.card)
+	draft[kind].append(copy)
+	selected_ids[kind] = copy.id
+	_refresh()
 
 
 func _delete_entry(kind: String) -> void:
-	var entry := selected_entry(kind)
-	if entry.is_empty():
-		return
+	var entry := selected_entry()
+	if entry.is_empty(): return
 	var references := Catalog.references(draft, kind, entry.id)
 	if not references.is_empty():
 		_message("Cannot delete " + entry.name + ". Change these references first:\n" + "\n".join(references), true)
 		return
 	draft[kind].remove_at(Catalog.index_by_id(draft[kind], entry.id))
-	selected_ids[kind] = ""
-	_refresh_all()
+	selected_ids.erase(kind)
+	_refresh()
 
 
-func _remember_ui() -> void:
-	var search_values: Dictionary = {}
-	for kind in KINDS:
-		search_values[kind] = searches[kind].text
-	ContentStore.editor_state = {"tab": tabs.current_tab, "selected": selected_ids.duplicate(), "searches": search_values, "editing_stance": editing_stance, "preview_slot": preview_slot, "preview_expanded": preview_expanded, "preview_position": preview_position, "preview_tags": preview_tags.duplicate()}
+func _new_stance(entry: Dictionary) -> void:
+	var id := _id(entry.stances, "stance")
+	entry.stances.append({"id": id, "name": "New Stance", "reactions": [], "effects": [{"kind": "attack", "target": "chosen_ally", "damage": 3, "hits": 1, "range": "weapon"}]})
+	entry.stance_loadout.append({"stance": id, "count": 1})
+	editing_stance = id
+	_dirty(); _rebuild_form(); _live_preview()
+
+
+func _duplicate_stance(entry: Dictionary) -> void:
+	var copy: Dictionary = entry.stances[Catalog.index_by_id(entry.stances, editing_stance)].duplicate(true)
+	copy.id = _id(entry.stances, copy.id + "_copy")
+	copy.name += " Copy"
+	entry.stances.append(copy)
+	entry.stance_loadout.append({"stance": copy.id, "count": 1})
+	editing_stance = copy.id
+	_dirty(); _rebuild_form(); _live_preview()
+
+
+func _delete_stance(entry: Dictionary) -> void:
+	if entry.stances.size() <= 1: _message("Keep at least one stance definition.", true); return
+	entry.stances.remove_at(Catalog.index_by_id(entry.stances, editing_stance))
+	entry.stance_loadout = entry.stance_loadout.filter(func(slot): return slot.stance != editing_stance)
+	editing_stance = entry.stances[0].id
+	_dirty(); _rebuild_form(); _live_preview()
+
+
+func _message(text: String, error: bool = false) -> void:
+	status.text = text
+	status.modulate = Color("#ff927f") if error else Color("#9ce6b7")
 
 
 func _save() -> bool:
 	if not ContentStore.save_content(draft):
 		_message("Cannot save:\n" + ContentStore.last_error, true)
 		return false
-	_dirty_changed()
-	_message("Saved project content. Start Game and Retry use this battle setup.")
+	draft = ContentStore.snapshot()
+	_refresh()
+	_dirty()
+	_message("Saved project content. Start Game, Retry, and playtests use this setup. No Git commit was created.")
 	return true
 
 
 func _revert() -> void:
-	draft = Catalog.migrate(ContentStore.snapshot()) if not ContentStore.saved.is_empty() else Catalog.empty_document()
-	_refresh_all()
-	_message("Unsaved changes reverted.")
+	draft = ContentStore.snapshot()
+	_refresh()
+	_message("Restored the last saved document.")
+
+
+func _remember() -> void:
+	var queries: Dictionary = {}
+	for kind in KINDS: queries[kind] = searches[kind].text
+	ContentStore.editor_state = {"tab": tabs.current_tab, "selected": selected_ids.duplicate(), "searches": queries, "editing_stance": editing_stance, "preview_position": preview_position, "preview_expanded": preview_expanded, "preview_slot": preview_slot, "preview_tags": preview_tags.duplicate()}
 
 
 func _test_battle() -> void:
-	if not _save():
-		return
-	_remember_ui()
+	if not _save(): return
+	_remember()
 	BattleSession.editor_playtest = true
 	get_tree().change_scene_to_file("res://scenes/game.tscn")
 
@@ -806,198 +826,13 @@ func _request_menu() -> void:
 
 func _request_leave() -> void:
 	if is_dirty():
-		leave_dialog.dialog_text = "Save changes before closing the game?" if leave_destination == "quit" else "Save changes before returning to the main menu?"
+		leave_dialog.dialog_text = "Save this draft before leaving? Discard restores the saved content."
 		leave_dialog.popup_centered()
-	else:
-		_go_menu()
+	else: _leave()
 
 
-func _go_menu() -> void:
-	_remember_ui()
+func _leave() -> void:
+	_remember()
 	BattleSession.editor_playtest = false
-	if leave_destination == "quit":
-		get_tree().quit()
-	else:
-		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
-
-
-func _message(text: String, error: bool = false) -> void:
-	status.text = text
-	status.modulate = Color("#ff927f") if error else Color("#9ce6b7")
-
-func _new_stance(entry: Dictionary) -> void:
-	var id := _new_id(entry.stances, "stance")
-	entry.stances.append({"id": id, "name": "New Stance", "reactions": [], "effects": [{"kind": "damage_ship", "target": "front", "amount": 4}]})
-	editing_stance = id
-	_dirty_changed()
-	_rebuild_form()
-
-
-func _duplicate_stance(entry: Dictionary) -> void:
-	var copy: Dictionary = entry.stances[Catalog.index_by_id(entry.stances, editing_stance)].duplicate(true)
-	copy.id = _new_id(entry.stances, copy.id + "_copy")
-	copy.name += " Copy"
-	entry.stances.append(copy)
-	editing_stance = copy.id
-	_dirty_changed()
-	_rebuild_form()
-
-
-func _delete_stance(entry: Dictionary) -> void:
-	if entry.stances.size() == 1 or entry.starting_stance == editing_stance:
-		_message("Keep one stance and choose another starting stance before deleting this one.", true)
-		return
-	entry.stances.remove_at(Catalog.index_by_id(entry.stances, editing_stance))
-	editing_stance = entry.starting_stance
-	_dirty_changed()
-	_rebuild_form()
-
-
-func _condition_form(parent: Node, condition: Dictionary) -> void:
-	var tags: Array = [{"value": "", "label": "Any card"}]
-	for tag in Catalog.TAGS:
-		tags.append({"value": tag, "label": tag})
-	_dropdown(parent, "Adjacent tag", tags, condition.get("tag", ""), func(value): _edit_value(condition, "tag", value))
-	_number(parent, "Minimum neighbours", condition.get("min", 0), func(value): _edit_value(condition, "min", value))
-
-
-func _circle_rules_form(parent: Node, entry: Dictionary) -> void:
-	for section in ["on_play", "modifiers", "triggers"]:
-		var row := _box(parent, false)
-		_label(row, {"on_play": "CONDITIONAL ON PLAY", "modifiers": "ONGOING BONUSES", "triggers": "CHAINED TRIGGERS / ONCE PER TURN"}[section], 13)
-		_button(row, "Add Rule", func():
-			var rule := {"condition": {"tag": "", "min": 0}}
-			if section == "modifiers":
-				rule.merge({"stat": "damage", "amount": 1, "tag": ""})
-			else:
-				rule["effects"] = [{"kind": "damage_monster", "amount": 1}]
-				if section == "triggers":
-					rule.merge({"id": _new_id(entry.triggers, "trigger"), "name": "New Trigger", "event": "played", "tag": "", "threshold": 1})
-			entry[section].append(rule)
-			_dirty_changed()
-			_rebuild_form())
-		for index in entry[section].size():
-			var rule: Dictionary = entry[section][index]
-			var panel := PanelContainer.new()
-			parent.add_child(panel)
-			var column := _box(panel)
-			var tools := _box(column, false)
-			_button(tools, "↑", _move_effect.bind(entry[section], index, -1))
-			_button(tools, "↓", _move_effect.bind(entry[section], index, 1))
-			_button(tools, "Remove rule", func(): entry[section].remove_at(index); _dirty_changed(); _rebuild_form())
-			if section == "triggers":
-				_line(column, "Name", rule.name, func(value): _edit_value(rule, "name", value))
-				var events: Array = []
-				for event in Catalog.CARD_EVENTS:
-					events.append({"value": event, "label": event})
-				_dropdown(column, "Neighbour event", events, rule.event, func(value): _edit_value(rule, "event", value))
-				_number(column, "Event threshold", rule.threshold, func(value): _edit_value(rule, "threshold", value))
-			if section in ["modifiers", "triggers"]:
-				var tags: Array = [{"value": "", "label": "Any tag"}]
-				for tag in Catalog.TAGS:
-					tags.append({"value": tag, "label": tag})
-				_dropdown(column, "Affected/event tag", tags, rule.tag, func(value): _edit_value(rule, "tag", value))
-			if section == "modifiers":
-				var stats: Array = []
-				for stat in Catalog.STATS:
-					stats.append({"value": stat, "label": stat})
-				_dropdown(column, "Bonus stat", stats, rule.stat, func(value): _edit_value(rule, "stat", value))
-				_number(column, "Bonus / cost reduction", rule.amount, func(value): _edit_value(rule, "amount", value))
-			_condition_form(column, rule.condition)
-			if section != "modifiers":
-				_effects_form(column, rule.effects, "trigger" if section == "triggers" else "card")
-
-
-func _live_preview() -> void:
-	if not is_instance_valid(preview_form):
-		return
-	_clear(preview_form)
-	var entry := selected_entry()
-	if entry.is_empty():
-		_label(preview_form, "Select content to preview.")
-		return
-	_label(preview_form, "LIVE / UNSAVED DRAFT", 13).modulate = Color("#d6adee")
-	var points: Array = []
-	for point in Geometry.POSITIONS:
-		points.append({"value": point, "label": point})
-	if _kind() == "cards":
-		var owner_index := Catalog.index_by_id(draft.ships, entry.get("owner", ""))
-		var owner: Dictionary = {} if owner_index < 0 else draft.ships[owner_index]
-		var info := Catalog.present_card(entry)
-		var face := CardFace.new()
-		face.custom_minimum_size = Vector2(286, 340)
-		face.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		preview_form.add_child(face)
-		face.configure(info, owner)
-		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		preview_widget = face
-		_check(preview_form, "Expanded context", preview_expanded, func(value): preview_expanded = value; preview_slot = mini(preview_slot, 3); _live_preview())
-		var slots: Array = []
-		for slot in (9 if preview_expanded else 4):
-			slots.append({"value": str(slot), "label": Geometry.SLOT_NAMES[slot]})
-		_dropdown(preview_form, "Preview slot", slots, str(preview_slot), func(value): preview_slot = int(value); _live_preview())
-		var contents: Array = [-1, -1, -1, -1, -1, -1, -1, -1, -1]
-		var data: Dictionary = {0: info}
-		contents[preview_slot] = 0
-		var neighbours: Array = []
-		for slot in Geometry.neighbours(preview_slot, preview_expanded):
-			var tag: String = preview_tags.get(slot, "")
-			if tag != "":
-				contents[slot] = slot + 1
-				data[slot + 1] = {"name": tag, "tag_ids": [tag], "effect": ""}
-				neighbours.append(data[slot + 1])
-		var mini := CircleView.new()
-		mini.custom_minimum_size = Vector2(0, 200)
-		preview_form.add_child(mini)
-		mini.configure(contents, preview_expanded, data, {}, preview_slot)
-		var active: Array = []
-		for rule in entry.get("on_play", []):
-			if Geometry.condition_matches(rule.condition, neighbours):
-				active.append(Catalog.effects_text(rule.effects))
-		_label(preview_form, "Active conditional bonuses: " + ("None" if active.is_empty() else " ".join(active)), 13).modulate = Color("#9ce6b7")
-		for modifier in entry.get("modifiers", []):
-			var count := 0
-			if Geometry.condition_matches(modifier.condition, neighbours):
-				for neighbour in neighbours:
-					if modifier.get("tag", "") == "" or neighbour.tag_ids.has(modifier.tag):
-						count += 1
-			_label(preview_form, "%s %s%d: affects %d neighbour(s)." % [modifier.stat, "−" if modifier.stat == "cost" else "+", modifier.amount, count], 13)
-		for slot in Geometry.neighbours(preview_slot, preview_expanded):
-			var tags: Array = [{"value": "", "label": "Empty"}]
-			for tag in Catalog.TAGS:
-				tags.append({"value": tag, "label": tag})
-			_dropdown(preview_form, Geometry.SLOT_NAMES[slot], tags, preview_tags.get(slot, ""), func(value): preview_tags[slot] = value; _live_preview())
-		if not Catalog.validate(draft).is_empty():
-			_label(preview_form, "Draft needs validation; preview only.", 12).modulate = Color("#ff927f")
-	else:
-		_dropdown(preview_form, "Preview position", points, preview_position, func(value): preview_position = value; _live_preview())
-		var board := {"ships": [], "formation": [-1, -1, -1, -1], "enemy_position": Geometry.POSITIONS.find(preview_position), "monster_hull": int(entry.get("hull", 1))}
-		var view := FormationView.new()
-		view.custom_minimum_size = Vector2(0, 250)
-		preview_form.add_child(view)
-		if _kind() == "ships":
-			var unit := entry.duplicate(true)
-			unit["max_hull"] = maxi(1, int(entry.get("hull", 1)))
-			unit["guard"] = 0
-			board.ships = [unit]
-			board.formation[Geometry.POSITIONS.find(preview_position)] = 0
-			view.configure(board)
-		else:
-			view.configure(board, true, entry)
-			var options: Array = []
-			for stance in entry.stances:
-				options.append({"value": stance.id, "label": stance.name})
-			if Catalog.index_by_id(entry.stances, editing_stance) < 0:
-				editing_stance = entry.starting_stance
-			_dropdown(preview_form, "Preview stance", options, editing_stance, func(value): editing_stance = value; _rebuild_form())
-			var stance_view := StanceView.new()
-			preview_form.add_child(stance_view)
-			stance_view.configure(entry.stances[Catalog.index_by_id(entry.stances, editing_stance)])
-		preview_widget = view
-
-
-func _set_basic_rule(key: String, value: int) -> void:
-	var basic := Catalog.basic_rules(draft)
-	basic[key] = value
-	draft.setup["basic_actions"] = basic
-	_dirty_changed()
+	if leave_destination == "quit": get_tree().quit()
+	else: get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
