@@ -28,6 +28,10 @@ Cards can have:
 
 Resolve the played card first, then process triggered effects in FIFO order, with ties broken by card play order and rule order. Effects can trigger other eligible cards. Each rule on each physical card instance can fire **once per turn**, marked used when queued to prevent loops. Continuous modifiers remain active after triggers are used and do not emit events.
 
+When a card and destination slot are selected, contributing neighbours have a green **BONUS** badge, a bright border, and a green link to the selected gold slot. Other occupied neighbours remain purple. Hover a bonus source for its cost/damage/guard/healing contribution or the conditional effect it enables. These public bonuses stay visible while payment or target choices are incomplete.
+
+As each chained effect resolves, a directional spark travels from the card that caused the event to the reacting card, with both endpoints outlined. Damage links are orange, guard links blue, repair links green, and other event links purple. The chain banner names both cards and the triggering event. Pulses follow the resolution queue, pause with the battle menu, and clear when finished.
+
 Triggered effects have automatic source/event-actor targets and no new movement prompts. Draw/discard effects pause the queue for player choices, then resume without resetting usage. Destroyed ships cannot receive guard or repairs; stored in-circle magic remains until cleanup. Previews simulate public effects without consuming real RNG, drawing hidden card identities, or revealing the next stance.
 
 ### Enemy stances
@@ -98,6 +102,7 @@ godot --headless --path . --script res://tests/combat_feedback.gd
 godot --headless --path . --script res://tests/results_flow.gd
 godot --headless --path . --script res://tests/editor_flow.gd
 godot --headless --path . --script res://tests/circle_examples.gd
+godot --headless --path . --script res://tests/circle_feedback.gd
 ```
 
 Suites cover unchanged payment, guard, repair, conservation, lethal-hit and results rules plus new positions, expansion timing, modifier costs, finite chains, paused discards, independent copies, stance transitions, migration, safe saving, live previews, real playtests, navigation, and animation cancellation. Editor/persistence tests use temporary user-data files and never save project content.

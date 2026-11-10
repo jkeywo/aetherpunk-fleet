@@ -337,6 +337,7 @@ func _present_resolution() -> void:
 
 func _update_controls() -> void:
 	var contributing: Array = []
+	var contribution_details: Dictionary = {}
 	for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
 		button.disabled = busy
 	for button in hand_view.get_children():
@@ -367,15 +368,16 @@ func _update_controls() -> void:
 		%PlayButton.disabled = not result.ok
 		%Inspection.text = result.text
 		contributing = result.get("contributors", [])
+		contribution_details = result.get("contribution_details", {})
 		%PlayButton.text = "Manoeuvre" if selected_uid < 0 else "Play Card"
 	else:
 		%Inspection.text = "Select an action card, choose its circle slot, and select other cards as payment."
-	%Status.text = "Hand %d / In circle %d\nNext stance hidden. Triggers fire once per card instance per turn." % [state.hand.size(), state.play_order.size()]
+	%Status.text = "Hand %d / In circle %d\nGreen BONUS = contributor. Purple = adjacent. Next stance hidden." % [state.hand.size(), state.play_order.size()]
 	var cards: Dictionary = {}
 	for uid in state.circle:
 		if uid >= 0:
 			cards[uid] = state.card(uid)
-	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, selected_slot, contributing)
+	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, selected_slot, contributing, contribution_details)
 
 
 func _show_history() -> void:

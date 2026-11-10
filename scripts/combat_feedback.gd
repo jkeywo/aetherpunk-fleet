@@ -63,8 +63,14 @@ func play(events: Array, battle_view: Control) -> void:
 				await _pause(0.40)
 			"card_triggered":
 				await _apply_board(event.board)
-				_message("CARD TRIGGER / " + event.title, Color("#9ce6b7"))
-				await _pause(0.28)
+				var source_uid: int = event.get("source_uid", -1)
+				var cause: String = event.get("source_event", "effect")
+				if source_uid >= 0:
+					_message("CHAIN / " + view.state.card(source_uid).name + " → " + view.state.card(event.uid).name + "\n" + cause.to_upper() + " / " + event.title, Color("#9ce6b7"))
+					await view.circle_view.animate_chain(source_uid, event.uid, cause, _time(0.55))
+				else:
+					_message("CARD TRIGGER / " + event.title, Color("#9ce6b7"))
+					await _pause(0.28)
 			"circle_expanded", "circle_reset":
 				await _apply_board(event.board)
 				_message(event.title, Color("#d6adee"))

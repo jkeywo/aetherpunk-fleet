@@ -1,22 +1,33 @@
 extends Control
 signal slot_selected(slot: int)
+signal link_pulse_started(source_uid: int, receiver_uid: int, event_kind: String)
 const Geometry = preload("res://scripts/battle_geometry.gd")
+const BONUS_COLOR := Color("#9ce6b7")
 var buttons: Array = []
 var expanded := false
 var selected := -1
 var contents: Array = []
 var card_data: Dictionary = {}
+var bonus_slots: Array = []
+var contribution_details: Dictionary = {}
+var pulse_source := -1
+var pulse_receiver := -1
+var pulse_event := ""
+var pulse_progress := 0.0
+var link_overlay: Control
 
 
 func _ready() -> void:
 	resized.connect(_arrange)
 
 
-func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictionary = {}, selected_slot: int = -1, contributors: Array = []) -> void:
+func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictionary = {}, selected_slot: int = -1, contributors: Array = [], details: Dictionary = {}) -> void:
 	expanded = is_expanded
 	selected = selected_slot
 	contents = circle.duplicate()
 	card_data = cards
+	contribution_details = details.duplicate(true)
+	bonus_slots.clear()
 	if buttons.is_empty():
 		for slot in 9:
 			var button := Button.new()
@@ -25,30 +36,55 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 			button.pressed.connect(func(): slot_selected.emit(slot))
 			add_child(button)
 			buttons.append(button)
+		link_overlay = Control.new()
+		link_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		link_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(link_overlay)
+		link_overlay.draw.connect(_draw_pulse)
 	for slot in 9:
 		var uid: int = circle[slot]
 		var locked: bool = slot >= 4 and not expanded
 		var button: Button = buttons[slot]
+		var provides: bool = uid >= 0 and contributors.has(uid) and selected >= 0 and Geometry.neighbours(selected, expanded).has(slot)
 		button.disabled = locked
 		button.text = "Locked" if locked else Geometry.SLOT_NAMES[slot] + "\n+"
 		button.modulate = Color("#3b4859") if locked else Color.WHITE
 		button.tooltip_text = Geometry.SLOT_NAMES[slot]
+		for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
+			button.remove_theme_stylebox_override(style_name)
 		if uid >= 0 and cards.has(uid):
 			var card: Dictionary = cards[uid]
 			var count := 0
 			for key in used:
 				if str(key).begins_with(str(uid) + "/"):
 					count += 1
-			button.text = card.name + ("\n◆ %d used" % count if count > 0 else "\nIn play")
+			var caption := "BONUS" if provides else "In play"
+			if count > 0:
+				caption = ("BONUS · " if provides else "") + "◆ %d used" % count
+			button.text = card.name + "\n" + caption
 			button.tooltip_text = card.name + "\n" + card.get("effect", "")
 			button.modulate = Color("#b7d2e6")
 		if slot == selected:
-			button.modulate = Color("#f6d491")
-		elif contributors.has(uid):
-			button.modulate = Color("#b3e6bb")
+			_highlight(button, Color("#e8bd77"), Color("#302b20"))
+		elif provides:
+			bonus_slots.append(slot)
+			button.modulate = Color.WHITE
+			_highlight(button, BONUS_COLOR, Color("#18372e"))
+			var reasons: Array = details.get(uid, [])
+			button.tooltip_text += "\n\nProviding to " + Geometry.SLOT_NAMES[selected] + ":\n" + "\n".join(reasons)
 		elif selected >= 0 and Geometry.neighbours(selected, expanded).has(slot) and uid >= 0:
 			button.modulate = Color("#d6adee")
 	_arrange()
+
+
+func _highlight(button: Button, tint: Color, fill: Color) -> void:
+	for style_name in ["normal", "hover", "pressed", "hover_pressed"]:
+		var style := StyleBoxFlat.new()
+		style.bg_color = fill.lightened(0.10) if style_name in ["hover", "hover_pressed"] else fill
+		style.border_color = tint
+		style.set_border_width_all(3)
+		style.set_corner_radius_all(5)
+		button.add_theme_stylebox_override(style_name, style)
 
 
 func _arrange() -> void:
@@ -57,6 +93,8 @@ func _arrange() -> void:
 		buttons[slot].position = Geometry.CIRCLE_POINTS[slot] * cell + Vector2(4, 4)
 		buttons[slot].size = cell - Vector2(8, 8)
 	queue_redraw()
+	if is_instance_valid(link_overlay):
+		link_overlay.queue_redraw()
 
 
 func _draw() -> void:
@@ -65,7 +103,64 @@ func _draw() -> void:
 	if expanded:
 		links.append_array(Geometry.EXTRA_LINKS)
 	for link in links:
-		var tint := Color("#9a61b8")
+		var tint := Color("#694c80")
+		var width := 2.0
 		if selected >= 0 and link.has(selected):
-			tint = Color("#e8bd77")
-		draw_line((Geometry.CIRCLE_POINTS[link[0]] + Vector2.ONE / 2) * cell, (Geometry.CIRCLE_POINTS[link[1]] + Vector2.ONE / 2) * cell, tint, 2, true)
+			var other: int = link[1] if link[0] == selected else link[0]
+			tint = BONUS_COLOR if bonus_slots.has(other) else Color("#9b819e")
+			width = 5.0 if bonus_slots.has(other) else 2.0
+		draw_line((Geometry.CIRCLE_POINTS[link[0]] + Vector2.ONE / 2) * cell, (Geometry.CIRCLE_POINTS[link[1]] + Vector2.ONE / 2) * cell, tint, width, true)
+
+
+func animate_chain(source_uid: int, receiver_uid: int, event_kind: String, duration: float) -> void:
+	var source: int = contents.find(source_uid)
+	var receiver: int = contents.find(receiver_uid)
+	if source < 0 or receiver < 0 or not Geometry.neighbours(source, expanded).has(receiver):
+		return
+	pulse_source = source
+	pulse_receiver = receiver
+	pulse_event = event_kind
+	set_pulse_progress(0.0)
+	link_pulse_started.emit(source_uid, receiver_uid, event_kind)
+	var tween := create_tween()
+	tween.tween_method(set_pulse_progress, 0.0, 1.0, maxf(0.001, duration)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	await tween.finished
+	pulse_source = -1
+	pulse_receiver = -1
+	pulse_event = ""
+	link_overlay.queue_redraw()
+
+
+func set_pulse_progress(value: float) -> void:
+	pulse_progress = value
+	if is_instance_valid(link_overlay):
+		link_overlay.queue_redraw()
+
+
+func _edge_point(button: Control, direction: Vector2) -> Vector2:
+	var half := button.size / 2
+	var factor := minf(half.x / maxf(0.001, absf(direction.x)), half.y / maxf(0.001, absf(direction.y)))
+	return button.position + half + direction * (factor + 2.0)
+
+
+func _draw_pulse() -> void:
+	if pulse_source < 0 or pulse_receiver < 0:
+		return
+	var source: Control = buttons[pulse_source]
+	var receiver: Control = buttons[pulse_receiver]
+	var direction := (receiver.get_rect().get_center() - source.get_rect().get_center()).normalized()
+	var start := _edge_point(source, direction)
+	var finish := _edge_point(receiver, -direction)
+	var tint: Color = {"damage": Color("#ffb17d"), "guard": Color("#8bd8ff"), "repair": BONUS_COLOR}.get(pulse_event, Color("#d6adee"))
+	var glow := tint
+	glow.a = 0.25 + sin(pulse_progress * PI) * 0.45
+	link_overlay.draw_rect(source.get_rect().grow(-2), glow, false, 4, true)
+	link_overlay.draw_rect(receiver.get_rect().grow(-2), tint, false, 4, true)
+	link_overlay.draw_line(start, finish, Color(tint, 0.30), 12, true)
+	link_overlay.draw_line(start, finish, tint, 4, true)
+	var spark := start.lerp(finish, pulse_progress)
+	link_overlay.draw_circle(spark, 8, Color(tint, 0.35), true, -1, true)
+	link_overlay.draw_circle(spark, 4, Color.WHITE, true, -1, true)
+	var head := finish - direction * 7
+	var perpendicular := Vector2(-direction.y, direction.x) * 5
+	link_overlay.draw_colored_polygon(PackedVector2Array([finish, head + perpendicular, head - perpendicular]), tint)

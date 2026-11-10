@@ -306,6 +306,7 @@ func _event(kind: String, source: int, actor: int, amount: int) -> void:
 				continue
 			used_triggers[key] = "queued"
 			tasks.append({"uid": host, "slot": circle.find(host), "actor": int(card(host).owner), "event_actor": actor,
+				"source_uid": source, "source_event": kind, "source_amount": amount,
 				"target": actor, "points": [], "effects": rule.effects.duplicate(true), "next_step": 0, "discard_remaining": 0,
 				"title": card(host).name + " / " + rule.get("name", rule.id), "trigger_key": key, "announced": false})
 
@@ -317,7 +318,8 @@ func _drain() -> void:
 			context.announced = true
 			used_triggers[context.trigger_key] = "fired"
 			history.append("Card trigger: " + context.title)
-			_record("card_triggered", {"uid": context.uid, "title": context.title})
+			_record("card_triggered", {"uid": context.uid, "title": context.title,
+				"source_uid": context.source_uid, "source_event": context.source_event, "source_amount": context.source_amount})
 		while context.next_step < context.effects.size():
 			var effect: Dictionary = context.effects[context.next_step]
 			context.next_step += 1
@@ -571,7 +573,8 @@ func refresh(optional_discards: Array) -> String:
 func preview(uid: int, payment: Array, target: int = -1, movement: int = -1, slot: int = -1) -> Dictionary:
 	var error := validate(uid, payment, target, movement, slot)
 	if error != "":
-		return {"ok": false, "text": error}
+		return {"ok": false, "text": error, "contributors": contributing_cards(uid, slot),
+			"contribution_details": contribution_details(uid, slot)}
 	var sim = get_script().new(0, document)
 	for key in ["ships", "formation", "card_keys", "hand", "deck", "discard", "held", "circle", "play_order", "used_triggers"]:
 		sim.set(key, get(key).duplicate(true))
@@ -595,7 +598,8 @@ func preview(uid: int, payment: Array, target: int = -1, movement: int = -1, slo
 	if sim.outcome != "":
 		lines.append(sim.outcome.to_upper())
 	lines.append("Drawn cards and replacement stances remain unknown.")
-	return {"ok": true, "text": " ".join(lines)}
+	return {"ok": true, "text": " ".join(lines), "contributors": contributing_cards(uid, slot, sim.used_triggers),
+		"contribution_details": contribution_details(uid, slot, sim.used_triggers)}
 
 
 func payment_total(payment: Array) -> int:
@@ -688,29 +692,40 @@ func board_snapshot() -> Dictionary:
 
 
 func contributing_cards(uid: int, slot: int, simulated_used: Dictionary = {}) -> Array:
-	if uid < 0:
-		return []
+	return contribution_details(uid, slot, simulated_used).keys()
+
+
+func contribution_details(uid: int, slot: int, simulated_used: Dictionary = {}) -> Dictionary:
+	var result: Dictionary = {}
+	if uid < 0 or uid >= card_keys.size():
+		return result
 	if slot < 0:
 		slot = first_slot()
-	if slot < 0:
-		return []
-	var result: Array = []
+	if slot < 0 or slot >= (9 if expanded else 4) or circle[slot] >= 0:
+		return result
+	var relevant: Array = ["cost"] if int(card(uid).cost) > 0 else []
+	for effect in active_effects(uid, slot):
+		var stat: String = {"damage_monster": "damage", "guard": "guard", "swap_pair_guard": "guard", "repair": "healing"}.get(effect.kind, "")
+		if stat != "" and not relevant.has(stat):
+			relevant.append(stat)
 	for adjacent in Geometry.neighbours(slot, expanded):
 		var source: int = circle[adjacent]
 		if source < 0:
 			continue
-		var contributes := false
+		var reasons: Array = []
 		for modifier in card(source).get("modifiers", []):
+			if int(modifier.amount) <= 0 or not relevant.has(modifier.stat):
+				continue
 			if (modifier.get("tag", "") == "" or card(uid).tag_ids.has(modifier.tag)) and condition_matches(modifier.condition, adjacent, uid, slot):
-				contributes = true
+				reasons.append(("%s%d %s" % ["−" if modifier.stat == "cost" else "+", modifier.amount, modifier.stat]))
 		for rule in card(uid).get("on_play", []):
 			if int(rule.condition.get("min", 0)) > 0 and condition_matches(rule.condition, slot):
 				if rule.condition.get("tag", "") == "" or card(source).tag_ids.has(rule.condition.tag):
-					contributes = true
+					reasons.append("Enables on-play: " + Catalog.effects_text(rule.effects))
 		for rule in card(source).get("triggers", []):
 			var key := "%d/%s" % [source, rule.id]
 			if simulated_used.has(key) and not used_triggers.has(key):
-				contributes = true
-		if contributes:
-			result.append(source)
+				reasons.append("Will trigger: " + str(rule.get("name", rule.id)))
+		if not reasons.is_empty():
+			result[source] = reasons
 	return result
