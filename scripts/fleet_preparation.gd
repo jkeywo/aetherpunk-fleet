@@ -27,6 +27,9 @@ var encounter: Label
 var fleet_scroll: ScrollContainer
 var deck_preview: VBoxContainer
 var deck_cards: HBoxContainer
+var upgrade_dialog: AcceptDialog
+var upgrade_comparison: HBoxContainer
+var comparison_tier := "two"
 var deck_summary: Label
 var content_scroll: ScrollContainer
 
@@ -185,6 +188,7 @@ func _render() -> void:
 	options=[]
 	for package in ship.levels.two: options.append({"label":package.name,"value":package.id,"tooltip":_package_text(package)})
 	_menu(inspector,"Level 2 branch",options,slot.level_2,_change.bind(selected_ship,"level_2"),"level_2_"+str(selected_ship),slot.level>=2)
+	_button(inspector, "Compare Level 2 branches", _show_upgrades.bind("two"))
 	var blocked := ""
 	var branch := Catalog.index_by_id(ship.levels.two,slot.level_2)
 	if branch>=0: blocked=ship.levels.two[branch].blocks
@@ -194,6 +198,7 @@ func _render() -> void:
 		if package.id==blocked: blocked_name=package.name
 		else: options.append({"label":package.name,"value":package.id,"tooltip":_package_text(package)})
 	_menu(inspector,"Level 3 branch",options,slot.level_3,_change.bind(selected_ship,"level_3"),"level_3_"+str(selected_ship),slot.level>=3)
+	_button(inspector, "Compare Level 3 branches", _show_upgrades.bind("three"))
 	_label(inspector,"Blocked by level 2: "+blocked_name if blocked_name!="" else "Select level 2 to determine the available paths.",12).modulate=Color("#e8bd77")
 	details.append(_label(inspector,"",14))
 	var rewards := _label(inspector,"",12)
@@ -434,3 +439,89 @@ func _render_deck_preview(compiled: Dictionary, ship: Dictionary, slot: Dictiona
 		face.configure(compiled.cards[group.card], ship)
 		column.add_child(face)
 	deck_summary.text = "%s / Level %d / %d cards in deck" % [ship.name, slot.level, total]
+
+
+func _show_upgrades(tier: String) -> void:
+	comparison_tier = tier
+	if is_instance_valid(upgrade_dialog):
+		upgrade_dialog.hide()
+		upgrade_dialog.queue_free()
+	upgrade_dialog = AcceptDialog.new()
+	upgrade_dialog.name = "UpgradeComparison"
+	upgrade_dialog.get_ok_button().text = "Close"
+	add_child(upgrade_dialog)
+	var slot: Dictionary = draft.setup.fleet[selected_ship]
+	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, slot.ship)]
+	var level := 2 if tier == "two" else 3
+	upgrade_dialog.title = "%s / Compare Level %d branches" % [ship.name, level]
+	var viewer_size := Vector2i(minf(1180, get_viewport_rect().size.x * 0.94), minf(700, get_viewport_rect().size.y * 0.88))
+	var body := VBoxContainer.new()
+	body.custom_minimum_size.x = viewer_size.x - 40
+	upgrade_dialog.add_child(body)
+	var caption := Label.new()
+	caption.text = "Each branch adds two copies of its card, plus the special rule and passive shown below."
+	caption.add_theme_font_size_override("font_size", 13)
+	if tier == "three" and slot.level < 2: caption.text += "\nChoose a Level 2 branch first to determine which Level 3 option is blocked."
+	if ship.has("legacy_loadout"): caption.text = "Imported loadout: these branches change rules and passives; the imported deck stays fixed."
+	body.add_child(caption)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(scroll)
+	upgrade_comparison = HBoxContainer.new()
+	upgrade_comparison.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	upgrade_comparison.alignment = BoxContainer.ALIGNMENT_CENTER
+	upgrade_comparison.add_theme_constant_override("separation", 14)
+	scroll.add_child(upgrade_comparison)
+	var blocked := ""
+	var l2 := Catalog.index_by_id(ship.levels.two, slot.level_2)
+	if l2 >= 0: blocked = ship.levels.two[l2].blocks
+	var width: float = floor((viewer_size.x - 60 - 14 * (ship.levels[tier].size() - 1)) / ship.levels[tier].size())
+	width = minf(width, 370)
+	for package in ship.levels[tier]:
+		var column := VBoxContainer.new()
+		column.custom_minimum_size.x = width
+		column.set_meta("branch_id", package.id)
+		upgrade_comparison.add_child(column)
+		var chosen: bool = slot.level >= level and slot["level_2" if tier == "two" else "level_3"] == package.id
+		var locked: bool = tier == "three" and package.id == blocked
+		var name_label := _label(column, package.name, 19)
+		name_label.set_meta("plain_text", true)
+		name_label.custom_minimum_size.y = 48
+		var state_text: String = "SELECTED" if chosen else ("BLOCKED by " + ship.levels.two[l2].name if locked else ("Choose Level 2 first" if tier == "three" and slot.level < 2 else "Available / +2 cards"))
+		var state_label := _label(column, state_text, 13)
+		state_label.custom_minimum_size.y = 36
+		state_label.modulate = Color("#f29b8e") if locked else (Color("#91c8ad") if chosen else Color("#e8bd77"))
+		var face := CardFace.new()
+		face.custom_minimum_size = Vector2(width, 300)
+		face.toggle_mode = false
+		face.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		face.configure(Catalog.present_card(draft.cards[Catalog.index_by_id(draft.cards, package.card)], selected_ship, ship.name), ship)
+		face.set_meta("card_id", package.card)
+		column.add_child(face)
+		var choose := _button(column, "Selected" if chosen else ("Blocked" if locked else "Choose this branch"), _choose_upgrade.bind(tier, package.id))
+		choose.set_meta("choose_branch", package.id)
+		choose.disabled = chosen or locked or (tier == "three" and slot.level < 2)
+		choose.tooltip_text = "Raises this ship to Level %d if needed." % level
+		if tier == "two":
+			var excluded: Dictionary = ship.levels.three[Catalog.index_by_id(ship.levels.three, package.blocks)]
+			_label(column, "Blocks Level 3: " + excluded.name, 12).modulate = Color("#e8bd77")
+		_label(column, "SPECIAL RULE", 12).modulate = Color("#91b9c6")
+		_label(column, Rules.rule_text(package.rule, ship.name), 13)
+		_label(column, "PASSIVE UPGRADE", 12).modulate = Color("#91b9c6")
+		_label(column, Rules.rule_text(package.passive, ship.name), 13)
+	upgrade_dialog.popup_centered(viewer_size)
+
+
+func _choose_upgrade(tier: String, id: String) -> void:
+	var slot: Dictionary = draft.setup.fleet[selected_ship]
+	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, slot.ship)]
+	if Catalog.index_by_id(ship.levels[tier], id) < 0: return
+	if tier == "three":
+		var l2 := Catalog.index_by_id(ship.levels.two, slot.level_2)
+		if slot.level < 2 or l2 < 0 or ship.levels.two[l2].blocks == id: return
+	slot.level = maxi(slot.level, 2 if tier == "two" else 3)
+	slot["level_2" if tier == "two" else "level_3"] = id
+	_repair_branch(slot)
+	_render()
+	_show_upgrades(tier)
