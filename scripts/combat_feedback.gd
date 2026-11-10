@@ -1,5 +1,7 @@
 extends CanvasLayer
 signal beat_started(kind: String)
+signal enemy_presentation_started(kind: String, presentation: Dictionary)
+signal enemy_presentation_finished
 signal finished
 signal attack_started(attacker: int, target: int)
 signal movement_started(paths: Dictionary)
@@ -8,6 +10,8 @@ var running := false
 var view: Control
 var overlay: Control
 var banner: PanelContainer
+var enemy_card: PanelContainer
+var enemy_source_rect := Rect2()
 var banner_label: Label
 var _sources: Dictionary = {}
 var _paid: Array = []
@@ -73,7 +77,7 @@ func play(events: Array, battle_view: Control) -> void:
 				view.stance_panel.show_trigger_preview([event.get("reaction_key","")])
 				_message("MONSTER REACTION\n" + event.title, Color("#ff927f"))
 				view.stance_panel.modulate = Color("#ff927f")
-				await _pause(0.50)
+				await _show_enemy_card(event)
 				view.stance_panel.modulate = Color.WHITE
 				view.stance_panel.show_trigger_preview()
 			"stance_changed":
@@ -82,7 +86,9 @@ func play(events: Array, battle_view: Control) -> void:
 				await _pause(0.30)
 			"intent_triggered":
 				_message("ENEMY ACTIVITY / " + event.title, Color("#ff927f"))
-				await _pause(0.40)
+				await _show_enemy_card(event)
+			"enemy_effect_finished":
+				await _hide_enemy_card()
 			"card_triggered":
 				await _apply_board(event.board)
 				var source_uid: int = event.get("source_uid", -1)
@@ -119,6 +125,7 @@ func play(events: Array, battle_view: Control) -> void:
 				await _pause(0.25)
 				await _apply_board(event.board)
 		view._show_piles(event.board)
+	if view.state.phase not in ["scry","discard"] or view.state.outcome != "": await _hide_enemy_card()
 	if view.state.outcome != "":
 		_message(view.state.outcome.to_upper(), Color("#e8bd77"))
 		await _pause(0.40)
@@ -446,3 +453,46 @@ func _impact_point(target: Control, event: Dictionary) -> Vector2:
 	if int(event.get("shields_absorbed",0))>0 and "shield_fx" in target:
 		return target.shield_fx.global_position+target.shield_fx.size*Vector2(.05 if enemy else .95,.53)
 	return _art_centre(target)
+
+
+func _show_enemy_card(event: Dictionary) -> void:
+	await _hide_enemy_card()
+	var data: Dictionary = event.get("presentation",{}).duplicate(true)
+	if data.is_empty(): return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var extent := Vector2(minf(370,viewport_size.x-40),minf(440,viewport_size.y-130))
+	enemy_source_rect = Rect2(viewport_size/2,Vector2(80,80))
+	var token: int = event.get("stance_uid",-1)
+	for button in view.stance_panel.buttons:
+		if button.get_meta("stance_uid",-2) == token: enemy_source_rect=button.get_global_rect(); break
+	if token < 0:
+		var source := _unit(data.get("owner",-1))
+		if source != null: enemy_source_rect=source.get_global_rect()
+	enemy_card = preload("res://scripts/enemy_effect_card.gd").new()
+	enemy_card.z_index = 5
+	enemy_card.theme = view.theme
+	overlay.add_child(enemy_card)
+	enemy_card.configure(event.kind,data)
+	enemy_card.size = extent
+	enemy_card.position = enemy_source_rect.position
+	enemy_card.scale = enemy_source_rect.size/extent
+	enemy_card.modulate.a = 0.25
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(enemy_card,"position",(viewport_size-extent)/2,_time(0.30)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(enemy_card,"scale",Vector2.ONE,_time(0.30)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(enemy_card,"modulate:a",1.0,_time(0.20))
+	await tween.finished
+	enemy_presentation_started.emit(event.kind,data.duplicate(true))
+	await _pause(0.65)
+
+
+func _hide_enemy_card() -> void:
+	if not is_instance_valid(enemy_card): return
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(enemy_card,"position",enemy_source_rect.position,_time(0.20)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tween.tween_property(enemy_card,"scale",enemy_source_rect.size/enemy_card.size,_time(0.20))
+	tween.tween_property(enemy_card,"modulate:a",0.0,_time(0.20))
+	await tween.finished
+	enemy_card.free()
+	enemy_card = null
+	enemy_presentation_finished.emit()

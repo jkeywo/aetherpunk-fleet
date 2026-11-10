@@ -770,9 +770,13 @@ func _drain() -> void:
 			"effect": Rules.execute(job.spec, c)
 			"hit": _hit(job, c)
 			"reaction_done":
+				_record("enemy_effect_finished")
 				_replace_row(job.stance_uid)
 				_emit("reaction_resolved", c, {"category": job.category, "stance_uid": job.stance_uid, "reaction_key": job.reaction_key, "amount": 1})
-			"activation_done": _replace_row(job.stance_uid)
+			"activation_done":
+				_record("enemy_effect_finished")
+				_replace_row(job.stance_uid)
+			"default_done": _record("enemy_effect_finished")
 		_cleanup()
 	if outcome != "":
 		_finish_terminal_payment()
@@ -829,7 +833,7 @@ func _advance_stage() -> bool:
 						c["ancestry"] = []
 						if not Rules.condition(reaction.conditions, c): continue
 						history.append(row_card(uid).owner_name + " reaction: " + reaction.name)
-						_record("reaction_triggered", {"title": row_card(uid).owner_name + " / " + reaction.name, "stance_uid": uid, "reaction_key": key})
+						_record("reaction_triggered", {"title": row_card(uid).owner_name + " / " + reaction.name, "stance_uid": uid, "reaction_key": key, "presentation": {"owner_name": row_card(uid).owner_name, "owner": owner, "name": reaction.name, "stance_name": row_card(uid).name, "conditions": reaction.conditions, "effects": reaction.effects}})
 						tasks.append_array(_effect_jobs(reaction.effects, c))
 						tasks.append({"kind": "reaction_done", "ctx": c, "stance_uid": uid, "category": reaction.get("category", ""), "reaction_key": key})
 						return true
@@ -845,7 +849,7 @@ func _advance_stage() -> bool:
 				if unit(owner).hull <= 0: continue
 				_next_enemy_action()
 				_activated.append(owner)
-				_record("intent_triggered", {"title": row.owner_name + " / " + row.name, "stance_uid": uid})
+				_record("intent_triggered", {"title": row.owner_name + " / " + row.name, "stance_uid": uid, "presentation": {"owner_name": row.owner_name, "owner": owner, "name": row.name, "effects": row.effects}})
 				var c := _enemy_context(owner)
 				tasks.append_array(_effect_jobs(row.effects, c))
 				tasks.append({"kind": "activation_done", "ctx": c, "stance_uid": uid})
@@ -857,8 +861,9 @@ func _advance_stage() -> bool:
 			if not _defaults.is_empty():
 				var owner: int = _defaults.pop_front()
 				_next_enemy_action()
-				_record("intent_triggered", {"title": unit(owner).name + " / weaker default action"})
+				_record("intent_triggered", {"title": unit(owner).name + " / weaker default action", "presentation": {"owner_name": unit(owner).name, "owner": owner, "name": "Default action", "effects": unit(owner).default_action}})
 				tasks.append_array(_effect_jobs(unit(owner).default_action, _enemy_context(owner)))
+				tasks.append({"kind":"default_done","ctx":_enemy_context(owner)})
 				return true
 			_round_cleanup()
 			return true
