@@ -11,8 +11,9 @@ func _run() -> void:
 	battle.state.formation[1] = -1
 	battle.state.round_number = 4
 	battle._render()
-	field_key(battle, "advance").pressed.emit()
-	field_key(battle, "tow").pressed.emit()
+	stage_card(battle, "advance", 0)
+	choose_first_targets(battle)
+	await pay_with(battle, "tow")
 	battle.get_node("%PlayButton").pressed.emit()
 	await scene_changed
 	expect(current_scene.name == "Victory", "Actual victory route failed.")

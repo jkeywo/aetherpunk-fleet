@@ -20,6 +20,7 @@ func play(events: Array, battle_view: Control) -> void:
 	view = battle_view
 	_sources.clear()
 	_paid.clear()
+	_sources.merge(view.pending_visual_sources.duplicate(true))
 	await _pause(0.02)
 	for button in view.hand_view.get_children():
 		_sources[button.get_meta("uid")] = {"node": button, "rect": button.get_global_rect()}
@@ -34,10 +35,11 @@ func play(events: Array, battle_view: Control) -> void:
 			"card_played":
 				_played_uid = event.uid
 				_message("PLAY / " + event.title, Color("#e8bd77"))
-				await _discard_cards(event.payment)
+				if not event.get("payment_previewed", false):
+					await _discard_cards(event.payment)
 				_paid = event.payment.duplicate()
 				await _apply_board(event.board)
-				if event.uid >= 0:
+				if event.uid >= 0 and not event.get("already_staged", false):
 					await _place_card(event.uid, event.slot)
 			"basic_action":
 				_message(event.title, Color("#9ce6b7") if event.action == "repair" else Color("#67bdd4"))
@@ -254,7 +256,7 @@ func _source_position(uid: int) -> Vector2:
 
 func _ghost(uid: int, full_card: bool = false) -> Control:
 	var ghost: Control
-	if full_card and _sources.has(uid):
+	if full_card and _sources.has(uid) and is_instance_valid(_sources[uid].get("node")):
 		ghost = _sources[uid].node.duplicate(0) as Control
 		ghost.size = _sources[uid].rect.size
 	else:
@@ -285,7 +287,7 @@ func _ignore_input(node: Node) -> void:
 
 
 func _hide_source(uid: int) -> void:
-	if _sources.has(uid):
+	if _sources.has(uid) and is_instance_valid(_sources[uid].get("node")):
 		_sources[uid].node.modulate.a = 0.0
 
 
@@ -349,3 +351,18 @@ func _popup(text: String, point: Vector2, tint: Color, duration: float) -> void:
 	tween.tween_property(label, "modulate:a", 0.0, _time(duration * 0.45)).set_delay(_time(duration * 0.55))
 	await tween.finished
 	label.queue_free()
+
+
+func stage_payment(uid: int, battle_view: Control) -> void:
+	if running:
+		return
+	running = true
+	view = battle_view
+	_sources.clear()
+	var face: Control = view.hand_view.get_node("Card%d" % uid)
+	_sources[uid] = {"node": face, "rect": face.get_global_rect()}
+	view.pending_visual_sources[uid] = {"rect": face.get_global_rect()}
+	_message("PAYMENT / " + view.state.card(uid).name, Color("#e8bd77"))
+	await _discard_cards([uid])
+	banner.hide()
+	running = false

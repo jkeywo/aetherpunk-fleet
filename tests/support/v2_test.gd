@@ -100,3 +100,21 @@ func open_battle(doc: Dictionary = {}) -> void:
 
 func _run() -> void:
 	pass
+
+
+func stage_card(battle, key: String, slot: int) -> void:
+	battle._select(uid_for(battle.state, key))
+	battle._circle_selected(slot)
+
+
+func choose_first_targets(battle) -> void:
+	for id in ["%TargetChoice", "%MovementChoice"]:
+		var control: OptionButton = battle.get_node(id)
+		if control.item_count > 1 and control.get_item_id(0) == -999:
+			control.select(1)
+			control.item_selected.emit(1)
+
+
+func pay_with(battle, key: String) -> void:
+	field_key(battle, key).pressed.emit()
+	await battle.payment_finished

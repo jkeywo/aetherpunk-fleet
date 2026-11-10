@@ -6,11 +6,16 @@ Godot 4.7 / GDScript / Compatibility renderer. Open `project.godot` and press **
 
 The battle follows the supplied layout: allied diamond left, enemy diamond right, a magic circle above the fanned shared hand, and deck/discard piles in the lower corners. Front faces the opponent. Each side has **Front, Upper Middle, Lower Middle, Rear** positions. Three allied ships and one leviathan are supported; empty slots persist after movement and destruction.
 
-Select a card, choose an empty unlocked circle slot, click other hand cards as payment, and **Play Card**. Target and movement selectors appear where needed. Hover cards or occupied circle slots for complete rules. **Cancel** clears the draft. **Manoeuvre** costs one resource to move into an adjacent empty position or swap with its occupant.
+Drag a hand card onto an empty unlocked circle slot to begin a **pending play**. The card leaves the visible hand and appears on the circle marked **PENDING**, with its payment progress. Clicking another card before placement selects that card instead; payment begins only after placement. Click remaining hand cards to discard them as payment: each animates into the discard pile and contributes its payment value. The pile labels these cards as pending until resolution.
 
-The gear opens a pausing battle menu with Resume, Main Menu, and Return to Editor during playtests. History shows recent resolution messages. Input locks during animations; menu navigation safely cancels playback.
+Choose any required target or movement explicitly, then press **Resolve Card**. The button remains disabled until the cost and choices are satisfied. Once fully paid, further payment clicks do not discard extra cards. Printed payment values and excess-payment loss are unchanged.
 
-Drag a hand card onto the circle as an alternative to clicking. Available destinations have blue **DROP HERE** outlines; hover turns the destination gold and highlights green **BONUS** sources and links. The preview recalculates adjacency, discounts, conditions, and available payment for that slot. Occupied, locked, unaffordable, and position-restricted destinations reject the drop. Dropping selects the action and destination: choose payment and targets, then press **Play Card**. Dropping outside or onto an invalid slot preserves the previous draft. Dragging the selected card keeps payment when still needed and clears it if the new slot makes the action free. Dragging is unavailable during resolution, mandatory discard, or hand refresh.
+**Cancel Play** returns the pending card and every payment card to their exact original hand order, including after full payment or target selection. Free cards also wait for Resolve and can be cancelled. No damage, guard, healing, movement, draws, card chains, monster reactions, history entries, or RNG changes occur before Resolve. Cancellation is available before resolution; it does not undo a completed action. A pending play must be resolved or cancelled before dragging another card or ending the phase.
+
+Available destinations have blue **DROP HERE** outlines; hover turns the destination gold and highlights green **BONUS** sources and links. The preview recalculates adjacency, discounts, conditions, and available payment for that slot. Occupied, locked, unaffordable, and position-restricted destinations reject the drop. Clicking a card and then a circle slot provides an alternative to dragging. Dropping outside or onto an invalid slot leaves combat unchanged. Dragging is unavailable during resolution, mandatory discard, or hand refresh.
+
+Hover cards or occupied circle slots for complete rules. **Manoeuvre** starts a pending one-resource action to move into an adjacent empty position or swap with its occupant; click payment cards, choose movement, then Resolve or Cancel Play.
+
 
 ### Basic ship actions
 
@@ -20,7 +25,7 @@ Drag a card onto **its own ship** to select a basic repair, or onto an **adjacen
 - **Recover a wreck:** defeated ships appear as recovery targets below the allied diamond. Their own cards add 2 recovery points per action; progress persists between turns. At 4 points they revive with 4 hull (capped at maximum), zero guard, and reset recovery. Use their former position if empty; otherwise use the first empty position in Front / Upper / Lower / Rear order. Defeated ships cannot swap or play cards into the circle.
 - **Swap:** the card's owning ship and target must both be alive and connected by a formation edge. The two ships exchange positions.
 
-Repair targets glow green, adjacent swap targets blue, and the hovered/selected target gold. Tooltips and the inspection line show the discarded card, actual healing, recovery progress, revival position, or the reason a target is invalid. Dropping only selects the action; cancelled or invalid drops preserve the prior draft.
+Repair targets glow green, adjacent swap targets blue, and the hovered/selected target gold. Tooltips and the inspection line show the discarded card, actual healing, recovery progress, revival position, or the reason a target is invalid. Dropping stages its own card as a pending discard. The action button confirms it; Cancel Play returns the card without applying healing, recovery, movement, or reactions. No additional payment is accepted for basic ship actions.
 
 After each basic action, check the visible monster reaction once. Basic repairs use the Repair tag; swaps use Movement; both have action cost zero for reaction checks. Only actual restored hull counts as healing, so recovery below the revive threshold does not trigger healing reactions. Revival can provoke retaliation immediately. Preview text shows these consequences. The whole fleet being destroyed still ends the battle.
 
@@ -33,7 +38,7 @@ The first four slots are North, East, South, and West, connected in a diamond. F
 
 Expansion keeps the original links. Centre touches all four original slots. Each corner touches its two neighbouring original points. Original slots consequently have five neighbours after expansion. Any empty unlocked slot can receive a card, with a maximum of nine plays resident at once. A full circle still permits manoeuvres and ending the phase.
 
-Played cards stay in the circle through the enemy phase. They are discarded at the next player-turn start, when the circle contracts and trigger usage resets. Payment cards are discarded after action resolution. Circle cleanup and payment never fire card triggers. All physical card instances remain conserved across hand, deck, discard, circle, and held payment.
+Played cards stay in the circle through the enemy phase. They are discarded at the next player-turn start, when the circle contracts and trigger usage resets. Payment cards animate to pending discard when clicked; their discard becomes final when the action resolves. Circle cleanup and payment never fire card triggers. All physical card instances remain conserved across hand, deck, discard, circle, and held payment.
 
 ### Conditions, modifiers, and chains
 
@@ -70,7 +75,7 @@ The saved setup starts with four example cards plus Broadside, Brace for Impact,
 | Arc Echo | Kestrel | 0 | Deal 2 damage. Once per turn, a neighbouring card granting guard makes Arc Echo deal 2 damage. |
 | Convergence Bolt | Kestrel | 1 | Deal 3 damage, plus a separate 3-damage effect if adjacent to a Tactic. |
 
-Try this sequence, with no payment cards selected:
+For each step, drop the card into its slot and press Resolve Card; no payment cards are required for the first four plays:
 
 1. **Aether Conduit → North.** Lamplighter gains 2 guard.
 2. **Resonant Bulwark → East.** Bastion gains 2 guard; its reaction is armed.
@@ -122,6 +127,7 @@ godot --headless --path . --script res://tests/circle_examples.gd
 godot --headless --path . --script res://tests/circle_feedback.gd
 godot --headless --path . --script res://tests/drag_drop.gd
 godot --headless --path . --script res://tests/basic_actions.gd
+godot --headless --path . --script res://tests/payment_flow.gd
 ```
 
 Suites cover unchanged payment, guard, repair, conservation, lethal-hit and results rules plus new positions, expansion timing, modifier costs, finite chains, paused discards, independent copies, stance transitions, migration, safe saving, live previews, real playtests, navigation, and animation cancellation. Editor/persistence tests use temporary user-data files and never save project content.

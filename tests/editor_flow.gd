@@ -74,7 +74,7 @@ func _run() -> void:
 	battle.feedback.duration_scale = 0.02
 	expect(battle.state.monster_hull == 88 and battle.state.ships[0].max_hull == 31, "Playtest ignored saved content.")
 	expect(root.get_node("BattleSession").editor_playtest, "Playtest origin lost.")
-	field_key(battle, "brace").pressed.emit()
+	stage_card(battle, "brace", 0)
 	battle.get_node("%PlayButton").pressed.emit()
 	await battle.resolution_finished
 	expect(battle.state.play_order.size() == 1 and battle.state.monster_hull == 87, "Authored conditional play effect did not resolve.")

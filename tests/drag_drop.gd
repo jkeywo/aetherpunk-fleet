@@ -87,35 +87,26 @@ func _run() -> void:
 	expect(battle.selected_slot == 3 and battle.payment.is_empty() and battle.state.play_order.size() == 1, "Drop bypassed confirmation or retained unrelated payment.")
 	expect(not battle._can_drop_card(payload, 2), "Completed drag token remained usable.")
 
-	# Aborted drags preserve the existing action and payment draft.
-	battle._circle_selected(2)
-	field_key(battle, "tow").pressed.emit()
-	var selection: int = battle.selected_uid
-	var payment_before: Array = battle.payment.duplicate()
-	before = JSON.stringify(battle.state.board_snapshot())
-	await begin_drag(battle, "patch")
-	await motion(Vector2(400, 410), true)
-	expect(battle.drag_hover_slot == -1, "Hover outside the circle remained active.")
-	await mouse(Vector2(400, 410), false)
-	expect(battle.selected_uid == selection and battle.selected_slot == 2 and battle.payment == payment_before, "Cancelled drag changed the previous action draft.")
-	expect(JSON.stringify(battle.state.board_snapshot()) == before and not battle.circle_view.drag_active, "Cancelled drag changed combat or left highlights.")
-	expect(is_equal_approx(field_key(battle, "patch").modulate.a, 1.0), "Cancelled drag left its hand card faded.")
+	# Pending plays must be cancelled before another card is dragged.
+	expect(battle.pending_play and field_key(battle, "salvo") == null, "Dropped card did not leave the hand for a pending circle slot.")
+	expect(battle._begin_card_drag(uid_for(battle.state, "patch")).is_empty(), "Another drag started while a play was pending.")
+	battle.get_node("%CancelButton").pressed.emit()
+	var before_invalid: String = JSON.stringify(battle.state.board_snapshot())
 	await begin_drag(battle, "patch")
 	point = await hover_slot(battle, 0)
 	expect(not battle._can_drop_card(battle.drag_payload, 0), "Occupied circle slot accepted a drop.")
 	await mouse(point, false)
-	expect(battle.selected_uid == selection and battle.payment == payment_before, "Invalid occupied drop changed the draft.")
+	expect(not battle.pending_play and battle.selected_uid == -2, "Invalid occupied drop staged an action.")
 	await begin_drag(battle, "patch")
 	point = await hover_slot(battle, 4)
 	expect(not battle._can_drop_card(battle.drag_payload, 4), "Locked circle slot accepted a drop.")
 	await mouse(point, false)
-	expect(battle.selected_slot == 2 and battle.payment == payment_before, "Locked drop changed the draft.")
+	expect(JSON.stringify(battle.state.board_snapshot()) == before_invalid and not battle.pending_play, "Locked drop changed combat state.")
+	await begin_drag(battle, "patch")
+	await motion(Vector2(400, 410), true)
+	await mouse(Vector2(400, 410), false)
+	expect(battle.drag_hover_slot == -1 and is_equal_approx(field_key(battle, "patch").modulate.a, 1.0), "Cancelled native drag retained hover or faded source.")
 
-	# Dropping the same card keeps selected payment when it is still needed.
-	await begin_drag(battle, "salvo")
-	point = await hover_slot(battle, 2)
-	await mouse(point, false)
-	expect(battle.payment == payment_before, "Repositioning the selected card lost its payment.")
 	battle.state.definitions.cards.salvo.cost = 99
 	await begin_drag(battle, "salvo")
 	expect(battle.circle_view.valid_drop_slots.is_empty() and "Unavailable" in battle.circle_view.buttons[1].text, "Impossible funding was marked valid.")
@@ -131,6 +122,7 @@ func _run() -> void:
 	await begin_drag(battle, "salvo")
 	expect(battle.circle_view.valid_drop_slots.is_empty(), "Destroyed owner's card was playable by dragging.")
 	await mouse(Vector2(400, 410), false)
+	var selection: int = uid_for(battle.state, "salvo")
 	battle.busy = true
 	expect(battle._begin_card_drag(selection).is_empty(), "Dragging began during feedback playback.")
 	battle.busy = false

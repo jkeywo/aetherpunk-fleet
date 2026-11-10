@@ -1,5 +1,6 @@
 extends Control
 signal resolution_finished
+signal payment_finished
 const State = preload("res://scripts/battle_state.gd")
 const Catalog = preload("res://scripts/content_catalog.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
@@ -14,6 +15,8 @@ var busy := false
 var selected_uid := -2
 var selected_slot := -1
 var basic_target := -1
+var pending_play := false
+var pending_visual_sources: Dictionary = {}
 var payment: Array = []
 var refresh_discards: Array = []
 var target := -1
@@ -195,6 +198,8 @@ func _render() -> void:
 		hand_view.remove_child(child)
 		child.queue_free()
 	for uid in state.hand:
+		if pending_play and (uid == selected_uid or payment.has(uid)):
+			continue
 		var face := CardFace.new()
 		face.name = "Card%d" % uid
 		face.set_meta("uid", uid)
@@ -214,7 +219,15 @@ func _render() -> void:
 
 func _show_piles(snapshot: Dictionary) -> void:
 	%DeckPile.text = "DECK\n%d" % snapshot.deck_size
-	%DiscardPile.text = "DISCARD\n%d" % snapshot.discard_size
+	var pending_count: int = payment.size() + (1 if basic_target >= 0 else 0) if pending_play and not busy else 0
+	%DiscardPile.text = "DISCARD\n%d" % snapshot.discard_size + ("\n+%d pending" % pending_count if pending_count > 0 else "")
+	var pending_names: Array = []
+	if pending_play:
+		for uid in payment:
+			pending_names.append(state.card(uid).name)
+		if basic_target >= 0:
+			pending_names.append(state.card(selected_uid).name)
+	%DiscardPile.tooltip_text = "Discard: %d cards." % snapshot.discard_size + ("\nPending: " + ", ".join(pending_names) + ". Cancel Play returns these cards." if not pending_names.is_empty() else "")
 
 
 func _show_board(snapshot: Dictionary) -> void:
@@ -224,24 +237,27 @@ func _show_board(snapshot: Dictionary) -> void:
 	for uid in snapshot.circle:
 		if uid >= 0:
 			cards[uid] = state.card(uid)
-	circle_view.configure(snapshot.circle, snapshot.expanded, cards, snapshot.used_triggers, selected_slot)
+	var displayed_circle: Array = snapshot.circle.duplicate()
+	if pending_play and selected_uid >= 0 and basic_target < 0 and selected_slot >= 0:
+		displayed_circle[selected_slot] = selected_uid
+		var pending_card: Dictionary = state.card(selected_uid).duplicate(true)
+		pending_card["pending_status"] = "PENDING %d/%d" % [state.payment_total(payment), state.effective_cost(selected_uid, selected_slot)]
+		cards[selected_uid] = pending_card
+	circle_view.configure(displayed_circle, snapshot.expanded, cards, snapshot.used_triggers, selected_slot)
 	stance_panel.configure(state.definitions.stances[snapshot.stance_index])
 	%CircleTitle.text = "MAGIC CIRCLE / %d" % (9 if snapshot.expanded else 4)
 	_show_piles(snapshot)
 
 
 func _circle_selected(slot: int) -> void:
-	if busy or dragged_uid >= 0 or state.phase != "fleet":
+	if busy or pending_play or dragged_uid >= 0 or state.phase != "fleet":
 		return
 	if state.circle[slot] >= 0:
 		var info: Dictionary = state.card(state.circle[slot])
 		%Inspection.text = info.name + ": " + info.effect
 		return
 	if selected_uid >= 0 and (slot < 4 or state.expanded):
-		selected_slot = slot
-		basic_target = -1
-		_fill_choices()
-		_update_controls()
+		_stage_circle(selected_uid, slot)
 
 
 func _choose_card(uid: int) -> void:
@@ -254,21 +270,29 @@ func _choose_card(uid: int) -> void:
 		return
 	if state.phase == "refresh":
 		_toggle(refresh_discards, uid)
-	elif basic_target >= 0:
-		if selected_uid == uid:
-			_cancel()
-		else:
-			_select(uid)
+		_update_controls()
 		return
-	elif selected_uid == -2:
-		_select(uid)
+	if pending_play:
+		if basic_target >= 0:
+			%Inspection.text = "This basic action discards its own card. Resolve it or Cancel Play."
+			return
+		if uid == selected_uid or payment.has(uid) or not state.hand.has(uid):
+			return
+		if state.payment_total(payment) >= state.effective_cost(selected_uid, selected_slot):
+			%Inspection.text = "Payment complete. Choose any required target, then Resolve Card or Cancel Play."
+			return
+		busy = true
+		_update_controls()
+		await feedback.stage_payment(uid, self)
+		payment.append(uid)
+		busy = false
+		_render()
+		payment_finished.emit()
 		return
-	elif selected_uid == uid:
+	if selected_uid == uid:
 		_cancel()
-		return
 	else:
-		_toggle(payment, uid)
-	_update_controls()
+		_select(uid)
 
 
 func _toggle(items: Array, uid: int) -> void:
@@ -279,12 +303,13 @@ func _toggle(items: Array, uid: int) -> void:
 
 
 func _select(uid: int) -> void:
-	if busy or dragged_uid >= 0 or state.phase != "fleet":
+	if busy or pending_play or dragged_uid >= 0 or state.phase != "fleet":
 		return
 	selected_uid = uid
 	basic_target = -1
 	selected_slot = state.first_slot() if uid >= 0 else -1
 	payment.clear()
+	pending_play = uid == -1
 	_fill_choices()
 	_update_controls()
 
@@ -295,24 +320,29 @@ func _fill_choices() -> void:
 	for pair in [[%TargetChoice, "primary"], [%MovementChoice, "movement"]]:
 		var control: OptionButton = pair[0]
 		control.clear()
-		for option in state.choices(selected_uid, pair[1], selected_slot):
+		var options: Array = state.choices(selected_uid, pair[1], selected_slot)
+		if pending_play and not options.is_empty():
+			control.add_item("Choose a target…" if pair[1] == "primary" else "Choose movement…", -999)
+		for option in options:
 			control.add_item(option.label, option.value)
 		if control.item_count > 0:
 			control.select(0)
 			if pair[1] == "primary":
-				target = control.get_item_id(0)
+				target = -1 if pending_play else control.get_item_id(0)
 			else:
-				movement_target = control.get_item_id(0)
+				movement_target = -1 if pending_play else control.get_item_id(0)
 
 
 func _cancel() -> void:
 	if busy or dragged_uid >= 0:
 		return
 	_clear_draft()
-	_update_controls()
+	_render()
 
 
 func _clear_draft() -> void:
+	pending_play = false
+	pending_visual_sources.clear()
 	selected_uid = -2
 	basic_target = -1
 	selected_slot = -1
@@ -330,6 +360,8 @@ func _commit() -> void:
 	var error := ""
 	if state.phase == "refresh":
 		error = state.refresh(refresh_discards)
+	elif not pending_play:
+		return
 	elif basic_target >= 0:
 		error = state.play_basic(selected_uid, basic_target)
 	elif selected_uid != -2:
@@ -339,11 +371,17 @@ func _commit() -> void:
 	if error != "":
 		%Inspection.text = error
 		return
+	if pending_play and basic_target < 0:
+		for event in state.feedback_events:
+			if event.kind == "card_played":
+				event["already_staged"] = selected_uid >= 0
+				event["payment_previewed"] = true
+	pending_play = false
 	await _present_resolution()
 
 
 func _end_phase() -> void:
-	if busy or dragged_uid >= 0:
+	if busy or pending_play or dragged_uid >= 0:
 		return
 	var error: String = state.end_phase()
 	if error != "":
@@ -390,8 +428,10 @@ func _update_controls() -> void:
 	%PlayButton.disabled = true
 	%PlayButton.text = "Play Card"
 	%CancelButton.disabled = selected_uid == -2 and refresh_discards.is_empty()
-	%EndPhaseButton.disabled = state.phase != "fleet"
-	%ManoeuvreButton.disabled = state.phase != "fleet"
+	%CancelButton.text = "Cancel Play" if pending_play else "Cancel"
+	%CancelButton.tooltip_text = "Return the pending card and all pending payment to the hand. No effects have resolved."
+	%EndPhaseButton.disabled = pending_play or state.phase != "fleet"
+	%ManoeuvreButton.disabled = pending_play or state.phase != "fleet"
 	if state.phase == "discard":
 		%Inspection.text = "%s: discard %d more card(s)." % [state.pending.title, state.pending.discard_remaining]
 	elif state.phase == "refresh":
@@ -405,19 +445,33 @@ func _update_controls() -> void:
 		%Inspection.text = result.text
 	elif selected_uid != -2:
 		var result: Dictionary = state.preview(selected_uid, payment, target, movement_target, selected_slot)
-		%PlayButton.disabled = not result.ok
+		%PlayButton.disabled = not result.ok or not pending_play
 		%Inspection.text = result.text
 		contributing = result.get("contributors", [])
 		contribution_details = result.get("contribution_details", {})
-		%PlayButton.text = "Manoeuvre" if selected_uid < 0 else "Play Card"
+		%PlayButton.text = "Resolve Manoeuvre" if selected_uid < 0 else "Resolve Card"
 	else:
-		%Inspection.text = "Select a card to play, or drag it onto its own ship to repair/recover or an adjacent ally to swap."
-	%Status.text = "Hand %d / In circle %d\nGreen BONUS = contributor. Purple = adjacent. Next stance hidden." % [state.hand.size(), state.play_order.size()]
+		%Inspection.text = "Drag a card to the circle, then click cards to discard as payment. Resolve Card confirms; Cancel Play restores your hand."
+	if pending_play:
+		var cost: int = 0 if basic_target >= 0 else state.effective_cost(selected_uid, selected_slot)
+		var detail: String = %Inspection.text
+		if detail.begins_with("Payment "):
+			detail = ""
+		var prompt: String = "Click hand cards to discard. " if state.payment_total(payment) < cost else "Paid. Choose any required target. "
+		%Inspection.text = ("Basic action pending. " if basic_target >= 0 else "Payment %d / %d. " % [state.payment_total(payment), cost] + prompt) + "Resolve or Cancel Play. " + detail
+	_show_piles(state.board_snapshot())
+	%Status.text = "Hand %d / In circle %d%s\nGreen BONUS = contributor. Purple = adjacent. Next stance hidden." % [state.hand.size() - (payment.size() + (1 if selected_uid >= 0 else 0) if pending_play else 0), state.play_order.size(), " (+1 pending)" if pending_play and selected_uid >= 0 and basic_target < 0 else ""]
 	var cards: Dictionary = {}
 	for uid in state.circle:
 		if uid >= 0:
 			cards[uid] = state.card(uid)
-	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, selected_slot if basic_target < 0 else -1, contributing, contribution_details)
+	var displayed_circle: Array = state.circle.duplicate()
+	if pending_play and selected_uid >= 0 and basic_target < 0:
+		displayed_circle[selected_slot] = selected_uid
+		var pending_card: Dictionary = state.card(selected_uid).duplicate(true)
+		pending_card["pending_status"] = "PENDING %d/%d" % [state.payment_total(payment), state.effective_cost(selected_uid, selected_slot)]
+		cards[selected_uid] = pending_card
+	circle_view.configure(displayed_circle, state.expanded, cards, state.used_triggers, selected_slot if basic_target < 0 else -1, contributing, contribution_details)
 
 
 func _show_history() -> void:
@@ -499,7 +553,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _begin_card_drag(uid: int) -> Dictionary:
-	if dragged_uid >= 0 or busy or get_tree().paused or state.phase != "fleet" or state.outcome != "" or not state.hand.has(uid):
+	if pending_play or dragged_uid >= 0 or busy or get_tree().paused or state.phase != "fleet" or state.outcome != "" or not state.hand.has(uid):
 		return {}
 	drag_serial += 1
 	dragged_uid = uid
@@ -592,11 +646,11 @@ func _update_drag_feedback() -> void:
 			var preview: Dictionary = state.preview(dragged_uid, selected_payment, ally, movement, highlight)
 			contributors = preview.contributors
 			details = preview.contribution_details
-			%Inspection.text = "Drop %s → %s, then choose payment and confirm. %s" % [title, Geometry.SLOT_NAMES[highlight], preview.text]
+			%Inspection.text = "Drop %s → %s, then click cards to discard as payment. %s" % [title, Geometry.SLOT_NAMES[highlight], preview.text]
 		else:
 			%Inspection.text = "Cannot place %s: %s" % [title, error]
 	else:
-		%Inspection.text = "Drag %s to the circle, its own ship to repair/recover, or an adjacent ally to swap. Drop selects; confirm to spend the card." % title
+		%Inspection.text = "Drag %s to the circle, its own ship to repair/recover, or an adjacent ally to swap. Drop stages the action. Resolve or Cancel Play." % title
 	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, highlight, contributors, details)
 
 
@@ -604,13 +658,8 @@ func _drop_card(slot: int, data: Variant) -> void:
 	if not _can_drop_card(data, slot):
 		return
 	var uid := dragged_uid
-	var retained_payment: Array = payment.duplicate() if selected_uid == uid else []
 	_finish_card_drag(false)
-	_select(uid)
-	selected_slot = slot
-	payment = retained_payment if state.effective_cost(uid, slot) > 0 else []
-	_fill_choices()
-	_update_controls()
+	_stage_circle(uid, slot)
 
 
 func _finish_card_drag(refresh: bool = true) -> void:
@@ -655,7 +704,9 @@ func _drop_ship(ship_id: int, data: Variant) -> void:
 	selected_slot = -1
 	%TargetChoice.clear()
 	%MovementChoice.clear()
-	_update_controls()
+	pending_play = true
+	pending_visual_sources[uid] = {"rect": allies.target_widget(ship_id).get_global_rect()}
+	_render()
 
 
 func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
@@ -673,3 +724,16 @@ func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
 		if preview.ok:
 			valid.append(ship_id)
 	allies.show_basic_targets(hints, valid, hovered, int(state.card(uid).owner))
+
+
+func _stage_circle(uid: int, slot: int) -> void:
+	if pending_play or _drop_slot_error(uid, slot) != "":
+		return
+	_select(uid)
+	selected_slot = slot
+	pending_play = true
+	var face: Node = hand_view.get_node_or_null("Card%d" % uid)
+	if face != null:
+		pending_visual_sources[uid] = {"rect": face.get_global_rect()}
+	_fill_choices()
+	_render()

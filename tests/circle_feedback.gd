@@ -30,6 +30,8 @@ func _run() -> void:
 	expect(not preview.ok and preview.contributors == [source_uid], "Unaffordable preview failed to report public bonus sources.")
 	circle.buttons[2].pressed.emit()
 	expect(circle.bonus_slots.is_empty() and not "BONUS" in circle.buttons[0].text, "Moving to a nonadjacent slot left a stale bonus.")
+	battle.get_node("%CancelButton").pressed.emit()
+	field_key(battle, "broadside").pressed.emit()
 	circle.buttons[3].pressed.emit()
 	expect(circle.bonus_slots == [0], "Selecting another adjacent slot did not restore bonuses.")
 	battle.get_node("%CancelButton").pressed.emit()
