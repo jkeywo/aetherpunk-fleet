@@ -1,35 +1,43 @@
 # Aetherpunk Fleet
 
-Godot 4.7 project using GDScript and the Compatibility renderer.
+Godot 4.7 / GDScript / Compatibility renderer. Open `project.godot` and press **F5**.
 
-## Run
+## Play
 
-Import `project.godot` in Godot 4.7 and press **F5**.
+Start Game enters a fixed opening battle: Bastion (28 hull), Kestrel (20), and Lamplighter (18) versus Stormmaw (70). The opening seven-card hand, Buffeting Wings reaction, and Rending Bite intent match the GDD. Remaining decks are shuffled per battle.
 
-Main Menu → Start Game → Battle. The battle displays Bastion (28 hull), Kestrel (20), and Lamplighter (18) in front-to-rear formation against Stormmaw (70). The shared opening hand contains seven cards from the GDD's fixed 18-card deck; the active reaction is Buffeting Wings and the enemy intent is Rending Bite.
+1. Click an action card. Click other hand cards to mark or unmark payment.
+2. Choose a target or swap in the dropdown when required.
+3. Read the public-outcome preview, then **Play Card**. **Cancel** clears the draft without spending anything; click the selected action again to cancel.
+4. The effect resolves first, followed by the qualifying current reaction. Its replacement is revealed immediately and waits for another action.
+5. **Signal Relay** draws up to two cards and asks you to click one card to discard before continuing.
+6. **Basic Manoeuvre** costs one resource and lets the chosen actor swap with a neighbour.
+7. **End Fleet Phase** resolves the visible enemy intent and expires guard. Select optional hand discards, then **Refill Hand** to retain the rest and draw to seven.
 
-Click a card, or focus it using Tab, to inspect its effect, owner, cost, payment value, and permitted ranks. Inspection highlights the card without playing or spending it. The opening is fixed for now. Combat resolution, payment, movement, damage, and enemy turns are not implemented.
+Cards have unique instance IDs, so duplicates remain independent. Payment cards do not trigger reactions. Overpayment is lost; free cards require no payment. Rank restrictions apply when committing the action. Guard absorbs damage before hull. Destroyed ships leave the formation; their cards remain usable as payment. Lethal attacks win before the monster can react. Fleet destruction loses automatically.
 
-**Main Menu** returns to port. **Test Win** and **Test Loss** retain the initial outcome flow. Each result screen returns to the main menu. Exit closes the application.
+A scrollable action history records payment, effects, damage, reactions, and round changes. The preview simulates public outcomes without drawing cards, revealing replacements, or consuming battle RNG. Escalation adds one enemy-intent damage per round beyond round three. Menu/result navigation and **Test Win / Test Loss** remain available.
+
+Buttons support mouse and keyboard focus with Tab and Enter/Space. The battle targets 1280 × 800; scroll to reach the action history or content in smaller windows.
 
 ## Layout
 
-- `scenes/game.tscn`: native battle layout, using `scripts/battle.gd`.
-- `scenes/components/`: reusable editable ship and hand-card scenes.
-- `data/battle_setup.gd`: GDD ship, card, monster, reaction, and intent data.
-- `scripts/battle_art.gd`: scalable vector silhouettes drawn with Godot.
-- `scenes/main_menu.tscn`, `victory.tscn`, `defeat.tscn`: navigation screens.
-- `tests/smoke_flow.gd`: navigation, battle content, and card inspection check.
-
-The battle view targets 1280 × 800. A scroll container keeps all content reachable in smaller windows. No external assets or dependencies are required.
+- `data/battle_setup.gd`: ships, all nine card designs (two copies each), six reactions, four intents.
+- `scripts/battle_state.gd`: rules, instance IDs, piles, validation, effects, reactions, and previews.
+- `scripts/battle.gd`: UI selection, payment, targeting, state rendering, and navigation.
+- `scenes/game.tscn` and `scenes/components/`: editable native battle layout.
+- `scripts/battle_art.gd`: scalable vector silhouettes.
 
 ## Validate
 
-With a Godot console executable on your PATH:
+With the Godot console executable on your PATH:
 
 ```powershell
 godot --headless --path . --editor --import --quit
+godot --headless --path . --script res://tests/battle_rules.gd
 godot --headless --path . --script res://tests/smoke_flow.gd
 ```
 
-Godot's generated `.godot/` cache and exported `build/` directory are ignored by Git. No remote or export target is configured.
+Rules tests cover payment validation, preview purity, the worked GDD sequence, card effects, six reaction triggers, Relay reshuffling, destruction, round transitions, and card conservation. UI smoke checks use actual buttons and verify live state, navigation, and automatic outcomes.
+
+Combat has no animation yet. Campaign progression, fleet persistence, and result statistics remain future work. No external dependencies, remote, or export target are configured. Godot's generated `.godot/` and export `build/` directories are ignored by Git.

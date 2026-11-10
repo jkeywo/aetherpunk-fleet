@@ -1,7 +1,7 @@
 [gd_scene format=3]
 
 [node name="HandCard" type="Button"]
-custom_minimum_size = Vector2(0, 218)
+custom_minimum_size = Vector2(152, 218)
 size_flags_horizontal = 3
 toggle_mode = true
 mouse_default_cursor_shape = 2

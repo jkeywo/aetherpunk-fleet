@@ -1,11 +1,16 @@
 extends Control
-## Battle-screen presentation. Selecting a card never spends it or changes combat.
+## Presentation and action drafting; battle_state.gd owns validation and resolution.
 
 const Setup = preload("res://data/battle_setup.gd")
+const State = preload("res://scripts/battle_state.gd")
 const ShipScene = preload("res://scenes/components/ship_panel.tscn")
 const CardScene = preload("res://scenes/components/hand_card.tscn")
 
-var selected_card_id: String = ""
+var state = State.new()
+var selected_uid: int = -2
+var payment: Array = []
+var target: int = -1
+var refresh_discards: Array = []
 
 
 func _ready() -> void:
@@ -13,67 +18,209 @@ func _ready() -> void:
 	%MenuButton.pressed.connect(_navigate.bind("res://scenes/main_menu.tscn"))
 	%WinButton.pressed.connect(_navigate.bind("res://scenes/victory.tscn"))
 	%LossButton.pressed.connect(_navigate.bind("res://scenes/defeat.tscn"))
+	%PlayButton.pressed.connect(_commit)
+	%CancelButton.pressed.connect(_cancel)
+	%ManoeuvreButton.pressed.connect(_select.bind(-1))
+	%EndPhaseButton.pressed.connect(_end_phase)
+	%TargetChoice.item_selected.connect(_target_changed)
+	_render()
+
+
+func _clear_children(container: Node) -> void:
+	for child in container.get_children():
+		container.remove_child(child)
+		child.queue_free()
+
+
+func _render() -> void:
+	_clear_children(%Formation)
+	_clear_children(%Hand)
 	%MonsterName.text = Setup.MONSTER.name.to_upper()
-	%MonsterHull.text = "HULL  %d / %d" % [Setup.MONSTER.hull, Setup.MONSTER.hull]
+	%MonsterHull.text = "HULL  %d / %d" % [state.monster_hull, Setup.MONSTER.hull]
 	%MonsterBar.max_value = Setup.MONSTER.hull
-	%MonsterBar.value = Setup.MONSTER.hull
-	%ReactionName.text = Setup.REACTION.name
-	%ReactionTrigger.text = Setup.REACTION.trigger
-	%ReactionEffect.text = Setup.REACTION.effect
-	%IntentName.text = Setup.INTENT.name
-	%IntentTrigger.text = Setup.INTENT.trigger
-	%IntentEffect.text = Setup.INTENT.effect
-	%HandCount.text = "SHARED HAND  ·  %d / 7" % Setup.OPENING_HAND.size()
-	%PileCounts.text = "DECK  %d    /    DISCARD  0" % (Setup.CARDS.size() * Setup.COPIES_PER_CARD - Setup.OPENING_HAND.size())
-	for index in Setup.SHIPS.size():
-		_add_ship(index)
-	for card_id in Setup.OPENING_HAND:
-		_add_card(card_id)
+	%MonsterBar.value = state.monster_hull
+	var reaction: Dictionary = Setup.REACTIONS[state.reaction_index]
+	%ReactionName.text = reaction.name
+	%ReactionTrigger.text = reaction.trigger
+	%ReactionEffect.text = reaction.effect
+	var intent: Dictionary = Setup.INTENTS[state.intent_index]
+	%IntentName.text = intent.name
+	%IntentTrigger.text = intent.trigger
+	%IntentEffect.text = intent.effect
+	var escalation: int = maxi(0, state.round_number - 3)
+	if escalation > 0:
+		%IntentEffect.text += "\nEscalation: +%d to each damage instance." % escalation
+	%Round.text = "ROUND %02d  /  %s" % [state.round_number, state.phase.to_upper()]
+	%Escalation.text = "Escalation +%d\nBegins in round 4" % maxi(0, state.round_number - 3)
+	%HandCount.text = "SHARED HAND  ·  %d CARDS" % state.hand.size()
+	%PileCounts.text = "DECK  %d    /    DISCARD  %d" % [state.deck.size(), state.discard.size()]
+	for index in state.formation.size():
+		_add_ship(state.formation[index], index)
+	for uid in state.hand:
+		_add_card(uid)
+	%History.text = "\n".join(state.history)
+	%History.scroll_to_line(maxi(0, state.history.size() - 1))
+	_update_controls()
+	if state.outcome != "":
+		_navigate.call_deferred("res://scenes/%s.tscn" % state.outcome)
 
 
-func _add_ship(index: int) -> void:
-	var ship: Dictionary = Setup.SHIPS[index]
+func _add_ship(ship_id: int, rank: int) -> void:
+	var ship: Dictionary = state.ships[ship_id]
 	var panel := ShipScene.instantiate()
 	panel.name = ship.name
 	%Formation.add_child(panel)
-	panel.get_node("%Rank").text = ["01  /  FRONT", "02  /  CENTRE", "03  /  REAR"][index]
+	panel.get_node("%Rank").text = ["01  /  FRONT", "02  /  CENTRE", "03  /  REAR"][rank]
 	panel.get_node("%ShipName").text = ship.name
 	panel.get_node("%Role").text = ship.role
 	panel.get_node("%Role").modulate = Color(ship.color)
-	panel.get_node("%Hull").text = "HULL  %d / %d" % [ship.hull, ship.hull]
-	panel.get_node("%HullBar").max_value = ship.hull
+	panel.get_node("%Hull").text = "HULL  %d / %d" % [ship.hull, ship.max_hull]
+	panel.get_node("%HullBar").max_value = ship.max_hull
 	panel.get_node("%HullBar").value = ship.hull
+	panel.get_node("Row/Stats/HullRow/Guard").text = "GUARD %d" % ship.guard
 	panel.get_node("%ShipArt").accent = Color(ship.color)
 
 
-func _add_card(card_id: String) -> void:
-	var card: Dictionary = Setup.CARDS[card_id]
-	var ship: Dictionary = Setup.SHIPS[card.owner]
+func _add_card(uid: int) -> void:
+	var info: Dictionary = state.card(uid)
+	var ship: Dictionary = state.ships[info.owner]
 	var button := CardScene.instantiate() as Button
-	button.name = card_id
+	button.name = "Card%d" % uid
+	button.set_meta("uid", uid)
 	%Hand.add_child(button)
 	button.get_node("%Owner").text = ship.name.to_upper()
 	button.get_node("%Owner").modulate = Color(ship.color)
-	button.get_node("%CardName").text = card.name
-	button.get_node("%Cost").text = "COST %d" % card.cost
-	button.get_node("%Payment").text = "PAYS %d" % card.pays
-	button.get_node("%Ranks").text = "RANKS  " + card.ranks
-	button.get_node("%Tags").text = card.tags
-	button.get_node("%Effect").text = card.effect
-	button.tooltip_text = "%s — %s\nCost: %d | Pays: %d | Ranks: %s\n%s\n%s\nInspection only; combat is not active yet." % [
-		card.name, ship.name, card.cost, card.pays, card.ranks, card.tags, card.effect]
-	button.pressed.connect(_inspect_card.bind(card_id))
-	button.focus_entered.connect(_inspect_card.bind(card_id))
+	button.get_node("%CardName").text = info.name
+	button.get_node("%Cost").text = "COST %d" % info.cost
+	button.get_node("%Payment").text = "PAYS %d" % info.pays
+	button.get_node("%Ranks").text = "RANKS  " + info.ranks
+	button.get_node("%Tags").text = info.tags
+	button.get_node("%Effect").text = info.effect
+	button.tooltip_text = "%s — %s\nCost %d | Pays %d | Ranks %s\n%s\n%s" % [
+		info.name, ship.name, info.cost, info.pays, info.ranks, info.tags, info.effect]
+	if ship.hull <= 0:
+		button.get_node("%Owner").text += " / LOST"
+	button.pressed.connect(_choose_card.bind(uid))
 
 
-func _inspect_card(card_id: String) -> void:
-	selected_card_id = card_id
+func _choose_card(uid: int) -> void:
+	if state.phase == "discard":
+		state.discard_for_relay(uid)
+		_clear_draft()
+		_render()
+		return
+	if state.phase == "refresh":
+		_toggle(refresh_discards, uid)
+	elif selected_uid == -2:
+		_select(uid)
+		return
+	elif selected_uid == uid:
+		_cancel()
+		return
+	else:
+		_toggle(payment, uid)
+	_update_controls()
+
+
+func _toggle(items: Array, uid: int) -> void:
+	if items.has(uid):
+		items.erase(uid)
+	else:
+		items.append(uid)
+
+
+func _select(uid: int) -> void:
+	if state.phase != "fleet":
+		return
+	selected_uid = uid
+	payment.clear()
+	target = -1
+	%TargetChoice.clear()
+	for option in state.choices(uid):
+		%TargetChoice.add_item(option.label, option.value)
+	if %TargetChoice.item_count > 0:
+		%TargetChoice.select(0)
+		target = %TargetChoice.get_item_id(0)
+	_update_controls()
+
+
+func _target_changed(index: int) -> void:
+	target = %TargetChoice.get_item_id(index)
+	_update_controls()
+
+
+func _clear_draft() -> void:
+	selected_uid = -2
+	payment.clear()
+	target = -1
+	refresh_discards.clear()
+	%TargetChoice.clear()
+
+
+func _cancel() -> void:
+	_clear_draft()
+	_update_controls()
+
+
+func _commit() -> void:
+	var error := ""
+	if state.phase == "refresh":
+		error = state.refresh(refresh_discards)
+	elif selected_uid != -2:
+		error = state.play(selected_uid, payment, target)
+	if error != "":
+		%Inspection.text = error
+		return
+	_clear_draft()
+	_render()
+
+
+func _end_phase() -> void:
+	var error: String = state.end_phase()
+	if error != "":
+		%Inspection.text = error
+		return
+	_clear_draft()
+	_render()
+
+
+func _update_controls() -> void:
 	for button in %Hand.get_children():
-		button.set_pressed_no_signal(button.name == card_id)
-	var card: Dictionary = Setup.CARDS[card_id]
-	var ship: Dictionary = Setup.SHIPS[card.owner]
-	%Inspection.text = "%s / %s  ·  Cost %d / Pays %d  ·  Ranks %s  ·  %s" % [
-		ship.name, card.name, card.cost, card.pays, card.ranks, card.effect]
+		var uid: int = button.get_meta("uid")
+		var is_action := uid == selected_uid
+		var marked := payment.has(uid) or refresh_discards.has(uid)
+		button.set_pressed_no_signal(is_action or marked)
+		button.modulate = Color("#a9e3cb") if marked else Color.WHITE
+		button.get_node("%Cost").text = ("PLAY %d" if is_action else "COST %d") % state.card(uid).cost
+		button.get_node("%Payment").text = ("PAY %d" if payment.has(uid) else "PAYS %d") % state.card(uid).pays
+		if state.phase == "refresh" and marked:
+			button.get_node("%Payment").text = "DROP"
+	%TargetChoice.visible = selected_uid != -2 and %TargetChoice.item_count > 0
+	%CancelButton.disabled = selected_uid == -2 and refresh_discards.is_empty()
+	%ManoeuvreButton.disabled = state.phase != "fleet" or state.formation.size() < 2
+	%EndPhaseButton.disabled = state.phase != "fleet"
+	%PlayButton.disabled = true
+	%PlayButton.text = "Play Card"
+	if state.phase == "discard":
+		%Inspection.text = "SIGNAL RELAY: click one card to discard. Finish this choice before taking another action."
+		%Status.text = "Action in progress: choose one discard."
+	elif state.phase == "refresh":
+		%PlayButton.disabled = false
+		%PlayButton.text = "Refill Hand"
+		%Inspection.text = "NEW ROUND: optionally click cards to discard, then Refill Hand. Keeping %d; discarding %d." % [
+			state.hand.size() - refresh_discards.size(), refresh_discards.size()]
+		%Status.text = "Keep cards you want; refill to seven."
+	elif selected_uid != -2:
+		var result: Dictionary = state.preview(selected_uid, payment, target)
+		%PlayButton.disabled = not result.ok
+		%PlayButton.text = "Manoeuvre" if selected_uid == -1 else "Play Card"
+		%Inspection.text = result.text
+		var title: String = "Basic manoeuvre" if selected_uid == -1 else state.card(selected_uid).name
+		var cost: int = 1 if selected_uid == -1 else state.card(selected_uid).cost
+		%Status.text = "%s  /  Payment %d of %d" % [title, state.payment_total(payment), cost]
+	else:
+		%Inspection.text = "Select an action card, then click other cards to pay. Choose a target if needed, then Play Card. Cancel to change action."
+		%Status.text = "Fleet phase — choose an action or end the phase."
 
 
 func _navigate(destination: String) -> void:
@@ -95,8 +242,14 @@ func _make_theme() -> Theme:
 	result.set_stylebox("hover", "Button", hover)
 	result.set_stylebox("pressed", "Button", selected)
 	result.set_stylebox("hover_pressed", "Button", selected)
+	var disabled := _box(Color("#101f28"), Color("#253b46"))
+	result.set_stylebox("disabled", "Button", disabled)
 	var focus := _box(Color.TRANSPARENT, Color("#e8bd77"))
 	result.set_stylebox("focus", "Button", focus)
+	result.set_stylebox("normal", "OptionButton", button)
+	result.set_stylebox("hover", "OptionButton", hover)
+	result.set_stylebox("pressed", "OptionButton", selected)
+	result.set_stylebox("focus", "OptionButton", focus)
 	var background := _box(Color("#07161e"), Color("#203d48"))
 	var fill := _box(Color("#78b7aa"), Color.TRANSPARENT)
 	result.set_stylebox("background", "ProgressBar", background)

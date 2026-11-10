@@ -57,6 +57,7 @@ size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.91, 0.74, 0.47, 1)
 
 [node name="Round" type="Label" parent="Scroll/Margin/Layout/Header"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "ROUND 01  /  FLEET PHASE"
@@ -68,7 +69,7 @@ text = "Main Menu"
 
 [node name="Encounter" type="HBoxContainer" parent="Scroll/Margin/Layout"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 172)
+custom_minimum_size = Vector2(0, 156)
 theme_override_constants/separation = 12
 
 [node name="Monster" type="PanelContainer" parent="Scroll/Margin/Layout/Encounter"]
@@ -116,6 +117,7 @@ custom_minimum_size = Vector2(130, 12)
 show_percentage = false
 
 [node name="Escalation" type="Label" parent="Scroll/Margin/Layout/Encounter/Monster/Row/Stats"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "Escalation +0\nBegins in round 4"
@@ -241,12 +243,42 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 8
 
+[node name="Actions" type="HBoxContainer" parent="Scroll/Margin/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TargetChoice" type="OptionButton" parent="Scroll/Margin/Layout/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PlayButton" type="Button" parent="Scroll/Margin/Layout/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Play Card"
+disabled = true
+
+[node name="CancelButton" type="Button" parent="Scroll/Margin/Layout/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Cancel"
+
+[node name="ManoeuvreButton" type="Button" parent="Scroll/Margin/Layout/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Basic Manoeuvre"
+
+[node name="EndPhaseButton" type="Button" parent="Scroll/Margin/Layout/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "End Fleet Phase"
+
 [node name="Inspection" type="Label" parent="Scroll/Margin/Layout"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "Select a card to inspect it. Cards can be played for effects or discarded as payment."
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 64)
 autowrap_mode = 2
 theme_override_colors/font_color = Color(0.91, 0.74, 0.47, 1)
 
@@ -255,10 +287,13 @@ layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="Status" type="Label" parent="Scroll/Margin/Layout/Footer"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
-text = "BATTLE VIEW  /  Card inspection available · Combat resolution coming next"
+text = "Fleet phase"
 size_flags_horizontal = 3
+autowrap_mode = 2
+custom_minimum_size = Vector2(400, 0)
 theme_override_colors/font_color = Color(0.57, 0.73, 0.78, 1)
 
 [node name="WinButton" type="Button" parent="Scroll/Margin/Layout/Footer"]
@@ -270,3 +305,19 @@ text = "Test Win"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Test Loss"
+
+
+[node name="LogSection" type="VBoxContainer" parent="Scroll/Margin/Layout"]
+layout_mode = 2
+
+[node name="LogTitle" type="Label" parent="Scroll/Margin/Layout/LogSection"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "ACTION HISTORY"
+
+[node name="History" type="RichTextLabel" parent="Scroll/Margin/Layout/LogSection"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 80)
+theme_override_font_sizes/normal_font_size = 13
+scroll_following = true
