@@ -2,6 +2,8 @@ extends Button
 ## The same card face is used by the hand, hover inspector, and live editor.
 var labels: Dictionary = {}
 var info: Dictionary = {}
+var owner_info: Dictionary = {}
+var drag_provider: Callable
 
 
 func _init() -> void:
@@ -38,6 +40,7 @@ func _ignore(node: Node) -> void:
 
 func configure(card: Dictionary, owner: Dictionary = {}) -> void:
 	info = card.duplicate(true)
+	owner_info = owner.duplicate(true)
 	labels.numbers.text = "COST %d     PAYS %d" % [card.get("cost", 0), card.get("pays", 1)]
 	labels.numbers.modulate = Color("#e8bd77")
 	labels.owner.text = str(owner.get("name", "Unassigned")).to_upper()
@@ -48,3 +51,24 @@ func configure(card: Dictionary, owner: Dictionary = {}) -> void:
 	labels.tags.text = card.get("tags", "") if card.get("tags") is String else " · ".join(card.get("tags", []))
 	labels.tags.modulate = Color("#88b5c7")
 	tooltip_text = labels.name.text + "\n" + labels.positions.text + "\n" + labels.rules.text
+
+
+func _get_drag_data(_at_position: Vector2) -> Variant:
+	if disabled or not drag_provider.is_valid():
+		return null
+	var data: Variant = drag_provider.call()
+	if not data is Dictionary or data.is_empty():
+		return null
+	var preview := Control.new()
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var face = get_script().new()
+	face.configure(info, owner_info)
+	face.theme = theme
+	face.position = Vector2(20, 20)
+	face.size = Vector2(154, 208)
+	face.scale = Vector2.ONE * 0.75
+	face.modulate.a = 0.80
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview.add_child(face)
+	set_drag_preview(preview)
+	return data

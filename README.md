@@ -10,6 +10,8 @@ Select a card, choose an empty unlocked circle slot, click other hand cards as p
 
 The gear opens a pausing battle menu with Resume, Main Menu, and Return to Editor during playtests. History shows recent resolution messages. Input locks during animations; menu navigation safely cancels playback.
 
+Drag a hand card onto the circle as an alternative to clicking. Available destinations have blue **DROP HERE** outlines; hover turns the destination gold and highlights green **BONUS** sources and links. The preview recalculates adjacency, discounts, conditions, and available payment for that slot. Occupied, locked, unaffordable, and position-restricted destinations reject the drop. Dropping selects the action and destination: choose payment and targets, then press **Play Card**. Dropping outside or onto an invalid slot preserves the previous draft. Dragging the selected card keeps payment when still needed and clears it if the new slot makes the action free. Dragging is unavailable during resolution, mandatory discard, or hand refresh.
+
 ### Magic circle
 
 The first four slots are North, East, South, and West, connected in a diamond. Filling them unlocks Centre and four outer corners. The fourth card and its complete allied chain resolve using the original graph; expansion happens afterward, before the monster reaction.
@@ -103,6 +105,7 @@ godot --headless --path . --script res://tests/results_flow.gd
 godot --headless --path . --script res://tests/editor_flow.gd
 godot --headless --path . --script res://tests/circle_examples.gd
 godot --headless --path . --script res://tests/circle_feedback.gd
+godot --headless --path . --script res://tests/drag_drop.gd
 ```
 
 Suites cover unchanged payment, guard, repair, conservation, lethal-hit and results rules plus new positions, expansion timing, modifier costs, finite chains, paused discards, independent copies, stance transitions, migration, safe saving, live previews, real playtests, navigation, and animation cancellation. Editor/persistence tests use temporary user-data files and never save project content.

@@ -25,6 +25,10 @@ var hand_view: Control
 var stance_panel: Control
 var feedback: CanvasLayer
 var menu: PopupMenu
+var dragged_uid := -1
+var drag_hover_slot := -1
+var drag_serial := 0
+var drag_payload: Dictionary = {}
 var history_dialog: AcceptDialog
 var header: HBoxContainer
 var actions: HBoxContainer
@@ -95,6 +99,10 @@ func _build_ui() -> void:
 	enemies = _named(Formation.new(), "Enemies", canvas)
 	circle_view = _named(Circle.new(), "Circle", canvas)
 	circle_view.slot_selected.connect(_circle_selected)
+	circle_view.drop_check = _can_drop_card
+	circle_view.drag_slot_hovered.connect(_drag_over_slot)
+	circle_view.drag_slot_exited.connect(_drag_leave_slot)
+	circle_view.card_dropped.connect(_drop_card)
 	stance_panel = _named(StancePanel.new(), "Stance", canvas)
 	hand_view = _named(Fan.new(), "Hand", canvas)
 	_button(canvas, "DeckPile", "Deck", func(): %Inspection.text = "Remaining draw pile: %d cards. Order is hidden." % state.deck.size())
@@ -187,6 +195,7 @@ func _render() -> void:
 		hand_view.add_child(face)
 		face.configure(state.card(uid), state.ships[state.card(uid).owner])
 		face.pressed.connect(_choose_card.bind(uid))
+		face.drag_provider = _begin_card_drag.bind(uid)
 		face.mouse_entered.connect(func(): hand_view.hover(face, true))
 		face.mouse_exited.connect(func(): hand_view.hover(face, false))
 	hand_view.arrange()
@@ -215,7 +224,7 @@ func _show_board(snapshot: Dictionary) -> void:
 
 
 func _circle_selected(slot: int) -> void:
-	if busy or state.phase != "fleet":
+	if busy or dragged_uid >= 0 or state.phase != "fleet":
 		return
 	if state.circle[slot] >= 0:
 		var info: Dictionary = state.card(state.circle[slot])
@@ -228,7 +237,7 @@ func _circle_selected(slot: int) -> void:
 
 
 func _choose_card(uid: int) -> void:
-	if busy:
+	if busy or dragged_uid >= 0:
 		return
 	if state.phase == "discard":
 		var error: String = state.discard_for_relay(uid)
@@ -256,7 +265,7 @@ func _toggle(items: Array, uid: int) -> void:
 
 
 func _select(uid: int) -> void:
-	if busy or state.phase != "fleet":
+	if busy or dragged_uid >= 0 or state.phase != "fleet":
 		return
 	selected_uid = uid
 	selected_slot = state.first_slot() if uid >= 0 else -1
@@ -282,7 +291,7 @@ func _fill_choices() -> void:
 
 
 func _cancel() -> void:
-	if busy:
+	if busy or dragged_uid >= 0:
 		return
 	_clear_draft()
 	_update_controls()
@@ -300,7 +309,7 @@ func _clear_draft() -> void:
 
 
 func _commit() -> void:
-	if busy:
+	if busy or dragged_uid >= 0:
 		return
 	var error := ""
 	if state.phase == "refresh":
@@ -316,7 +325,7 @@ func _commit() -> void:
 
 
 func _end_phase() -> void:
-	if busy:
+	if busy or dragged_uid >= 0:
 		return
 	var error: String = state.end_phase()
 	if error != "":
@@ -336,6 +345,10 @@ func _present_resolution() -> void:
 
 
 func _update_controls() -> void:
+	if dragged_uid >= 0:
+		_update_drag_feedback()
+		return
+	circle_view.drag_active = false
 	var contributing: Array = []
 	var contribution_details: Dictionary = {}
 	for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
@@ -435,3 +448,139 @@ func _box(background: Color, border: Color) -> StyleBoxFlat:
 	box.content_margin_top = 8
 	box.content_margin_bottom = 8
 	return box
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_DRAG_END and dragged_uid >= 0:
+		_finish_card_drag()
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and dragged_uid >= 0 and drag_hover_slot >= 0:
+		var button: Control = circle_view.buttons[drag_hover_slot]
+		var local_point: Vector2 = button.get_global_transform_with_canvas().affine_inverse() * event.position
+		if not Rect2(Vector2.ZERO, button.size).has_point(local_point):
+			drag_hover_slot = -1
+			_update_drag_feedback()
+
+
+func _begin_card_drag(uid: int) -> Dictionary:
+	if dragged_uid >= 0 or busy or get_tree().paused or state.phase != "fleet" or state.outcome != "" or not state.hand.has(uid):
+		return {}
+	drag_serial += 1
+	dragged_uid = uid
+	drag_hover_slot = -1
+	drag_payload = {"kind": "fleet_hand_card", "battle": get_instance_id(), "uid": uid, "serial": drag_serial}
+	for face in hand_view.get_children():
+		if face.get_meta("uid", -1) == uid:
+			face.modulate.a = 0.35
+	_update_drag_feedback()
+	return drag_payload.duplicate()
+
+
+func _is_our_drag(data: Variant) -> bool:
+	return data is Dictionary and not drag_payload.is_empty() and data == drag_payload and dragged_uid >= 0 and state.hand.has(dragged_uid)
+
+
+func _drop_slot_error(uid: int, slot: int) -> String:
+	if busy or get_tree().paused or state.phase != "fleet" or state.outcome != "" or not state.hand.has(uid):
+		return "Cards can only be placed during the fleet phase."
+	if slot < 0 or slot >= (9 if state.expanded else 4) or state.circle[slot] >= 0:
+		return "Choose an empty unlocked circle slot."
+	# A destination is valid if the hand can fund it, even before payment is selected.
+	var funding: Array = []
+	var cost: int = state.effective_cost(uid, slot)
+	var total := 0
+	for payer in state.hand:
+		if total >= cost:
+			break
+		if payer != uid:
+			funding.append(payer)
+			total += int(state.card(payer).pays)
+	var primary: Array = state.choices(uid, "primary", slot)
+	var movements: Array = state.choices(uid, "movement", slot)
+	var ally: int = primary[0].value if not primary.is_empty() else -1
+	var movement: int = movements[0].value if not movements.is_empty() else -1
+	return state.validate(uid, funding, ally, movement, slot)
+
+
+func _can_drop_card(data: Variant, slot: int) -> bool:
+	return _is_our_drag(data) and _drop_slot_error(dragged_uid, slot) == ""
+
+
+func _drag_over_slot(slot: int, data: Variant) -> void:
+	if not _is_our_drag(data) or drag_hover_slot == slot:
+		return
+	drag_hover_slot = slot
+	_update_drag_feedback()
+
+
+func _drag_leave_slot(slot: int) -> void:
+	if dragged_uid >= 0 and drag_hover_slot == slot:
+		drag_hover_slot = -1
+		_update_drag_feedback()
+
+
+func _update_drag_feedback() -> void:
+	for control in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
+		control.disabled = true
+	circle_view.drag_active = true
+	circle_view.valid_drop_slots = []
+	circle_view.drop_errors = {}
+	for slot in 9:
+		var error := _drop_slot_error(dragged_uid, slot)
+		circle_view.drop_errors[slot] = error
+		if error == "":
+			circle_view.valid_drop_slots.append(slot)
+	var cards: Dictionary = {}
+	for uid in state.circle:
+		if uid >= 0:
+			cards[uid] = state.card(uid)
+	var contributors: Array = []
+	var details: Dictionary = {}
+	var highlight := -1
+	var title: String = state.card(dragged_uid).name
+	if drag_hover_slot >= 0:
+		var error: String = circle_view.drop_errors[drag_hover_slot]
+		if error == "":
+			highlight = drag_hover_slot
+			var primary: Array = state.choices(dragged_uid, "primary", highlight)
+			var movements: Array = state.choices(dragged_uid, "movement", highlight)
+			var ally: int = primary[0].value if not primary.is_empty() else -1
+			var movement: int = movements[0].value if not movements.is_empty() else -1
+			var selected_payment: Array = payment if selected_uid == dragged_uid and state.effective_cost(dragged_uid, highlight) > 0 else []
+			var preview: Dictionary = state.preview(dragged_uid, selected_payment, ally, movement, highlight)
+			contributors = preview.contributors
+			details = preview.contribution_details
+			%Inspection.text = "Drop %s → %s, then choose payment and confirm. %s" % [title, Geometry.SLOT_NAMES[highlight], preview.text]
+		else:
+			%Inspection.text = "Cannot place %s: %s" % [title, error]
+	else:
+		%Inspection.text = "Drag %s to an outlined slot. Drop selects the destination; Play Card confirms after payment." % title
+	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, highlight, contributors, details)
+
+
+func _drop_card(slot: int, data: Variant) -> void:
+	if not _can_drop_card(data, slot):
+		return
+	var uid := dragged_uid
+	var retained_payment: Array = payment.duplicate() if selected_uid == uid else []
+	_finish_card_drag(false)
+	_select(uid)
+	selected_slot = slot
+	payment = retained_payment if state.effective_cost(uid, slot) > 0 else []
+	_fill_choices()
+	_update_controls()
+
+
+func _finish_card_drag(refresh: bool = true) -> void:
+	dragged_uid = -1
+	drag_hover_slot = -1
+	drag_payload.clear()
+	circle_view.drag_active = false
+	circle_view.valid_drop_slots.clear()
+	circle_view.drop_errors.clear()
+	for face in hand_view.get_children():
+		face.modulate.a = 1.0
+	if refresh:
+		_update_controls()

@@ -1,5 +1,8 @@
 extends Control
 signal slot_selected(slot: int)
+signal drag_slot_hovered(slot: int, data: Variant)
+signal drag_slot_exited(slot: int)
+signal card_dropped(slot: int, data: Variant)
 signal link_pulse_started(source_uid: int, receiver_uid: int, event_kind: String)
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const BONUS_COLOR := Color("#9ce6b7")
@@ -15,6 +18,10 @@ var pulse_receiver := -1
 var pulse_event := ""
 var pulse_progress := 0.0
 var link_overlay: Control
+var drop_check: Callable
+var drag_active := false
+var valid_drop_slots: Array = []
+var drop_errors: Dictionary = {}
 
 
 func _ready() -> void:
@@ -34,6 +41,8 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 			button.add_theme_font_size_override("font_size", 11)
 			button.clip_text = true
 			button.pressed.connect(func(): slot_selected.emit(slot))
+			button.set_drag_forwarding(Callable(), _can_drop_at.bind(slot), _drop_at.bind(slot))
+			button.mouse_exited.connect(func(): drag_slot_exited.emit(slot))
 			add_child(button)
 			buttons.append(button)
 		link_overlay = Control.new()
@@ -64,6 +73,10 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 			button.text = card.name + "\n" + caption
 			button.tooltip_text = card.name + "\n" + card.get("effect", "")
 			button.modulate = Color("#b7d2e6")
+		if drag_active and uid < 0 and not locked:
+			button.text = Geometry.SLOT_NAMES[slot] + ("\nDROP HERE" if valid_drop_slots.has(slot) else "\nUnavailable")
+			button.tooltip_text = "Drop to select this slot; choose payment and confirm Play Card." if valid_drop_slots.has(slot) else str(drop_errors.get(slot, "Unavailable."))
+			_highlight(button, Color("#67bdd4") if valid_drop_slots.has(slot) else Color("#8a535b"), Color("#102b36") if valid_drop_slots.has(slot) else Color("#291c25"))
 		if slot == selected:
 			_highlight(button, Color("#e8bd77"), Color("#302b20"))
 		elif provides:
@@ -164,3 +177,15 @@ func _draw_pulse() -> void:
 	var head := finish - direction * 7
 	var perpendicular := Vector2(-direction.y, direction.x) * 5
 	link_overlay.draw_colored_polygon(PackedVector2Array([finish, head + perpendicular, head - perpendicular]), tint)
+
+
+func _can_drop_at(_at_position: Vector2, data: Variant, slot: int) -> bool:
+	if not drop_check.is_valid():
+		return false
+	drag_slot_hovered.emit(slot, data)
+	return bool(drop_check.call(data, slot))
+
+
+func _drop_at(_at_position: Vector2, data: Variant, slot: int) -> void:
+	if drop_check.is_valid() and drop_check.call(data, slot):
+		card_dropped.emit(slot, data)
