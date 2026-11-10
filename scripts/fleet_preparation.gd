@@ -35,6 +35,9 @@ var upgrade_dialog: AcceptDialog
 var upgrade_comparison: HBoxContainer
 var comparison_tier := "two"
 var deck_summary: Label
+var preparation_tabs: TabContainer
+var fleet_deck_body: VBoxContainer
+var fleet_deck_summary: Label
 var content_scroll: ScrollContainer
 
 func _ready() -> void:
@@ -90,10 +93,14 @@ func _build() -> void:
 	_button(header,"Reset to Saved Fleet",_reset)
 	_button(header,"Main Menu",_back)
 	_label(outer,"Select a ship for its options. Drag ships between positions; drag captains onto ships to assign or swap them.",14).modulate = Color("#91b9c6")
+	preparation_tabs = TabContainer.new()
+	preparation_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outer.add_child(preparation_tabs)
 	var split := HSplitContainer.new()
+	split.name = "Fleet Setup"
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	split.split_offset = 675
-	outer.add_child(split)
+	preparation_tabs.add_child(split)
 	var left_scroll := ScrollContainer.new()
 	fleet_scroll = left_scroll
 	left_scroll.custom_minimum_size.x = 570
@@ -142,6 +149,22 @@ func _build() -> void:
 	inspector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector.add_theme_constant_override("separation",7)
 	content_scroll.add_child(inspector)
+	var fleet_deck_scroll := ScrollContainer.new()
+	fleet_deck_scroll.name = "Fleet Deck"
+	fleet_deck_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	preparation_tabs.add_child(fleet_deck_scroll)
+	var deck_page := VBoxContainer.new()
+	deck_page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	deck_page.add_theme_constant_override("separation", 12)
+	fleet_deck_scroll.add_child(deck_page)
+	fleet_deck_summary = _label(deck_page, "", 22)
+	fleet_deck_summary.set_meta("plain_text", true)
+	fleet_deck_summary.modulate = Color("#e8bd77")
+	_label(deck_page, "The complete deck for your current fleet, grouped by ship, then Attack, Guard, Manoeuvre, Support. One preview per design; copy counts include every physical card.", 14)
+	fleet_deck_body = VBoxContainer.new()
+	fleet_deck_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fleet_deck_body.add_theme_constant_override("separation", 24)
+	deck_page.add_child(fleet_deck_body)
 	var footer := HBoxContainer.new()
 	outer.add_child(footer)
 	status = _label(footer,"",14)
@@ -346,8 +369,11 @@ func _update() -> void:
 	launch_button.disabled = not errors.is_empty()
 	if not errors.is_empty():
 		status.text = "Cannot launch: " + str(errors[0])
+		fleet_deck_summary.text = "Deck preview unavailable until fleet setup is valid."
+		_clear(fleet_deck_body)
 		return
 	var compiled := Catalog.compile(candidate)
+	_render_fleet_deck(compiled, candidate)
 	var sim = State.new(0,candidate)
 	var board: Dictionary = sim.board_snapshot()
 	formation.configure(board,false)
@@ -413,17 +439,7 @@ func _show_deck() -> void:
 
 func _render_deck_preview(compiled: Dictionary, ship: Dictionary, slot: Dictionary) -> void:
 	_clear(deck_cards)
-	var groups: Array = []
-	if ship.has("legacy_loadout"):
-		for pair in ship.loadout: groups.append({"label": "Imported loadout", "card": pair.card, "count": pair.count})
-	else:
-		groups.append({"label": "Starter / Level 1", "card": ship.starter, "count": 2})
-		groups.append({"label": "Captain / " + ship.captain.name + " / Tier " + str(ship.captain.tier), "card": ship.captain.card, "count": 2})
-		for tier in ["two", "three"]:
-			var level := 2 if tier == "two" else 3
-			if slot.level < level: continue
-			var package: Dictionary = ship.levels[tier][Catalog.index_by_id(ship.levels[tier], slot["level_2" if tier == "two" else "level_3"])]
-			groups.append({"label": "Level %d / %s / +2 cards" % [level, package.name], "card": package.card, "count": 2})
+	var groups := _ship_card_groups(ship, slot)
 	var total := 0
 	for group in groups:
 		total += int(group.count)
@@ -674,3 +690,80 @@ func _choose_ship(id: String) -> void:
 	if Catalog.index_by_id(draft.ships, id) < 0: return
 	_change(id, selected_ship, "ship")
 	_show_ships()
+
+
+func _ship_card_groups(ship: Dictionary, slot: Dictionary) -> Array:
+	var groups: Array = []
+	if ship.has("legacy_loadout"):
+		for pair in ship.loadout: groups.append({"label": "Imported loadout", "card": pair.card, "count": pair.count})
+	else:
+		groups.append({"label": "Starter / Level 1", "card": ship.starter, "count": 2})
+		groups.append({"label": "Captain / " + ship.captain.name + " / Tier " + str(ship.captain.tier), "card": ship.captain.card, "count": 2})
+		for tier in ["two", "three"]:
+			var level := 2 if tier == "two" else 3
+			if slot.level < level: continue
+			var package: Dictionary = ship.levels[tier][Catalog.index_by_id(ship.levels[tier], slot["level_2" if tier == "two" else "level_3"])]
+			groups.append({"label": "Level %d / %s / +2 cards" % [level, package.name], "card": package.card, "count": 2})
+	return groups
+
+
+func _render_fleet_deck(compiled: Dictionary, candidate: Dictionary) -> void:
+	_clear(fleet_deck_body)
+	var fleet_total := 0
+	var design_total := 0
+	for index in compiled.ships.size():
+		var ship: Dictionary = compiled.ships[index]
+		var slot: Dictionary = candidate.setup.fleet[index]
+		var quantities: Dictionary = {}
+		var origins: Dictionary = {}
+		for pair in ship.loadout: quantities[pair.card] = quantities.get(pair.card, 0) + int(pair.count)
+		for group in _ship_card_groups(ship, slot):
+			if not origins.has(group.card): origins[group.card] = []
+			if not origins[group.card].has(group.label): origins[group.card].append(group.label)
+		var ship_total := 0
+		for count in quantities.values(): ship_total += int(count)
+		fleet_total += ship_total
+		design_total += quantities.size()
+		var section := VBoxContainer.new()
+		section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		section.add_theme_constant_override("separation", 10)
+		section.set_meta("ship_index", index)
+		fleet_deck_body.add_child(section)
+		var heading := _label(section, "%s / %s / Level %d / %d cards" % [ship.name, slot.position.capitalize(), slot.level, ship_total], 21)
+		heading.set_meta("plain_text", true)
+		heading.modulate = Color(ship.color)
+		_label(section, "Captain: " + ship.captain.name, 14).set_meta("plain_text", true)
+		for type in Rules.TYPES:
+			var keys: Array = quantities.keys().filter(func(id): return compiled.cards[id].type == type)
+			if keys.is_empty(): continue
+			keys.sort_custom(func(a, b):
+				var first: String = compiled.cards[a].name
+				var second: String = compiled.cards[b].name
+				return first.naturalnocasecmp_to(second) < 0 if first != second else str(a) < str(b))
+			var type_total := 0
+			for id in keys: type_total += int(quantities[id])
+			_label(section, "%s / %d cards" % [type, type_total], 16)
+			var flow := HFlowContainer.new()
+			flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			flow.add_theme_constant_override("h_separation", 14)
+			flow.add_theme_constant_override("v_separation", 14)
+			flow.set_meta("card_type", type)
+			section.add_child(flow)
+			for id in keys:
+				var cell := VBoxContainer.new()
+				cell.custom_minimum_size.x = 240
+				flow.add_child(cell)
+				var caption := _label(cell, "%d copies / %s" % [quantities[id], "; ".join(origins.get(id, []))], 12)
+				caption.custom_minimum_size.y = 40
+				caption.set_meta("plain_text", true)
+				var face := CardFace.new()
+				face.custom_minimum_size = Vector2(240, 300)
+				face.toggle_mode = false
+				face.mouse_default_cursor_shape = Control.CURSOR_ARROW
+				face.configure(compiled.cards[id], ship)
+				face.set_meta("card_id", id)
+				face.set_meta("ship_index", index)
+				face.set_meta("copies", quantities[id])
+				face.set_meta("origins", origins.get(id, []).duplicate())
+				cell.add_child(face)
+	fleet_deck_summary.text = "Fleet deck / %d cards / %d designs / %d ships" % [fleet_total, design_total, compiled.ships.size()]
