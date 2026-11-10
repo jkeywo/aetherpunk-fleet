@@ -1,0 +1,93 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/screen.gd" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="PanelStyle"]
+bg_color = Color(0.055, 0.105, 0.145, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.25, 0.39, 0.44, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_left = 12
+corner_radius_bottom_right = 12
+
+[node name="Defeat" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+primary_scene = "res://scenes/main_menu.tscn"
+secondary_scene = ""
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.035, 0.065, 0.10, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(580, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("PanelStyle")
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 48
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 48
+theme_override_constants/margin_bottom = 40
+
+[node name="Content" type="VBoxContainer" parent="Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Eyebrow" type="Label" parent="Center/Panel/Margin/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.91, 0.74, 0.47, 1)
+theme_override_font_sizes/font_size = 16
+text = "AETHERPUNK FLEET"
+horizontal_alignment = 1
+
+[node name="Heading" type="Label" parent="Center/Panel/Margin/Content"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+text = "Defeat"
+horizontal_alignment = 1
+
+[node name="Description" type="Label" parent="Center/Panel/Margin/Content"]
+custom_minimum_size = Vector2(480, 65)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.76, 0.80, 1)
+theme_override_font_sizes/font_size = 18
+text = "Your fleet has fallen. Return to port and try again."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="PrimaryButton" type="Button" parent="Center/Panel/Margin/Content"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "Return to Main Menu"
+
+[node name="SecondaryButton" type="Button" parent="Center/Panel/Margin/Content"]
+visible = false
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = ""
