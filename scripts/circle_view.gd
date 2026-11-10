@@ -70,16 +70,16 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 			var caption: String = card.get("pending_status", "BONUS" if provides else "In play")
 			if count > 0:
 				caption = ("BONUS · " if provides else "") + "◆ %d used" % count
-			if persistence.has(uid): caption += " · P" + str(persistence[uid])
+			if persistence.has(uid): caption += " · Persistence " + str(persistence[uid])
 			button.text = card.name + "\n" + caption
 			button.tooltip_text = card.name + "\n" + card.get("effect", "")
 			if persistence.has(uid): button.tooltip_text += "\nPersistence %d: remove one at cleanup and keep this card for the next round." % persistence[uid]
 			if card.has("pending_status"):
-				button.tooltip_text += "\n" + card.pending_status + ". Click hand cards to discard as payment. Resolve Card commits; Cancel Play returns all cards."
+				button.tooltip_text += "\n" + card.pending_status + ". Click hand cards to discard as payment. The card resolves when paid and targeted; Cancel Play returns pending cards."
 			button.modulate = Color("#b7d2e6")
 		if drag_active and uid < 0 and not locked:
 			button.text = Geometry.SLOT_NAMES[slot] + ("\nDROP HERE" if valid_drop_slots.has(slot) else "\nUnavailable")
-			button.tooltip_text = "Drop here, click other cards to discard as payment, then Resolve Card or Cancel Play." if valid_drop_slots.has(slot) else str(drop_errors.get(slot, "Unavailable."))
+			button.tooltip_text = "Drop here, click other cards to discard as payment, then click targets. Resolves automatically when ready; Cancel Play refunds pending cards." if valid_drop_slots.has(slot) else str(drop_errors.get(slot, "Unavailable."))
 			_highlight(button, Color("#67bdd4") if valid_drop_slots.has(slot) else Color("#8a535b"), Color("#102b36") if valid_drop_slots.has(slot) else Color("#291c25"))
 		if slot == selected:
 			button.modulate = Color.WHITE

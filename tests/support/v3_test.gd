@@ -86,11 +86,37 @@ func stage_card(battle, id: String, slot: int) -> void:
 	battle._select(uid_for(battle.state, id))
 	battle._circle_selected(slot)
 func choose_first_targets(battle) -> void:
-	for group in ["Target", "Movement", "Enemy", "Circle", "Stance", "Reaction", "Slot"]:
-		var control: OptionButton = battle.get_node("%" + group + "Choice")
-		if control.item_count > 1 and control.get_item_id(0) == -999:
-			control.select(1)
-			control.item_selected.emit(1)
+	var uid: int=battle.selected_uid
+	var slot: int=battle.selected_slot
+	var options: Dictionary=battle._action_options()
+	var flags: Dictionary=battle.state.choice_flags(uid,slot,options)
+	var primary: Array=battle.state.choices(uid,"primary",slot,options)
+	if not primary.is_empty():
+		var value: int=primary[0].value
+		if flags.pair:
+			battle._ally_position_pressed(int((value-100)/4))
+			battle._ally_position_pressed((value-100)%4)
+		elif flags.ally: battle.allies.target_widget(value).pressed.emit()
+		else: battle.allies.widgets[value].pressed.emit()
+	var moves: Array=battle.state.choices(uid,"movement",slot,options)
+	if not moves.is_empty(): battle.allies.widgets[moves[0].value].pressed.emit()
+	var enemies: Array=battle.state.choices(uid,"enemy",slot,options)
+	if not enemies.is_empty(): battle.enemies.widgets[battle.state.position_of(enemies[0].value)].pressed.emit()
+	for group in ["circle","stance","reaction","slot"]:
+		var list: Array=battle.state.choices(uid,group,slot,options)
+		if list.is_empty(): continue
+		var value: Variant=list[0].value
+		if group=="circle": battle.circle_view.buttons[battle.state.circle.find(value) if battle.state.circle.has(value) else slot].pressed.emit()
+		elif group=="stance": battle._stance_pressed(value)
+		elif group=="reaction": battle.stance_panel.reaction_selected.emit(value)
+		elif group=="slot": battle.allies.widgets[value].pressed.emit()
+
+func settle(battle) -> void:
+	await flush()
+	if is_instance_valid(battle) and battle.busy: await battle.resolution_finished
+	await flush()
+
+
 func pay_with(battle, id: String) -> void:
 	field_key(battle, id).pressed.emit()
 	await battle.payment_finished

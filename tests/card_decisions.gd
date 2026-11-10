@@ -60,4 +60,10 @@ func _run() -> void:
 	b.deck.clear()
 	b.effect_scry({"look": 99, "take": 1}, {"owner": 0, "uid": -1, "event": {}, "ancestry": []})
 	expect(b.phase == "scry" and b.pending.revealed.size() == 11 and conserved(b), "Scry reshuffle or available-card clamp failed.")
+	doc=neutral()
+	doc.ships[0].resource.rules=[rule("startup","turn_start",[{"kind":"scry","look":1,"take":0}],"owner","ship")]
+	b=State.new(1,doc)
+	expect(b.phase=="scry","Startup scry did not suspend.")
+	b.choose_scry([],b.pending.revealed.duplicate(),[])
+	expect(b.preview(uid_for(b,"brace"),[],-1,-1,0).ok,"Completed startup decision leaked into detached previews.")
 	done("Card decisions and discard timing")

@@ -22,6 +22,14 @@ var action_options: Dictionary = {}
 var selected_crystals := 0
 var locked_cost := -1
 var selected_boosts: Array = []
+var end_turn_discards: Array = []
+var pair_first := -1
+var hovered_reaction := -1
+var reaction_panel: PanelContainer
+var reaction_text: Label
+var deck_count_label: Label
+var discard_count_label: Label
+var discard_pending_label: Label
 var boost_dialog: AcceptDialog
 var scry_dialog: ConfirmationDialog
 var scry_body: VBoxContainer
@@ -119,6 +127,7 @@ func _build_ui() -> void:
 	allies.ship_dropped.connect(_drop_ship)
 	enemies = _named(Formation.new(), "Enemies", canvas)
 	allies.position_selected.connect(_ally_position_pressed)
+	allies.unit_selected.connect(func(id): if pending_play and not busy: _set_group_value("primary",id))
 	enemies.position_selected.connect(_enemy_position_pressed)
 	circle_view = _named(Circle.new(), "Circle", canvas)
 	circle_view.slot_selected.connect(_circle_selected)
@@ -128,9 +137,25 @@ func _build_ui() -> void:
 	circle_view.card_dropped.connect(_drop_card)
 	stance_panel = _named(StancePanel.new(), "Stance", canvas)
 	stance_panel.card_selected.connect(_stance_pressed)
+	stance_panel.card_hovered.connect(_reaction_hovered)
+	stance_panel.card_exited.connect(_reaction_exited)
+	stance_panel.reaction_selected.connect(func(key): _set_group_value("reaction",key))
+	reaction_panel = PanelContainer.new()
+	reaction_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(reaction_panel)
+	reaction_panel.position=Vector2(16,382)
+	reaction_panel.size=Vector2(350,94)
+	reaction_panel.hide()
+	reaction_text=Label.new()
+	reaction_text.add_theme_font_size_override("font_size",10)
+	reaction_text.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	reaction_text.max_lines_visible=5
+	reaction_text.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	reaction_panel.add_child(reaction_text)
 	hand_view = _named(Fan.new(), "Hand", canvas)
 	_button(canvas, "DeckPile", "Deck", func(): %Inspection.text = "Remaining draw pile: %d cards. Order is hidden." % state.deck.size())
 	_button(canvas, "DiscardPile", "Discard", func(): %Inspection.text = "Discard: %d cards. Played cards stay in the circle until next turn." % state.discard.size())
+	_build_pile_counters()
 	actions = HFlowContainer.new()
 	actions.add_theme_constant_override("h_separation", 7)
 	actions.add_theme_constant_override("v_separation", 6)
@@ -154,9 +179,7 @@ func _build_ui() -> void:
 		control.item_selected.connect(func(index): action_options[group] = control.get_item_metadata(index); _update_controls())
 	_button(actions, "ManaButton", "Mana 0/1", _pay_crystal)
 	_button(actions, "BoostButton", "Boosts", _show_boosts)
-	_button(actions, "PlayButton", "Play Card", _commit)
 	_button(actions, "CancelButton", "Cancel", _cancel)
-	_button(actions, "ManoeuvreButton", "Manoeuvre", _select.bind(-1))
 	_button(actions, "EndPhaseButton", "End Fleet Phase", _end_phase)
 	_button(actions, "HistoryButton", "History", _show_history)
 	_button(actions, "WinButton", "Test Win", _navigate.bind("res://scenes/victory.tscn"))
@@ -192,6 +215,7 @@ func _build_ui() -> void:
 	history_dialog.min_size = Vector2i(780, 460)
 	add_child(history_dialog)
 	boost_dialog = AcceptDialog.new()
+	boost_dialog.visibility_changed.connect(func(): if not boost_dialog.visible: _try_resolve_pending.call_deferred())
 	boost_dialog.title = "Optional boosts / choose before payment"
 	boost_dialog.ok_button_text = "Use selected boosts"
 	boost_dialog.min_size = Vector2i(650, 300)
@@ -256,8 +280,11 @@ func _render() -> void:
 		hand_view.add_child(face)
 		face.configure(state.card(uid), state.ships[state.card(uid).owner])
 		face.pressed.connect(_choose_card.bind(uid))
+		face.set_meta("refresh_discard",end_turn_discards.has(uid))
+		face.gui_input.connect(func(event):
+			if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed: _queue_refresh_discard(uid))
 		face.drag_provider = _begin_card_drag.bind(uid)
-		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, or an adjacent living ally to swap. Basic actions discard this card." % state.ships[state.card(uid).owner].name
+		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, or an adjacent ally/empty position to swap/move. Basic actions immediately discard this card on drop. Right-click to toggle discard at the next automatic refill." % state.ships[state.card(uid).owner].name
 		face.mouse_entered.connect(func(): hand_view.hover(face, true))
 		face.mouse_exited.connect(func(): hand_view.hover(face, false))
 	hand_view.arrange()
@@ -268,17 +295,21 @@ func _render() -> void:
 		_navigate.call_deferred("res://scenes/%s.tscn" % state.outcome)
 
 
-func _show_piles(snapshot: Dictionary) -> void:
-	%DeckPile.text = "DECK\n%d" % snapshot.deck_size
+func _show_piles(_snapshot: Dictionary) -> void:
+	%DeckPile.text = "DECK\n%d" % state.deck.size()
 	var pending_count: int = payment.size() + (1 if basic_target >= 0 else 0) if pending_play and not busy else 0
-	%DiscardPile.text = "DISCARD\n%d" % snapshot.discard_size + ("\n+%d pending" % pending_count if pending_count > 0 else "")
+	%DiscardPile.text = "DISCARD\n%d" % state.discard.size() + ("\n+%d pending" % pending_count if pending_count > 0 else "")
+	if is_instance_valid(deck_count_label):
+		deck_count_label.text=str(state.deck.size())
+		discard_count_label.text=str(state.discard.size())
+		discard_pending_label.text="+%d pending" % pending_count if pending_count>0 else ""
 	var pending_names: Array = []
 	if pending_play:
 		for uid in payment:
 			pending_names.append(state.card(uid).name)
 		if basic_target >= 0:
 			pending_names.append(state.card(selected_uid).name)
-	%DiscardPile.tooltip_text = "Discard: %d cards." % snapshot.discard_size + ("\nPending: " + ", ".join(pending_names) + ". Cancel Play returns these cards." if not pending_names.is_empty() else "")
+	%DiscardPile.tooltip_text = "Discard: %d cards." % state.discard.size() + ("\nPending: " + ", ".join(pending_names) + ". Cancel Play returns these cards." if not pending_names.is_empty() else "")
 
 
 func _show_board(snapshot: Dictionary) -> void:
@@ -302,7 +333,10 @@ func _show_board(snapshot: Dictionary) -> void:
 
 
 func _circle_selected(slot: int) -> void:
-	if busy or pending_play or dragged_uid >= 0 or state.phase != "fleet":
+	if busy or dragged_uid>=0 or state.phase!="fleet": return
+	if pending_play:
+		if state.choice_flags(selected_uid,selected_slot,_action_options()).circle and state.circle[slot]>=0: _set_group_value("circle",state.circle[slot])
+		elif state.choice_flags(selected_uid,selected_slot,_action_options()).circle and slot==selected_slot: _set_group_value("circle",selected_uid)
 		return
 	if state.circle[slot] >= 0:
 		var info: Dictionary = state.card(state.circle[slot])
@@ -331,7 +365,7 @@ func _choose_card(uid: int) -> void:
 		if uid == selected_uid or payment.has(uid) or not state.hand.has(uid):
 			return
 		if _payment_amount() >= _current_cost():
-			%Inspection.text = "Payment complete. Choose any required target, then Resolve Card or Cancel Play."
+			%Inspection.text = "Payment complete. Click the highlighted target; the card resolves automatically."
 			return
 		busy = true
 		_update_controls()
@@ -385,7 +419,7 @@ func _fill_choices() -> void:
 			control.set_item_metadata(control.item_count - 1, option.value)
 		if control.item_count > 0:
 			control.select(0)
-			var value: Variant = -1 if pending_play else control.get_item_metadata(0)
+			var value: Variant = -999 if pending_play else control.get_item_metadata(0)
 			if group == "primary": target = int(value)
 			elif group == "movement": movement_target = int(value)
 			else: action_options[group] = value
@@ -404,6 +438,7 @@ func _clear_draft() -> void:
 	action_options.clear()
 	selected_boosts.clear()
 	selected_crystals = 0
+	pair_first = -1
 	locked_cost = -1
 	selected_uid = -2
 	basic_target = -1
@@ -433,6 +468,8 @@ func _commit() -> void:
 	if error != "":
 		%Inspection.text = error
 		return
+	if selected_uid>=0: end_turn_discards.erase(selected_uid)
+	for uid in payment: end_turn_discards.erase(uid)
 	if pending_play and basic_target < 0:
 		for event in state.feedback_events:
 			if event.kind == "card_played":
@@ -454,8 +491,15 @@ func _end_phase() -> void:
 
 func _present_resolution() -> void:
 	busy = true
+	reaction_panel.hide()
+	%Status.show()
 	_update_controls()
 	await feedback.play(state.feedback_events.duplicate(true), self)
+	if state.phase == "refresh" and state.outcome == "":
+		var discarded: Array = end_turn_discards.filter(func(uid): return state.hand.has(uid))
+		end_turn_discards.clear()
+		state.refresh(discarded)
+		await feedback.play(state.feedback_events.duplicate(true),self)
 	busy = false
 	_clear_draft()
 	_render()
@@ -467,83 +511,86 @@ func _update_controls() -> void:
 		_update_drag_feedback()
 		return
 	circle_view.drag_active = false
-	if busy:
-		allies.show_basic_targets()
-	else:
-		_update_basic_highlights()
-	var contributing: Array = []
-	var contribution_details: Dictionary = {}
-	for button in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %EnemyChoice, %CircleChoice, %StanceChoice, %ReactionChoice, %SlotChoice, %ManaButton, %BoostButton, %WinButton, %LossButton]:
-		button.disabled = busy
+	for button in [%CancelButton,%EndPhaseButton,%ManaButton,%BoostButton,%WinButton,%LossButton]: button.disabled = busy
+	for group in ["Target","Movement","Enemy","Circle","Stance","Reaction","Slot"]: get_node("%"+group+"Choice").hide()
 	for button in hand_view.get_children():
 		var uid: int = button.get_meta("uid")
 		button.disabled = busy
-		button.set_pressed_no_signal(uid == selected_uid or payment.has(uid) or refresh_discards.has(uid))
-		button.modulate = Color("#a9e3cb") if payment.has(uid) or refresh_discards.has(uid) else Color.WHITE
+		button.set_pressed_no_signal(uid == selected_uid or payment.has(uid))
+		button.modulate = Color("#9c86aa") if end_turn_discards.has(uid) else Color.WHITE
 	hand_view.selected_uid = selected_uid
 	hand_view.arrange()
-	%TargetChoice.visible = basic_target < 0 and selected_uid != -2 and %TargetChoice.item_count > 0
-	%MovementChoice.visible = basic_target < 0 and selected_uid != -2 and %MovementChoice.item_count > 0
-	for group in ["enemy", "circle", "stance", "reaction", "slot"]:
-		var control: OptionButton = get_node("%" + group.capitalize() + "Choice")
-		control.visible = basic_target < 0 and selected_uid != -2 and control.item_count > 0
-	%ManaButton.text = "Mana %d/%d" % [state.mana - (selected_crystals if pending_play else 0), state.fleet_stat("mana_capacity")]
-	%ManaButton.tooltip_text = "Click to reserve one temporary crystal as mana payment. Reserved %d. Cancel Play restores it. Crystals cannot satisfy card-discard effects." % selected_crystals
-	%ManaButton.disabled = busy or not pending_play or basic_target >= 0 or state.phase != "fleet" or state.mana <= selected_crystals or _payment_amount() >= _current_cost()
-	%BoostButton.disabled = busy or not pending_play or not payment.is_empty() or selected_crystals > 0 or _boost_options().is_empty()
+	%ManaButton.text = "Mana %d/%d" % [state.mana-(selected_crystals if pending_play else 0),state.fleet_stat("mana_capacity")]
+	%ManaButton.disabled = busy or not pending_play or state.phase!="fleet" or state.mana<=selected_crystals or _payment_amount()>=_current_cost()
+	%ManaButton.tooltip_text = "Click to pay one mana crystal. Cancel Play refunds pending payment."
+	%BoostButton.disabled = busy or selected_uid<0 or state.phase!="fleet" or not payment.is_empty() or selected_crystals>0 or _boost_options().is_empty()
 	%BoostButton.text = "Boosts (%d)" % selected_boosts.size()
+	%BoostButton.tooltip_text = "Select a card and choose optional boosts before dropping/paying."
+	%CancelButton.disabled = busy or selected_uid == -2
+	%CancelButton.text = "Cancel Play" if pending_play else "Cancel"
+	%EndPhaseButton.disabled = busy or pending_play or state.phase!="fleet"
 	if busy:
 		%Inspection.text = "Resolving action and chained effects…"
-		return
-	%PlayButton.disabled = true
-	%PlayButton.text = "Play Card"
-	%CancelButton.disabled = selected_uid == -2 and refresh_discards.is_empty()
-	%CancelButton.text = "Cancel Play" if pending_play else "Cancel"
-	%CancelButton.tooltip_text = "Return the pending card and all pending payment to the hand. No effects have resolved."
-	%EndPhaseButton.disabled = pending_play or state.phase != "fleet"
-	%ManoeuvreButton.disabled = pending_play or state.phase != "fleet"
-	if state.phase == "discard":
-		%Inspection.text = "%s: discard %d more card(s)." % [state.pending.title, state.pending.discard_remaining]
-	elif state.phase == "refresh":
-		%PlayButton.disabled = false
-		%PlayButton.text = "Refill Hand"
-		%Inspection.text = "New player turn: circle cleared. Select optional hand discards, then refill to seven."
+	elif state.phase == "discard":
+		%Inspection.text = "%s: click %d more cards to discard." % [state.pending.title,state.pending.discard_remaining]
 	elif state.phase == "scry":
-		%Inspection.text = "Scry choice pending: choose hand cards and order the top/discard piles."
-	elif basic_target >= 0:
-		var result: Dictionary = state.basic_preview(selected_uid, basic_target, _action_options())
-		%PlayButton.disabled = not result.ok
-		%PlayButton.text = result.action if result.ok else "Basic Action"
-		%Inspection.text = result.text
-	elif selected_uid != -2:
-		var result: Dictionary = state.preview(selected_uid, payment, target, movement_target, selected_slot, _action_options())
-		%PlayButton.disabled = not result.ok or not pending_play
-		%Inspection.text = result.text
-		contributing = result.get("contributors", [])
-		contribution_details = result.get("contribution_details", {})
-		%PlayButton.text = "Resolve Manoeuvre" if selected_uid < 0 else "Resolve Card"
+		%Inspection.text = "Scry: choose hand cards and order the remaining cards."
+	elif pending_play:
+		var preview: Dictionary = state.preview(selected_uid,payment,target,movement_target,selected_slot,_action_options())
+		%Inspection.text = "Payment %d/%d. Click highlighted ships/slots for targets. Resolves automatically when ready. Cancel Play refunds the pending action. %s" % [_payment_amount(),_current_cost(),preview.text]
+		_show_target_choices()
+		_try_resolve_pending.call_deferred()
 	else:
-		%Inspection.text = "Drag a card to the circle, then click cards to discard as payment. Resolve Card confirms; Cancel Play restores your hand."
-	if pending_play:
-		var cost: int = 0 if basic_target >= 0 else _current_cost()
-		var detail: String = %Inspection.text
-		if detail.begins_with("Payment "):
-			detail = ""
-		var prompt: String = "Click hand cards to discard. " if _payment_amount() < cost else "Paid. Choose any required target. "
-		%Inspection.text = ("Basic action pending. " if basic_target >= 0 else "Payment %d / %d. " % [_payment_amount(), cost] + prompt) + "Resolve or Cancel Play. " + detail
-	_show_piles(state.board_snapshot())
-	%Status.text = "Hand %d / In circle %d%s\nGreen BONUS = contributor. Purple = adjacent. Next stance hidden." % [state.hand.size() - (payment.size() + (1 if selected_uid >= 0 else 0) if pending_play else 0), state.play_order.size(), " (+1 pending)" if pending_play and selected_uid >= 0 and basic_target < 0 else ""]
+		allies.show_basic_targets()
+		enemies.show_rule_preview()
+		%Inspection.text = "Drag to the circle to play. Drop on ships/empty positions for immediate basic actions. Right-click hand cards to discard at next turn's automatic refill."
 	var cards: Dictionary = {}
 	for uid in state.circle:
-		if uid >= 0:
-			cards[uid] = state.card(uid)
-	var displayed_circle: Array = state.circle.duplicate()
-	if pending_play and selected_uid >= 0 and basic_target < 0:
-		displayed_circle[selected_slot] = selected_uid
-		var pending_card: Dictionary = state.card(selected_uid).duplicate(true)
-		pending_card["pending_status"] = "PENDING %d/%d" % [state.payment_total(payment), state.effective_cost(selected_uid, selected_slot)]
-		cards[selected_uid] = pending_card
-	circle_view.configure(displayed_circle, state.expanded, cards, state.used_triggers, selected_slot if basic_target < 0 else -1, contributing, contribution_details, state.persistence)
+		if uid>=0: cards[uid]=state.card(uid)
+	var shown: Array = state.circle.duplicate()
+	var contributors: Array=state.contributing_cards(selected_uid,selected_slot) if selected_uid>=0 else []
+	var details: Dictionary=state.contribution_details(selected_uid,selected_slot) if selected_uid>=0 else {}
+	if pending_play and selected_uid>=0:
+		shown[selected_slot]=selected_uid
+		cards[selected_uid]=state.card(selected_uid).duplicate(true)
+		cards[selected_uid]["pending_status"]="PENDING %d/%d" % [_payment_amount(),_current_cost()]
+		contributors=state.contributing_cards(selected_uid,selected_slot)
+		details=state.contribution_details(selected_uid,selected_slot)
+	circle_view.configure(shown,state.expanded,cards,state.used_triggers,selected_slot,contributors,details,state.persistence)
+	%Status.text = "Hand %d / In circle %d\nRight-click: discard at refill (%d marked)" % [state.hand.size(),state.play_order.size(),end_turn_discards.size()]
+	_show_piles(state.board_snapshot())
+
+
+func _try_resolve_pending() -> void:
+	if busy or not pending_play or dragged_uid>=0 or get_tree().paused or boost_dialog.visible or state.phase!="fleet": return
+	if state.validate(selected_uid,payment,target,movement_target,selected_slot,_action_options())=="": _commit()
+
+
+func _queue_refresh_discard(uid: int) -> void:
+	if busy or pending_play or dragged_uid>=0 or state.phase!="fleet": return
+	_toggle(end_turn_discards,uid)
+	_render()
+
+
+func _show_target_choices() -> void:
+	var ally_notes: Dictionary={}
+	var enemy_notes: Dictionary={}
+	var flags: Dictionary=state.choice_flags(selected_uid,selected_slot,_action_options())
+	for group in ["primary","movement","slot"]:
+		for item in state.choices(selected_uid,group,selected_slot,_action_options()):
+			var value: int=item.value
+			if group=="slot" or (flags.movement and not flags.ally) or group=="movement":
+				if value in range(4): ally_notes[state.formation[value] if state.formation[value]>=0 else 100+value]="Click to move / choose slot"
+			elif flags.ally: ally_notes[value]="Click to choose ally"
+	if flags.pair:
+		for point in 4:
+			if state.formation[point]>=0: ally_notes[state.formation[point]]="Click two adjacent ships to swap"
+	for item in state.choices(selected_uid,"enemy",selected_slot,_action_options()): enemy_notes[item.value]="Click to choose enemy"
+	if target>=0 and ally_notes.has(target): ally_notes[target]="Selected ally"
+	var enemy_id: int=action_options.get("enemy",-999)
+	if enemy_notes.has(enemy_id): enemy_notes[enemy_id]="Selected enemy"
+	allies.show_rule_preview(ally_notes,target if flags.ally else -999)
+	enemies.show_rule_preview(enemy_notes,enemy_id)
 
 
 func _show_history() -> void:
@@ -691,7 +738,7 @@ func _drag_leave_slot(slot: int) -> void:
 
 
 func _update_drag_feedback() -> void:
-	for control in [%PlayButton, %CancelButton, %ManoeuvreButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
+	for control in [%CancelButton, %EndPhaseButton, %TargetChoice, %MovementChoice, %WinButton, %LossButton]:
 		control.disabled = true
 	circle_view.drag_active = true
 	_update_basic_highlights(dragged_uid, drag_hover_ship)
@@ -712,7 +759,7 @@ func _update_drag_feedback() -> void:
 	var title: String = state.card(dragged_uid).name
 	if drag_hover_ship >= 0:
 		var preview: Dictionary = state.basic_preview(dragged_uid, drag_hover_ship)
-		%Inspection.text = ("Drop to select basic action, then confirm. " if preview.ok else "Cannot drop: ") + preview.text
+		%Inspection.text = ("Release to act immediately. " if preview.ok else "Cannot drop: ") + preview.text
 	elif drag_hover_slot >= 0:
 		var error: String = circle_view.drop_errors[drag_hover_slot]
 		if error == "":
@@ -725,11 +772,11 @@ func _update_drag_feedback() -> void:
 			var preview: Dictionary = state.preview(dragged_uid, selected_payment, ally, movement, highlight, _first_options(dragged_uid, highlight))
 			contributors = preview.contributors
 			details = preview.contribution_details
-			%Inspection.text = "Drop %s → %s, then click cards to discard as payment. %s" % [title, Geometry.SLOT_NAMES[highlight], preview.text]
+			%Inspection.text = "Drop %s → %s, then click cards to discard as payment and click any required target. %s" % [title, Geometry.SLOT_NAMES[highlight], preview.text]
 		else:
 			%Inspection.text = "Cannot place %s: %s" % [title, error]
 	else:
-		%Inspection.text = "Drag %s to the circle, its own ship to repair/recover, or an adjacent ally to swap. Drop stages the action. Resolve or Cancel Play." % title
+		%Inspection.text = "Drag %s to the circle to stage a play, its own ship to repair/recover, or an adjacent ship/empty position to swap/move. Basic actions resolve immediately on drop." % title
 	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, highlight, contributors, details, state.persistence)
 
 
@@ -774,19 +821,16 @@ func _drag_leave_ship(ship_id: int) -> void:
 
 
 func _drop_ship(ship_id: int, data: Variant) -> void:
-	if not _can_drop_ship(data, ship_id):
-		return
+	if not _can_drop_ship(data, ship_id): return
 	var uid := dragged_uid
 	_finish_card_drag(false)
-	_select(uid)
-	basic_target = ship_id
-	selected_slot = -1
-	%TargetChoice.clear()
-	%MovementChoice.clear()
-	pending_play = true
-	locked_cost = 0
-	pending_visual_sources[uid] = {"rect": allies.target_widget(ship_id).get_global_rect()}
-	_render()
+	var error: String = state.play_basic(uid, ship_id)
+	if error != "":
+		%Inspection.text = error
+		_update_controls()
+		return
+	end_turn_discards.erase(uid)
+	await _present_resolution()
 
 
 func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
@@ -798,7 +842,7 @@ func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
 		return
 	var hints: Dictionary = {}
 	var valid: Array = []
-	for ship_id in state.ships.size():
+	for ship_id in state.basic_targets():
 		var preview: Dictionary = state.basic_preview(uid, ship_id)
 		hints[ship_id] = preview.text
 		if preview.ok:
@@ -809,7 +853,9 @@ func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
 func _stage_circle(uid: int, slot: int) -> void:
 	if pending_play or _drop_slot_error(uid, slot) != "":
 		return
+	var boosts: Array = selected_boosts.duplicate() if selected_uid==uid else []
 	_select(uid)
+	selected_boosts=boosts
 	selected_slot = slot
 	locked_cost = state.effective_cost(uid, slot)
 	pending_play = true
@@ -854,7 +900,7 @@ func _boost_options() -> Array:
 
 
 func _show_boosts() -> void:
-	if not pending_play or busy or not payment.is_empty() or selected_crystals > 0: return
+	if selected_uid<0 or busy or not payment.is_empty() or selected_crystals>0: return
 	for child in boost_dialog.get_children():
 		if child.get_meta("boost_body", false):
 			boost_dialog.remove_child(child)
@@ -895,11 +941,17 @@ func _set_group_value(group: String, value: Variant) -> void:
 
 
 func _ally_position_pressed(point: int) -> void:
-	if busy or not pending_play or basic_target >= 0: return
-	var flags: Dictionary = state.choice_flags(selected_uid, selected_slot, _action_options())
-	if flags.ally and state.formation[point] >= 0: _set_group_value("primary", state.formation[point])
-	elif flags.movement: _set_group_value("movement" if flags.ally else "primary", point)
-	elif flags.slot: _set_group_value("slot", point)
+	if busy or not pending_play: return
+	var flags: Dictionary=state.choice_flags(selected_uid,selected_slot,_action_options())
+	if flags.pair and not flags.ally:
+		if pair_first<0: pair_first=point; %Inspection.text="Choose the second adjacent ship."; return
+		_set_group_value("primary",100+mini(pair_first,point)*4+maxi(pair_first,point))
+		pair_first=-1
+	elif flags.ally and (target<0 or (not flags.movement and not flags.slot)) and state.formation[point]>=0:
+		_set_group_value("primary",state.formation[point])
+	elif flags.movement:
+		_set_group_value("movement" if flags.ally else "primary",point)
+	elif flags.slot: _set_group_value("slot",point)
 
 
 func _enemy_position_pressed(point: int) -> void:
@@ -1001,3 +1053,62 @@ func _plain_label(parent: Node, text: String, font: int = 13, width: float = 590
 	label.add_theme_font_size_override('font_size', font)
 	parent.add_child(label)
 	return label
+
+
+
+
+func _build_pile_counters() -> void:
+	for pair in [[%DeckPile,"Deck"],[%DiscardPile,"Discard"]]:
+		var button: Button=pair[0]
+		button.set_meta("plain_text",true)
+		for color in ["font_color","font_hover_color","font_pressed_color","font_disabled_color"]: button.add_theme_color_override(color,Color.TRANSPARENT)
+		var box:=VBoxContainer.new()
+		box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		box.alignment=BoxContainer.ALIGNMENT_CENTER
+		box.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		button.add_child(box)
+		var heading:=Label.new()
+		heading.text=pair[1]
+		heading.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+		heading.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		box.add_child(heading)
+		var number:=Label.new()
+		number.set_meta("plain_text",true)
+		number.add_theme_font_size_override("font_size",28)
+		number.add_theme_color_override("font_color",Color.WHITE)
+		number.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+		number.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		box.add_child(number)
+		if pair[1]=="Deck": deck_count_label=number
+		else:
+			discard_count_label=number
+			discard_pending_label=Label.new()
+			discard_pending_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+			discard_pending_label.add_theme_font_size_override("font_size",10)
+			discard_pending_label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+			box.add_child(discard_pending_label)
+
+func _reaction_hovered(uid: int) -> void:
+	if busy or dragged_uid>=0: return
+	hovered_reaction=uid
+	var action: Dictionary={"uid":selected_uid,"actor":state.card(selected_uid).get("owner",-999),"target":target}
+	var preview: Dictionary=state.reaction_preview(uid,action)
+	if preview.is_empty(): return
+	var ally_notes: Dictionary={}
+	var enemy_notes: Dictionary={}
+	for id in preview.notes:
+		if id>=0: ally_notes[id]=preview.notes[id]
+		else: enemy_notes[id]=preview.notes[id]
+	allies.show_rule_preview(ally_notes)
+	enemies.show_rule_preview(enemy_notes,preview.source)
+	%Inspection.text=preview.text
+	reaction_text.text=preview.text
+	reaction_panel.show()
+	%Status.hide()
+
+func _reaction_exited(uid: int) -> void:
+	if hovered_reaction!=uid: return
+	hovered_reaction=-1
+	reaction_panel.hide()
+	%Status.show()
+	if not busy: _update_controls()

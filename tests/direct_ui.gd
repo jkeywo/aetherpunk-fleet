@@ -1,0 +1,114 @@
+extends "res://tests/support/v3_test.gd"
+const Icons=preload("res://scripts/keyword_icons.gd")
+func drag_control(control: Control, destination: Control) -> void:
+	var from: Vector2=control.get_global_transform_with_canvas()*Vector2(20,20)
+	await motion(from)
+	await mouse(from,true)
+	await motion(from+Vector2(0,-70),true)
+	expect(root.gui_is_dragging(),"Native formation/captain drag did not begin.")
+	var to: Vector2=destination.get_global_transform_with_canvas()*(destination.size/2)
+	await motion(to,true)
+	await mouse(to,false)
+	await flush()
+
+func _run() -> void:
+	root.size=Vector2i(1280,800)
+	expect(Icons.parts("cost 2, stunned, confused").filter(func(part): return part.has("icon")).size()==3,"Keyword inflections/cost not iconized.")
+	var doc:=neutral(true)
+	card_def(doc,"broadside").cost=1
+	card_def(doc,"broadside").rules[0].effects=[attack(4)]
+	await open_battle(doc)
+	var b=current_scene
+	expect(b.get_node_or_null("%PlayButton")==null and b.get_node_or_null("%ManoeuvreButton")==null,"Confirmation/manoeuvre buttons remain.")
+	var face=field_key(b,"broadside")
+	expect(face.get_theme_stylebox("normal").border_color==Color(b.state.ships[1].color),"Card border does not use owning ship colour.")
+	expect("Mana cost: 1" in face._get_tooltip(Vector2(140,20)) and "Attack" in face._get_tooltip(Vector2(20,20)),"Cost/type icon tooltips incorrect.")
+	await flush()
+	var rich=face.labels.rules.get_node_or_null("KeywordText")
+	expect(rich!=null and rich.icon_keys.has("attack"),"Inline keyword renderer missing.")
+	var token=preload("res://scripts/keyword_text.gd").new()
+	root.add_child(token)
+	token.size=Vector2(300,40)
+	token.configure("Armour",20)
+	await flush()
+	expect(token.icon_keys==["armour"] and "Armour" in token.get_tooltip(Vector2(10,10)),"Inline icon hover does not explain its keyword.")
+	token.free()
+	# Drag from rules text, not just the empty card face.
+	var from: Vector2=face.get_global_transform_with_canvas()*Vector2(20,112)
+	await motion(from)
+	await mouse(from,true)
+	await motion(from+Vector2(0,-80),true)
+	expect(root.gui_is_dragging(),"Keyword text prevented dragging a card.")
+	var point:=await hover_slot(b,0)
+	await mouse(point,false)
+	await pay_with(b,"brace")
+	await flush()
+	expect(b.pending_play and not b.busy and b.state.monster_hull==70,"Card did not wait for its ship target.")
+	var target: Control=b.enemies.widgets[0]
+	var target_point: Vector2=target.get_global_transform_with_canvas()*(target.size/2)
+	await motion(target_point)
+	await mouse(target_point,true)
+	await mouse(target_point,false)
+	await settle(b)
+	expect(b.state.monster_hull==66 and b.state.discard.size()==1,"Native target click did not automatically play card.")
+	expect(b.deck_count_label.text==str(b.state.deck.size()) and b.discard_count_label.text=="1","Live piles incorrect after payment.")
+	# Mark a retained hand card, then verify automatic cleanup/refill and counts.
+	var marked: int=b.state.hand[0]
+	var marked_face: Control=b.hand_view.get_children()[0]
+	var right := InputEventMouseButton.new()
+	right.button_index=MOUSE_BUTTON_RIGHT
+	right.pressed=true
+	right.position=marked_face.get_global_transform_with_canvas()*Vector2(20,112)
+	right.global_position=right.position
+	root.push_input(right)
+	await flush()
+	right=right.duplicate()
+	right.pressed=false
+	root.push_input(right)
+	await flush()
+	expect(b.end_turn_discards.has(marked),"Optional next-refill discard could not be marked.")
+	b.get_node("%EndPhaseButton").pressed.emit()
+	await settle(b)
+	expect(b.state.phase=="fleet" and b.state.round_number==2 and b.state.hand.size()==7,"Hand did not refill automatically.")
+	expect(b.end_turn_discards.is_empty() and conserved(b.state),"Automatic refill lost cards/marks.")
+	expect(b.deck_count_label.text==str(b.state.deck.size()) and b.discard_count_label.text==str(b.state.discard.size()),"Pile counts stale after automatic refill.")
+	# Exhaustion/reshuffle does not leave initial pile counts behind.
+	b.state.discard.append_array(b.state.deck)
+	b.state.deck.clear()
+	b._render()
+	expect(b.deck_count_label.text=="0" and b.discard_count_label.text==str(b.state.discard.size()),"Pile display did not reflect empty deck.")
+	for uid in b.state.hand: b._queue_refresh_discard(uid)
+	b.get_node("%EndPhaseButton").pressed.emit()
+	await settle(b)
+	expect(b.state.hand.size()==7 and conserved(b.state),"Automatic discard/reshuffle failed.")
+	expect(b.deck_count_label.text==str(b.state.deck.size()) and b.discard_count_label.text==str(b.state.discard.size()),"Pile display stale after reshuffle.")
+	# Hover previews use detached state and identify deterministic victims.
+	doc=neutral()
+	doc.leviathans[0].stances[0].reactions=[{"id":"counter","name":"Counter","category":"Test","conditions":{"kind":"always"},"effects":[attack(3,1,"Long","chosen_ally")]}]
+	await open_battle(doc)
+	b=current_scene
+	var before:=JSON.stringify(b.state.board_snapshot())
+	var seed: int=b.state.rng.state
+	b._reaction_hovered(b.state.enemy_row[0])
+	expect(b.allies.target_widget(0).get_theme_stylebox("normal").border_width_left==3,"Reaction hover did not highlight target ship.")
+	expect(b.enemies.widgets[0].get_theme_stylebox("normal").border_width_left==3,"Reaction source not highlighted.")
+	expect(JSON.stringify(b.state.board_snapshot())==before and b.state.rng.state==seed,"Reaction hover mutated live state or RNG.")
+	b._reaction_exited(b.state.enemy_row[0])
+	expect(not b.allies.target_widget(0).has_theme_stylebox_override("normal"),"Reaction hover left stale highlights.")
+	root.get_node("ContentStore").saved=fixture.duplicate(true)
+	change_scene_to_file("res://scenes/fleet_preparation.tscn")
+	await scene_changed
+	var prep=current_scene
+	await flush()
+	var saved:=JSON.stringify(root.get_node("ContentStore").saved)
+	expect(prep.formation.large_cards and prep.controls.size()==6,"Preparation is not a formation with one selected inspector.")
+	await drag_control(prep.formation.target_widget(0),prep.formation.widgets[2])
+	expect(prep.draft.setup.fleet[0].position=="lower" and prep.draft.setup.fleet[0].captain=="iona","Moving ship did not carry its captain/profile.")
+	prep.formation.widgets[1].pressed.emit()
+	await flush()
+	expect(prep.selected_ship==1 and prep.controls.has("level_1") and "GUNSHIP" in prep.details[0].text,"Clicking ship did not select its right-hand details.")
+	var badge: Control=prep.formation.target_widget(0).get_meta("captain_badge")
+	await drag_control(badge,prep.formation.target_widget(1))
+	expect(prep.draft.setup.fleet[1].captain=="iona" and prep.draft.setup.fleet[0].captain=="rook","Captain drag did not swap unique assignments.")
+	expect(JSON.stringify(root.get_node("ContentStore").saved)==saved,"Preparation drag edited saved content.")
+	done("Direct UI, icons, piles and formation drag")

@@ -568,7 +568,10 @@ func _live_preview() -> void:
 			var index := Catalog.index_by_id(draft.cards, entry.card)
 			if index < 0: _label(preview_form, "Choose an existing captain card pair."); return
 			source = draft.cards[index]
-		var owner_index := Catalog.index_by_id(draft.ships, source.owner)
+		var preview_owner: String = source.owner
+		for assignment in draft.setup.fleet:
+			if assignment.captain == source.owner: preview_owner = assignment.ship
+		var owner_index := Catalog.index_by_id(draft.ships, preview_owner)
 		var owner: Dictionary = draft.ships[owner_index] if owner_index >= 0 else entry
 		var face := CardFace.new()
 		face.custom_minimum_size = Vector2(270, 340)

@@ -1,0 +1,76 @@
+extends RefCounted
+## One vocabulary and vector icon set for cards, combat, preparation, and authoring.
+static var textures: Dictionary = {}
+static var matcher: RegEx
+const DEFINITIONS := {
+	"cost": ["Cost", "#f0d49b", "Mana cost: pay with other hand cards and temporary mana crystals. Excess payment is lost.", "M12 3a9 9 0 110 18 9 9 0 010-18M10 8h3v9M9 17h7"],
+	"attack": ["Attack", "#ec756b", "Attack card / deal damage. Each hit resolves cover, armour, shields, then hull.", "M5 19L19 5M12 5h7v7M5 12v7h7"],
+	"guard": ["Guard", "#76b8fa", "Guard card: a defensive card type.", "M12 3L20 6v6c0 5-8 9-8 9S4 17 4 12V6z"],
+	"manoeuvre": ["Manoeuvre", "#5ed4dd", "Manoeuvre card / move or swap along formation links. Basic moves discard a ship's card.", "M4 8h14l-4-4M20 16H6l4 4M18 8l-4 4M6 16l4-4"],
+	"support": ["Support", "#86d6a1", "Support card: repair, coordination, and utility.", "M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"],
+	"mana": ["Mana", "#c789f3", "Temporary mana crystal. One crystal pays one mana; unspent crystals expire at fleet-phase end. Purple crystals on a card show its discard production.", "M12 2l7 10-7 10-7-10zM5 12h14M12 2v20"],
+	"hull": ["Hull", "#f59489", "Hull / HP. A ship at zero is defeated. Basic recovery can revive it.", "M3 9h18l-4 10H7zM7 9V4h10v5"],
+	"damage": ["Damage", "#f38071", "Damage per hit: cover first, then armour, then shields, then hull. Armour applies separately to every hit.", "M14 2L4 14h7l-1 8 10-13h-7z"],
+	"armour": ["Armour", "#c6cbd6", "Armour reduces each hit after cover. It is not consumed and protects shields and hull.", "M7 3l5 3 5-3 4 6-4 3v9H7v-9L3 9z"],
+	"shields": ["Shields", "#7cbfff", "Shields are temporary HP carried by a ship. They absorb damage after armour and expire at next player-turn start.", "M12 3L20 6v6c0 5-8 9-8 9S4 17 4 12V6zM8 12h8M12 8v8"],
+	"cover": ["Cover", "#ddb77e", "Cover is temporary HP belonging to a formation slot. It absorbs damage before armour and stays when ships move.", "M3 19V8l9-5 9 5v11M7 19v-7h10v7M2 21h20"],
+	"repair": ["Repair", "#8ce2a3", "Repair restores actual missing hull. Recovery can revive a defeated ship after reaching its threshold.", "M5 19L17 7M14 3a6 6 0 007 7l-5 6-4-4-7 9-3-3 9-7-4-4z"],
+	"revive": ["Revive", "#a2efc5", "Recover a defeated ship to its revive threshold. It returns to a free position with hull.", "M5 12a7 7 0 111 5M5 12V5M5 12h7M12 7v10M8 12h8"],
+	"weapon": ["Weapon", "#f0bc78", "Weapon damage and range come from the acting ship, including its active upgrades.", "M3 9h13v6H3zM16 10h6v4h-6M6 15v5h6v-5"],
+	"short": ["Short", "#f0a079", "Short range: cannot attack from Rear or target Rear.", "M5 12h14M14 7l5 5-5 5M5 7v10"],
+	"long": ["Long", "#b0cfff", "Long range: may attack from or target any occupied position.", "M2 12h20M17 7l5 5-5 5M2 7v10M7 7v10"],
+	"draw": ["Draw", "#8acfe6", "Draw from the shared deck; reshuffle the discard pile when needed.", "M4 3h11v14H4zM8 7h11v14H8M14 10v7M11 14l3 3 3-3"],
+	"discard": ["Discard", "#c69adb", "Deliberate discards can trigger abilities. Automatic circle cleanup cannot. Payment discards commit after the played card and allied chains.", "M5 3h10v12H5zM16 10v11M12 17l4 4 4-4"],
+	"deck": ["Deck", "#a8c4d6", "Shared fleet draw pile. Order is hidden; an empty pile reshuffles discards.", "M4 4h13v13H4zM7 7h13v13H7M10 10h13v13H10"],
+	"scry": ["Scry", "#d3a4f5", "Look at up to X deck cards, take Y, then choose and order which others return to the top or are discarded.", "M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7zM15 12a3 3 0 11-6 0 3 3 0 016 0"],
+	"stun": ["Stun", "#f4da84", "Suppress one chosen visible reaction for the rest of this fleet phase. Enemy-phase activity still happens.", "M12 2l3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1z"],
+	"confuse": ["Confuse", "#de9ce9", "Discard one visible stance card and reveal its replacement. A replacement cannot react to the action that revealed it.", "M4 7h13l-4-4M20 17H7l4 4M17 7l-4 4M7 17l4-4M10 6l4 12"],
+	"persistence": ["Persistence", "#d1a1f6", "At turn cleanup, remove one token and retain the card, even when it reaches zero. A card starting cleanup at zero is discarded.", "M12 3a9 9 0 110 18 9 9 0 010-18M12 6v6l5 3"],
+	"resource": ["Resource", "#e4bf76", "Personal ship resource: persists between rounds, resets on defeat, and is gained or spent by authored rules.", "M12 2l9 5v10l-9 5-9-5V7zM3 7l9 5 9-5M12 12v10"],
+	"adjacent": ["Adjacent", "#c2a1f3", "Connected by a formation or magic-circle edge. Initially circle cards have two neighbours; expansion adds centre and outer links.", "M3 9h6v6H3zM15 9h6v6h-6M9 12h6M12 3v5M12 16v5"],
+	"reaction": ["Reaction", "#f49180", "A visible conditional enemy response after the complete player action and discard chains. Each enemy reacts at most once per action.", "M13 3L4 14h7l-1 7 10-12h-7zM4 4l3 3M17 18l3 3"],
+	"intent": ["Intent", "#edba86", "Visible enemy-phase activity. The row activates left to right; new replacements do not add activations to that phase.", "M4 5h16v14H4zM8 9h8M8 13h5M18 2v6M6 2v6"],
+	"on_play": ["On Play", "#b3e5d4", "Resolves when this physical card is played into the circle. Retained cards do not replay it.", "M4 3h12v18H4zM10 8l7 4-7 4z"],
+	"front": ["Front", "#e4c276", "Front position: faces the enemy. Enemy Front and Rear normally attack player Front.", "M4 12h16M13 5l7 7-7 7"],
+	"upper": ["Upper", "#8bcbe2", "Upper Middle position of the fleet diamond.", "M12 20V4M5 11l7-7 7 7"],
+	"lower": ["Lower", "#8bcbe2", "Lower Middle position of the fleet diamond.", "M12 4v16M5 13l7 7 7-7"],
+	"rear": ["Rear", "#a4b7ce", "Rear position: Short attacks cannot originate here or target it.", "M20 12H4M11 5l-7 7 7 7"]
+}
+const ALIASES := {"costs":"cost","stunned":"stun","confused":"confuse","attacks":"attack","guard":"guard","manoeuvre":"manoeuvre","maneuvre":"manoeuvre","movement":"manoeuvre","move":"manoeuvre","swap":"manoeuvre","support":"support","mana crystal":"mana","mana crystals":"mana","crystals":"mana","crystal":"mana","hp":"hull","healing":"repair","heal":"repair","repaired":"repair","recovery":"revive","revival":"revive","shield":"shields","armour mitigation":"armour","armor":"armour","resources":"resource","neighbours":"adjacent","neighbor":"adjacent","neighbour":"adjacent","reactions":"reaction","stance":"intent","stances":"intent","enemy phase":"intent","upper middle":"upper","lower middle":"lower","on play":"on_play"}
+
+static func key(word: String) -> String:
+	var lower := word.to_lower()
+	return ALIASES.get(lower, lower)
+
+static func description(id: String) -> String:
+	return DEFINITIONS[id][0] + " — " + DEFINITIONS[id][2] if DEFINITIONS.has(id) else id
+
+static func texture(id: String) -> Texture2D:
+	if textures.has(id): return textures[id]
+	var entry: Array = DEFINITIONS.get(id, DEFINITIONS.resource)
+	var svg := '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><rect x="0.5" y="0.5" width="23" height="23" rx="5" fill="#10212c"/><path d="%s" fill="none" stroke="%s" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>' % [entry[3],entry[1]]
+	var bitmap := Image.new()
+	bitmap.load_svg_from_string(svg)
+	textures[id] = ImageTexture.create_from_image(bitmap)
+	return textures[id]
+
+static func parts(text: String) -> Array:
+	if matcher == null:
+		var words: Array = DEFINITIONS.keys() + ALIASES.keys()
+		words.erase("on_play")
+		words.sort_custom(func(a,b): return a.length() > b.length())
+		matcher = RegEx.new()
+		matcher.compile("(?i)\\b(" + "|".join(words) + ")\\b|\\b(?:A|W|C)(?=\\d)|\\bSH\\b")
+	var result: Array = []
+	var offset := 0
+	for found in matcher.search_all(text):
+		if found.get_start() > offset: result.append({"text":text.substr(offset,found.get_start()-offset)})
+		var word: String = found.get_string()
+		var id: String = {"A":"armour","W":"weapon","C":"cover","SH":"shields"}.get(word,key(word))
+		result.append({"icon":id,"text":word})
+		offset = found.get_end()
+	if offset < text.length(): result.append({"text":text.substr(offset)})
+	return result
+
+static func has_keywords(text: String) -> bool:
+	return parts(text).any(func(part): return part.has("icon"))

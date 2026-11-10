@@ -9,6 +9,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 [autoload]
 ContentStore="*res://scripts/content_store.gd"
 BattleSession="*res://scripts/battle_session.gd"
+KeywordUi="*res://scripts/keyword_ui.gd"
 
 [display]
 window/size/viewport_width=1280

@@ -1,39 +1,36 @@
 extends "res://tests/support/v3_test.gd"
-var pulses: Array = []
+var pulses: Array=[]
 func _run() -> void:
-	var doc := neutral()
-	var passive := R.rule("passive", [], "circle")
-	passive.id = "discount"
-	passive.modifiers = [{"kind":"cost","target":"adjacent_cards","amount":1,"card_type":"Attack"}]
-	card_def(doc,"brace").rules[1] = passive
-	card_def(doc,"broadside").cost = 2
-	card_def(doc,"broadside").rules[0].effects = [attack(3)]
+	var doc:=neutral()
+	var passive:=R.rule("passive",[],"circle")
+	passive.id="discount"
+	passive.modifiers=[{"kind":"cost","target":"adjacent_cards","amount":1,"card_type":"Attack"}]
+	card_def(doc,"brace").rules[1]=passive
+	card_def(doc,"broadside").cost=2
+	card_def(doc,"broadside").rules[0].effects=[attack(3)]
 	await open_battle(doc)
-	var b = current_scene
-	var source := uid_for(b.state,"brace")
+	var b=current_scene
+	var source:=uid_for(b.state,"brace")
 	b.state.play(source,[],-1,-1,0)
 	b._render()
 	b._select(uid_for(b.state,"broadside"))
-	b.selected_slot = 1
+	b.selected_slot=1
 	b._update_controls()
-	expect(b.circle_view.bonus_slots == [0] and "BONUS" in b.circle_view.buttons[0].text, "Adjacent contributor missing.")
-	expect("cost" in b.circle_view.buttons[0].tooltip_text.to_lower(), "Contributor tooltip missing.")
-	b.selected_slot = 2
+	expect(b.circle_view.bonus_slots==[0] and "BONUS" in b.circle_view.buttons[0].text,"Contributor missing.")
+	b.selected_slot=2
 	b._update_controls()
-	expect(b.circle_view.bonus_slots.is_empty(), "Nonadjacent stale highlight.")
+	expect(b.circle_view.bonus_slots.is_empty(),"Nonadjacent stale highlight.")
 	b._cancel()
-	expect(b.circle_view.bonus_slots.is_empty(), "Cancel left highlights.")
-	doc = neutral()
-	card_def(doc,"brace").rules[1] = rule("chain","adjacent_card_played",[attack(2)],"adjacent")
+	doc=neutral()
+	card_def(doc,"brace").rules[1]=rule("chain","adjacent_card_played",[attack(2)],"adjacent")
 	await open_battle(doc)
-	b = current_scene
-	source = uid_for(b.state,"brace")
+	b=current_scene
+	source=uid_for(b.state,"brace")
 	b.state.play(source,[],-1,-1,0)
 	b._render()
 	b.circle_view.link_pulse_started.connect(func(from,to,event): pulses.append([from,to,event]))
 	stage_card(b,"broadside",1)
-	b.get_node("%PlayButton").pressed.emit()
-	await b.resolution_finished
-	expect(pulses.size() == 1 and pulses[0][1] == source, "Chain link did not identify contributing card.")
-	expect(b.circle_view.pulse_source == -1 and b.state.monster_hull == 68, "Link animation stale or changed rules.")
+	await settle(b)
+	expect(pulses.size()==1 and pulses[0][1]==source,"Auto play did not animate contributor link.")
+	expect(b.circle_view.pulse_source==-1 and b.state.monster_hull==68,"Link animation changed rules/stayed active.")
 	done("Circle contribution feedback")

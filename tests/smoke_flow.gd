@@ -19,17 +19,15 @@ func _run() -> void:
 	stage_card(b, "broadside", 1)
 	choose_first_targets(b)
 	await pay_with(b, "brace")
-	expect(not b.get_node("%PlayButton").disabled, "Paid targeted play not ready.")
+	expect(b.pending_play, "Payment did not remain staged until the automatic resolve frame.")
 	var before: int = b.state.monster_hull
-	b.get_node("%PlayButton").pressed.emit()
-	await b.resolution_finished
+	await settle(b)
 	expect(b.state.circle[1] >= 0 and b.state.monster_hull < before, "Card did not resolve.")
 	expect(b.hand_view.get_child_count() == 5 and conserved(b.state), "Hand not updated.")
 	b.get_node("%EndPhaseButton").pressed.emit()
 	await b.resolution_finished
-	expect(b.state.round_number == 2 and b.state.phase == "refresh", "Enemy phase failed.")
-	b.get_node("%PlayButton").pressed.emit()
-	await b.resolution_finished
+	expect(b.state.round_number == 2 and b.state.phase == "fleet", "Enemy phase/automatic refresh failed.")
+	await settle(b)
 	expect(b.state.hand.size() == 7 and b.state.mana == 1, "Retained-hand refresh/mana failed.")
 	b.get_node("%GearButton").pressed.emit()
 	expect(paused, "Menu did not pause.")

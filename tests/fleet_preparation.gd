@@ -22,7 +22,7 @@ func _run() -> void:
 	await scene_changed
 	var prep = current_scene
 	await flush()
-	expect(prep.name == "FleetPreparation" and prep.controls.size() == 18,"Start Game did not open preparation controls.")
+	expect(prep.name == "FleetPreparation" and prep.controls.size() == 6,"Start Game did not open preparation controls.")
 	expect(prep.fixed_available and prep._candidate().setup.fixed_hand and not prep.launch_button.disabled,"Saved opening not preserved.")
 	expect("18 cards" in prep.status.text and "ARMOUR 3" in prep.details[0].text,"Fleet/card/effective-stat preview incorrect.")
 	await select_value(prep,"ship_0","kestrel")

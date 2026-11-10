@@ -3,10 +3,12 @@ signal ship_drag_hovered(ship_id: int, data: Variant)
 signal ship_drag_exited(ship_id: int)
 signal ship_dropped(ship_id: int, data: Variant)
 signal position_selected(point: int)
+signal unit_selected(id: int)
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const Unit = preload("res://scripts/unit_view.gd")
 var widgets: Dictionary = {}
 var wreck_widgets: Dictionary = {}
+var large_cards := false
 var drop_check: Callable
 var enemy := false
 var snapshot: Dictionary = {}
@@ -54,6 +56,7 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 			widget.text = Geometry.POSITION_NAMES[point] + "\nEmpty" + (" / Cover " + str(cover_amount) if cover_amount > 0 else "")
 			widget.modulate = Color("#506977")
 			add_child(widget)
+			if not is_enemy: _wire_target(widget, 100 + point)
 		widget.pressed.connect(func(): position_selected.emit(point))
 		widgets[point] = widget
 	if not is_enemy:
@@ -71,12 +74,13 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 			add_child(wreck)
 			_wire_target(wreck, ship_id)
 			wreck_widgets[ship_id] = wreck
+			wreck.pressed.connect(func(): unit_selected.emit(ship_id))
 	_arrange()
 
 
 func _arrange() -> void:
-	var w := minf(144, size.x * 0.43)
-	var h := 80.0
+	var w := minf(218 if large_cards else 144, size.x * 0.43)
+	var h := 120.0 if large_cards else 80.0
 	var coordinates := [Vector2(0.77 if not enemy else 0.23, 0.50), Vector2(0.5, 0.12), Vector2(0.5, 0.88), Vector2(0.23 if not enemy else 0.77, 0.5)]
 	for point in widgets:
 		widgets[point].size = Vector2(w, h)
@@ -99,7 +103,7 @@ func _draw() -> void:
 func _wire_target(widget: Button, ship_id: int) -> void:
 	if widget is Unit:
 		if drop_check.is_valid():
-			widget.tooltip_text += "\nDrag its own card here to repair, or an adjacent living ship's card to swap. Basic actions discard the dragged card."
+			widget.tooltip_text += "\nDrag its own card here to repair, or an adjacent living ship's card to swap. Release to act immediately; this discards the dragged card."
 		widget.set_meta("base_guard_text", widget.guard_label.text)
 	widget.set_meta("base_tooltip", widget.tooltip_text)
 	widget.set_drag_forwarding(Callable(), _can_drop_on_ship.bind(ship_id), _drop_on_ship.bind(ship_id))
@@ -107,6 +111,7 @@ func _wire_target(widget: Button, ship_id: int) -> void:
 
 
 func target_widget(ship_id: int) -> Control:
+	if ship_id >= 100: return widgets.get(ship_id - 100)
 	if wreck_widgets.has(ship_id):
 		return wreck_widgets[ship_id]
 	for widget in widgets.values():
@@ -128,7 +133,10 @@ func _drop_on_ship(_point: Vector2, data: Variant, ship_id: int) -> void:
 
 
 func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship: int = -1, actor: int = -1) -> void:
-	for ship_id in snapshot.get("ships", []).size():
+	var candidates: Array = range(snapshot.get("ships", []).size())
+	for point in widgets:
+		if snapshot.get("formation", []).size() == 4 and snapshot.formation[point] < 0: candidates.append(100 + int(point))
+	for ship_id in candidates:
 		var widget := target_widget(ship_id) as Button
 		if widget == null:
 			continue
@@ -156,3 +164,44 @@ func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship
 			style.set_border_width_all(3 if valid.has(ship_id) else 1)
 			style.set_corner_radius_all(5)
 			widget.add_theme_stylebox_override(key, style)
+
+
+
+
+func show_rule_preview(notes: Dictionary = {}, source: int = -999) -> void:
+	var candidates: Array=[]
+	for point in widgets: candidates.append({"widget":widgets[point],"id":widgets[point].get_meta("ship_index",100+int(point))})
+	for id in wreck_widgets: candidates.append({"widget":wreck_widgets[id],"id":id})
+	for entry in candidates:
+		var widget: Button=entry.widget
+		var id: int=entry.id
+		if not widget.has_meta("rule_base_tooltip"):
+			widget.set_meta("rule_base_tooltip",widget.tooltip_text)
+			widget.set_meta("rule_base_tint",widget.modulate)
+		for state in ["normal","hover","pressed","hover_pressed"]: widget.remove_theme_stylebox_override(state)
+		widget.tooltip_text=str(widget.get_meta("rule_base_tooltip",""))
+		widget.modulate=widget.get_meta("rule_base_tint",Color.WHITE)
+		for child in widget.get_children():
+			if child.get_meta("rule_preview",false): widget.remove_child(child); child.queue_free()
+		if not notes.has(id) and id!=source: continue
+		widget.modulate=Color.WHITE
+		var color:=Color("#f3b179") if id==source else (Color("#67bdd4") if str(notes.get(id,"")).begins_with("Click") else Color("#f0d18a"))
+		for state in ["normal","hover","pressed","hover_pressed"]:
+			var box:=StyleBoxFlat.new()
+			box.bg_color=Color("#2b2d36")
+			box.border_color=color
+			box.set_border_width_all(3)
+			box.set_corner_radius_all(5)
+			widget.add_theme_stylebox_override(state,box)
+		if notes.has(id):
+			widget.tooltip_text+="\n"+str(notes[id])
+			var label:=Label.new()
+			label.set_meta("rule_preview",true)
+			label.text=str(notes[id])
+			label.add_theme_font_size_override("font_size",10)
+			label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+			label.position=Vector2(0,-32)
+			label.size=Vector2(widget.size.x,30)
+			label.modulate=color
+			label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+			widget.add_child(label)

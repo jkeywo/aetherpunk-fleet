@@ -12,7 +12,6 @@ func _run() -> void:
 	b.state.round_number = 4
 	b._render()
 	stage_card(b, "brace", 0)
-	b.get_node("%PlayButton").pressed.emit()
 	await scene_changed
 	expect(current_scene.name == "Victory", "Actual victory failed.")
 	expect(current_scene.get_node("%SurvivorsValue").text == "2 / 3" and current_scene.get_node("%HullValue").text == "30 / 66", "Hull/survivors incorrect.")

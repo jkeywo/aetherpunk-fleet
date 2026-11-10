@@ -20,6 +20,7 @@ func _init() -> void:
 	column.add_theme_constant_override("separation", 0)
 	add_child(column)
 	name_label = Label.new()
+	name_label.set_meta("plain_text",true)
 	name_label.add_theme_font_size_override("font_size", 14)
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	column.add_child(name_label)
