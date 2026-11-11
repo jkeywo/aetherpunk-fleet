@@ -5,6 +5,7 @@ func _ready() -> void:
 	super._ready()
 	var is_web := OS.has_feature("web")
 	%EditorButton.visible = not is_web
+	secondary_button.visible = not is_web
 	%EditorButton.pressed.connect(_navigate.bind("res://scenes/editor.tscn"))
 	if ContentStore.saved.is_empty():
 		primary_button.disabled = true
