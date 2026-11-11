@@ -65,7 +65,7 @@ At **End Fleet Phase**, holding at least two cards earns one temporary mana crys
 
 The three visible enemy cards activate left to right, discarding and replacing each afterward. Multiple cards can activate one enemy repeatedly. Replacements add no activations to that phase. Each surviving enemy that had no activation performs its weaker default action afterward. Defeated enemies' cards leave the shared row and pool.
 
-After enemy actions, shields and cover expire, persistence cleanup runs, turn limits reset, and earned mana is granted. The hand automatically refills to seven while retaining unspent cards. Cards can only be discarded for an action cost or an authored effect. Right-click and refill do not offer voluntary discards. Committed payment, basic-action costs, and effect discards can trigger discard abilities. Win after defeating all enemies while a ship survives; lose when the fleet is destroyed. Results report surviving ships, remaining hull, and rounds.
+After enemy actions, shields and cover expire, persistence cleanup runs, turn limits reset, and earned mana is granted. At the start of each turn, draw up to four cards plus one per surviving ship. Draw effects can take the hand above that number, and excess cards stay in hand. Cards can only be discarded for an action cost or an authored effect. Right-click and refill do not offer voluntary discards. Committed payment, basic-action costs, and effect discards can trigger discard abilities. Win after defeating all enemies while a ship survives; lose when the fleet is destroyed. Results report surviving ships, remaining hull, and rounds.
 
 ### Control and hidden information
 

@@ -3,6 +3,7 @@ func _run() -> void:
 	_payment()
 	_damage()
 	_persistence_and_mana()
+	_hand_refill()
 	_order_and_chains()
 	done("Combat rules v3")
 
@@ -102,6 +103,23 @@ func _persistence_and_mana() -> void:
 	b = State.new(1, doc)
 	b.end_phase()
 	expect(b.mana == 2, "Configured mana generation/capacity ignored.")
+
+func _hand_refill() -> void:
+	var doc := neutral()
+	card_def(doc, "brace").rules[0].effects = [{"kind": "draw", "amount": 3}]
+	var b = State.new(1, doc)
+	expect(b.play(uid_for(b, "brace"), [], -1, -1, 0) == "" and b.hand.size() == 9, "Draw effect was capped by the refill limit.")
+	b.end_phase()
+	var retained: Array = b.hand.duplicate()
+	expect(b.refresh() == "" and b.hand == retained and conserved(b), "Refill discarded or added cards while already over the limit.")
+
+	b = State.new(1, neutral())
+	b.play(uid_for(b, "brace"), [], -1, -1, 0)
+	b.play(uid_for(b, "broadside"), [], -1, -1, 1)
+	b.ships[2].hull = 0
+	b.end_phase()
+	expect(b.refresh() == "" and b.hand.size() == 6 and conserved(b), "Refill did not draw up to six with two surviving ships.")
+
 
 func _order_and_chains() -> void:
 	var doc := neutral()

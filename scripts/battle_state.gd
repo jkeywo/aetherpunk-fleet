@@ -128,7 +128,7 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 					deck.erase(uid)
 					break
 	_shuffle(deck)
-	if not definitions.fixed_hand: _draw(7, {})
+	if not definitions.fixed_hand: _draw(hand_refill_limit(), {})
 	_shuffle(stance_deck)
 	_fill_row()
 	feedback_events.clear()
@@ -161,6 +161,10 @@ func alive_ids(enemy: bool = false) -> Array:
 		if id >= 0 and int(unit(-1 - id if enemy else id).get("hull", 0)) > 0:
 			result.append(-1 - id if enemy else id)
 	return result
+
+
+func hand_refill_limit() -> int:
+	return 4 + alive_ids().size()
 
 
 func first_slot() -> int:
@@ -888,7 +892,7 @@ func _advance_stage() -> bool:
 			return false
 		"refresh_discard":
 			_stage = "refresh_draw"
-			_draw(maxi(0, 7 - hand.size()), root_context)
+			_draw(maxi(0, hand_refill_limit() - hand.size()), root_context)
 			return true
 		"refresh_draw":
 			_stage = ""
