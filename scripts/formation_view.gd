@@ -94,16 +94,15 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 		widget.pressed.connect(func(): position_selected.emit(point))
 		widgets[point] = widget
 	if not is_enemy:
-		var threshold: int = int(board.get("basic_actions", {}).get("revive_threshold", 4))
 		for ship_id in board.get("ships", []).size():
 			var ship: Dictionary = board.ships[ship_id]
-			if int(ship.hull) > 0:
+			if not ship.get("disabled", int(ship.get("hull", 1)) <= 0):
 				continue
 			var wreck := Button.new()
 			wreck.add_theme_font_size_override("font_size", 12)
 			wreck.clip_text = true
-			wreck.text = "%s / DISABLED\nRecovery %d / %d" % [ship.name, ship.get("recovery", 0), threshold]
-			wreck.tooltip_text = "%s is disabled. Recovery %d / %d. Use a repair card or drag one of its own cards here. It returns with %d hull, up to its maximum." % [ship.name, ship.get("recovery", 0), threshold, Catalog.REVIVED_HULL]
+			wreck.text = "%s / DISABLED\n%d hull" % [ship.name, ship.hull]
+			wreck.tooltip_text = "%s is disabled at %d hull. Repair it to %d hull to rejoin the formation." % [ship.name, ship.hull, Catalog.REVIVED_HULL]
 			wreck.set_meta("ship_index", ship_id)
 			add_child(wreck)
 			_wire_target(wreck, ship_id)

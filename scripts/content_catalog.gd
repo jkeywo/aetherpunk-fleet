@@ -3,7 +3,7 @@ const V2 = preload("res://scripts/content_v2.gd")
 const Rules = preload("res://scripts/rules/rule_registry.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const TYPES = Rules.TYPES
-const DEFAULT_BASIC_RULES := {"repair": 2, "revive_threshold": 4}
+const DEFAULT_BASIC_RULES := {"repair": 2}
 const REVIVED_HULL := 6
 
 
@@ -391,8 +391,8 @@ static func _validate_setup(doc: Dictionary, ships: Dictionary, captains: Dictio
 		if not _integer(setup.get(key)): errors.append(key + " must be a nonnegative integer.")
 	if not _integer(setup.get("retain_threshold"), 1): errors.append("Retain threshold must be positive.")
 	var basic: Variant = setup.get("basic_actions")
-	if not basic is Dictionary or not _integer(basic.get("repair"), 1) or not _integer(basic.get("revive_threshold"), 1):
-		errors.append("Basic repair and revive threshold must be positive.")
+	if not basic is Dictionary or not _integer(basic.get("repair"), 1):
+		errors.append("Basic repair must be positive.")
 	if setup.has("encounter_stars") and (not _integer(setup.encounter_stars, 1) or setup.encounter_stars > 10):
 		errors.append("Encounter difficulty must be between one and ten stars.")
 	if not setup.get("fixed_hand") is bool or not setup.get("opening_hand") is Array:

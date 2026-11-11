@@ -12,7 +12,7 @@ func _run() -> void:
 	expect(b.discard.has(discarded) and conserved(b), "Mandatory discard conservation failed.")
 	expect(b.discard_for_relay(discarded) != "", "Discard accepted outside decision.")
 	doc = neutral()
-	card_def(doc, "brace").rules[0].effects = [{"kind": "scry", "look": 4, "take": 1}, attack(2)]
+	card_def(doc, "brace").rules[0].effects = [{"kind": "scry", "look": 4}, {"kind":"draw", "amount":1}, attack(2)]
 	b = State.new(1, doc)
 	var seed: int = b.rng.state
 	var original := JSON.stringify(b.board_snapshot())
@@ -22,11 +22,15 @@ func _run() -> void:
 	expect(b.monster_hull == 70 and conserved(b), "Post-scry effects ran before choices.")
 	var shown: Array = b.pending.revealed.duplicate()
 	var deck_before: Array = b.deck.duplicate()
-	expect(b.choose_scry([], shown, []) != "" and b.phase == "scry", "Incorrect take count accepted.")
-	expect(b.choose_scry([shown[0]], [shown[0]], shown.slice(2)) != "", "Duplicate scry assignment accepted.")
-	var top: Array = [shown[3], shown[1]]
-	expect(b.choose_scry([shown[2]], top, [shown[0]]) == "" and b.monster_hull == 68, "Scry did not resume effects.")
-	expect(b.hand.has(shown[2]) and b.deck.slice(0, 2) == top and b.discard.back() == shown[0] and b.deck.slice(2) == deck_before, "Scry hand/top/discard order wrong.")
+	expect(b.choose_scry(shown.slice(1), []) != "" and b.phase == "scry", "Scry accepted an unassigned card.")
+	expect(b.choose_scry([shown[0]], shown) != "", "Duplicate scry assignment accepted.")
+	var top: Array = shown.slice(1)
+	var hand_before: Array = b.hand.duplicate()
+	var rng_before: int = b.rng.state
+	expect(b.choose_scry(top, [shown[0]]) == "" and b.monster_hull == 68, "Scry did not resume effects.")
+	var drawn: Array = b.hand.filter(func(uid): return not hand_before.has(uid))
+	var returned: Array = b.deck.slice(0, 2) + drawn
+	expect(drawn.size() == 1 and returned.all(func(uid): return top.has(uid)) and b.discard.back() == shown[0] and b.deck.slice(2) == deck_before and b.rng.state != rng_before, "Scry did not shuffle returned cards before Draw.")
 	expect(conserved(b), "Scry lost/duplicated physical cards.")
 	# Top-discard passives never discount their own committed transaction.
 	doc = neutral()
@@ -65,6 +69,6 @@ func _run() -> void:
 	doc.ships[0].resource.rules=[rule("startup","turn_start",[{"kind":"scry","look":1,"take":0}],"owner","ship")]
 	b=State.new(1,doc)
 	expect(b.phase=="scry","Startup scry did not suspend.")
-	b.choose_scry([],b.pending.revealed.duplicate(),[])
+	b.choose_scry(b.pending.revealed.duplicate(),[])
 	expect(b.preview(uid_for(b,"brace"),[],-1,-1,0).ok,"Completed startup decision leaked into detached previews.")
 	done("Card decisions and discard timing")

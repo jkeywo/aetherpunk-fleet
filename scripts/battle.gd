@@ -594,7 +594,7 @@ func _update_controls() -> void:
 	elif state.phase == "discard":
 		%Inspection.text = "%s: click %d more cards to discard." % [state.pending.title,state.pending.discard_remaining]
 	elif state.phase == "scry":
-		%Inspection.text = "Scry: choose hand cards and order the remaining cards."
+		%Inspection.text = "Scry: choose which cards to return or discard."
 	elif pending_play:
 		var preview: Dictionary = state.preview(selected_uid,payment,target,movement_target,selected_slot,_action_options())
 		%Inspection.text = "Payment %d/%d. Click highlighted ships/slots for targets. Resolves automatically when ready. Cancel Play refunds the pending action. %s" % [_payment_amount(),_current_cost(),preview.text]
@@ -1057,7 +1057,7 @@ func _render_scry() -> void:
 	for child in scry_body.get_children():
 		scry_body.remove_child(child)
 		child.queue_free()
-	_plain_label(scry_body, "Take exactly %d. Remaining cards may return to the top or be discarded. Top and discard orders follow the list from top to bottom. Once revealed, these choices must be completed." % state.pending.take, 14)
+	_plain_label(scry_body, "Choose which cards to discard. Shuffle the rest together and return them to the top of the deck.", 14)
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(750, 340)
 	scry_body.add_child(scroll)
@@ -1072,44 +1072,22 @@ func _render_scry() -> void:
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		title.tooltip_text = state.card(uid).effect
 		var choice := OptionButton.new()
-		for zone in ["hand", "top", "discard"]:
+		for zone in ["top", "discard"]:
 			choice.add_item(zone.capitalize())
 			choice.set_item_metadata(choice.item_count - 1, zone)
 			if scry_zones[uid] == zone: choice.select(choice.item_count - 1)
 		row.add_child(choice)
-		choice.item_selected.connect(func(i): scry_zones[uid] = choice.get_item_metadata(i); _update_scry_selection())
-		for text in ["↑", "↓"]:
-			var button := Button.new()
-			button.text = text
-			row.add_child(button)
-			button.pressed.connect(func():
-				var destination: int = index + (-1 if text == "↑" else 1)
-				if destination >= 0 and destination < scry_order.size():
-					scry_order.remove_at(index)
-					scry_order.insert(destination, uid)
-					_render_scry())
-
-	_update_scry_selection()
-
-
-func _update_scry_selection() -> void:
-	var count := 0
-	for uid in scry_order:
-		if scry_zones[uid] == "hand": count += 1
-	scry_dialog.get_ok_button().disabled = count != int(state.pending.take)
-	scry_dialog.title = "Scry / hand %d of %d · order the rest" % [count, state.pending.take]
+		choice.item_selected.connect(func(i): scry_zones[uid] = choice.get_item_metadata(i))
 
 
 func _confirm_scry() -> void:
-	var take: Array = []
 	var top: Array = []
 	var rejected: Array = []
 	for uid in scry_order:
 		match scry_zones[uid]:
-			"hand": take.append(uid)
 			"top": top.append(uid)
 			"discard": rejected.append(uid)
-	var error: String = state.choose_scry(take, top, rejected)
+	var error: String = state.choose_scry(top, rejected)
 	if error != "":
 		scry_dialog.dialog_text = error
 		return

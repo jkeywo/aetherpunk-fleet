@@ -60,11 +60,6 @@ func play(events: Array, battle_view: Control) -> void:
 				await _discard_cards([event.uid])
 				_paid = [event.uid]
 				await _apply_board(event.board)
-			"revive_progress":
-				await _apply_board(event.board)
-				var wreck := _unit(event.target)
-				if wreck != null:
-					await _popup("RECOVERY +%d\n%d / %d" % [event.amount, event.board.ships[event.target].recovery, event.threshold], _visible_position(wreck.global_position), Color("#9ce6b7"), 0.45)
 			"revived":
 				await _apply_board(event.board)
 				_message("SHIP REVIVED / " + event.title, Color("#9ce6b7"))

@@ -37,7 +37,7 @@ func _run() -> void:
 		while b.phase == "discard": b.discard_for_relay(b.hand[0])
 		if b.phase == "scry":
 			var shown: Array = b.pending.revealed.duplicate()
-			b.choose_scry(shown.slice(0,b.pending.take),shown.slice(b.pending.take),[])
+			b.choose_scry(shown,[])
 		expect(b.phase == "fleet" and conserved(b), "Chunk did not finish/conserve cards: " + id)
 	var errors: Array = []
 	R.validate_rule({"id":"bad","trigger":5,"effects":42},"bad",errors)

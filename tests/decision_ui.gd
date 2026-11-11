@@ -2,7 +2,7 @@ extends "res://tests/support/v3_test.gd"
 func _run() -> void:
 	root.size=Vector2i(1280,800)
 	var doc:=neutral()
-	card_def(doc,"brace").rules[0].effects=[{"kind":"stun","target":"chosen_reaction"},{"kind":"confuse","target":"chosen_stance"},{"kind":"scry","look":3,"take":1},attack(3)]
+	card_def(doc,"brace").rules[0].effects=[{"kind":"stun","target":"chosen_reaction"},{"kind":"confuse","target":"chosen_stance"},{"kind":"scry","look":3},{"kind":"draw","amount":1},attack(3)]
 	doc.leviathans[0].stances[0].reactions=[{"id":"counter","name":"Counter","category":"Test","conditions":{"kind":"always"},"effects":[attack(1,1,"Long","chosen_ally")]}]
 	await open_battle(doc)
 	var b=current_scene
@@ -19,8 +19,8 @@ func _run() -> void:
 	expect(menus.size()==3,"Scry cards missing.")
 	menus[0].select(0)
 	menus[0].item_selected.emit(0)
-	menus[2].select(2)
-	menus[2].item_selected.emit(2)
+	menus[2].select(1)
+	menus[2].item_selected.emit(1)
 	expect(b.scry_dialog.size.y<=root.size.y and not b.scry_dialog.get_ok_button().disabled,"Scry choices not confirmable in viewport.")
 	b.scry_dialog.get_ok_button().pressed.emit()
 	await settle(b)

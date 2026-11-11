@@ -561,7 +561,7 @@ func _build_setup() -> void:
 	_label(setup_form, "MANA / BASIC ACTIONS", 15)
 	for key in ["mana_capacity", "mana_reward", "retain_threshold"]:
 		setup_controls[key] = _number(setup_form, key.replace("_", " ").capitalize(), int(draft.setup[key]), func(value): _edit(draft.setup, key, value), "", 1 if key == "retain_threshold" else 0)
-	for key in ["repair", "revive_threshold"]:
+	for key in ["repair"]:
 		setup_controls["basic_" + key] = _number(setup_form, key.replace("_", " ").capitalize(), int(draft.setup.basic_actions[key]), func(value): _edit(draft.setup.basic_actions, key, value), "", 1)
 	var fixed := CheckBox.new()
 	var opening_size: int = 4 + draft.setup.fleet.size()

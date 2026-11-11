@@ -1520,13 +1520,13 @@
 				"range": "Short"
 			},
 			"resource": {
-				"name": "Resolve",
+				"name": "Ballast",
 				"capacity": 6,
 				"rules": [
 					{
 						"id": "gain",
 						"trigger": {
-							"kind": "armour_absorbed",
+							"kind": "cover_absorbed",
 							"subject": "owner"
 						},
 						"conditions": {
@@ -1565,8 +1565,8 @@
 						],
 						"effects": [
 							{
-								"kind": "add_shields",
-								"target": "owner",
+								"kind": "add_cover",
+								"target": "source_slot",
 								"amount": 3
 							}
 						],
@@ -1594,7 +1594,7 @@
 						"effects": [
 							{
 								"kind": "add_cover",
-								"target": "source_slot",
+								"target": "chosen_slot",
 								"amount": 2
 							}
 						],
@@ -2159,7 +2159,22 @@
 						{
 							"kind": "add_shields",
 							"target": "owner",
-							"amount": 6
+							"amount": {
+								"kind": "sum",
+								"values": [
+									4,
+									{
+										"kind": "min",
+										"values": [
+											2,
+											{
+												"kind": "resource_count",
+												"target": "owner"
+											}
+										]
+									}
+								]
+							}
 						}
 					],
 					"modifiers": [],
@@ -2610,7 +2625,16 @@
 										"kind": "weapon_damage",
 										"target": "owner"
 									},
-									2
+									{
+										"kind": "min",
+										"values": [
+											2,
+											{
+												"kind": "resource_count",
+												"target": "owner"
+											}
+										]
+									}
 								]
 							},
 							"hits": 1,
@@ -3054,7 +3078,22 @@
 						{
 							"kind": "repair",
 							"target": "chosen_ally",
-							"amount": 4
+							"amount": {
+								"kind": "sum",
+								"values": [
+									3,
+									{
+										"kind": "min",
+										"values": [
+											2,
+											{
+												"kind": "resource_count",
+												"target": "owner"
+											}
+										]
+									}
+								]
+							}
 						}
 					],
 					"modifiers": [],
@@ -3297,7 +3336,7 @@
 					"costs": [],
 					"effects": [
 						{
-							"kind": "recovery",
+							"kind": "repair",
 							"target": "chosen_ally",
 							"amount": 4
 						}
@@ -3382,8 +3421,11 @@
 					"effects": [
 						{
 							"kind": "scry",
-							"look": 3,
-							"take": 1
+							"look": 3
+						},
+						{
+							"kind": "draw",
+							"amount": 1
 						}
 					],
 					"modifiers": [],
@@ -3476,6 +3518,30 @@
 					"limit": "once_per_action",
 					"optional": false,
 					"zone": "circle"
+				},
+				{
+					"id": "relay",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Manoeuvre",
+						"exclude_owner": "Yes"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "event_actor",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
 				}
 			]
 		},
@@ -3518,21 +3584,21 @@
 					"zone": "circle"
 				},
 				{
-					"id": "bonus",
+					"id": "relay",
 					"trigger": {
-						"kind": "on_play",
-						"subject": "self_card"
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Attack",
+						"exclude_owner": "Yes"
 					},
 					"conditions": {
-						"kind": "adjacent",
-						"card_type": "Support",
-						"minimum": 1
+						"kind": "always"
 					},
 					"costs": [],
 					"effects": [
 						{
 							"kind": "gain_resource",
-							"target": "owner",
+							"target": "event_actor",
 							"amount": 1
 						}
 					],
@@ -3592,21 +3658,20 @@
 					"zone": "circle"
 				},
 				{
-					"id": "bonus",
+					"id": "relay",
 					"trigger": {
-						"kind": "on_play",
-						"subject": "self_card"
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Support",
+						"exclude_owner": "Yes"
 					},
 					"conditions": {
-						"kind": "adjacent",
-						"card_type": "Support",
-						"minimum": 1
+						"kind": "always"
 					},
 					"costs": [],
 					"effects": [
 						{
-							"kind": "gain_resource",
-							"target": "owner",
+							"kind": "draw",
 							"amount": 1
 						}
 					],
@@ -3616,10 +3681,12 @@
 					"zone": "circle"
 				},
 				{
-					"id": "reload",
+					"id": "rally",
 					"trigger": {
-						"kind": "on_play",
-						"subject": "self_card"
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Guard",
+						"exclude_owner": "Yes"
 					},
 					"conditions": {
 						"kind": "always"
@@ -3627,7 +3694,8 @@
 					"costs": [],
 					"effects": [
 						{
-							"kind": "draw",
+							"kind": "gain_resource",
+							"target": "event_actor",
 							"amount": 1
 						}
 					],
@@ -3678,20 +3746,22 @@
 					"zone": "circle"
 				},
 				{
-					"id": "followup",
+					"id": "linked",
 					"trigger": {
 						"kind": "on_play",
 						"subject": "self_card"
 					},
 					"conditions": {
-						"kind": "always"
+						"kind": "adjacent",
+						"card_type": "Support",
+						"minimum": 1
 					},
 					"costs": [],
 					"effects": [
 						{
 							"kind": "add_shields",
 							"target": "owner",
-							"amount": 2
+							"amount": 3
 						}
 					],
 					"modifiers": [],
@@ -3741,20 +3811,22 @@
 					"zone": "circle"
 				},
 				{
-					"id": "followup",
+					"id": "linked",
 					"trigger": {
 						"kind": "on_play",
 						"subject": "self_card"
 					},
 					"conditions": {
-						"kind": "always"
+						"kind": "adjacent",
+						"card_type": "Manoeuvre",
+						"minimum": 1
 					},
 					"costs": [],
 					"effects": [
 						{
 							"kind": "gain_resource",
 							"target": "owner",
-							"amount": 1
+							"amount": 2
 						}
 					],
 					"modifiers": [],
@@ -3802,13 +3874,15 @@
 					"zone": "circle"
 				},
 				{
-					"id": "followup",
+					"id": "linked",
 					"trigger": {
 						"kind": "on_play",
 						"subject": "self_card"
 					},
 					"conditions": {
-						"kind": "always"
+						"kind": "adjacent",
+						"card_type": "Guard",
+						"minimum": 1
 					},
 					"costs": [],
 					"effects": [
@@ -3851,9 +3925,24 @@
 					"costs": [],
 					"effects": [
 						{
-							"kind": "add_shields",
-							"target": "owner",
-							"amount": 6
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": {
+								"kind": "sum",
+								"values": [
+									3,
+									{
+										"kind": "min",
+										"values": [
+											2,
+											{
+												"kind": "resource_count",
+												"target": "owner"
+											}
+										]
+									}
+								]
+							}
 						}
 					],
 					"modifiers": [],
@@ -4295,9 +4384,33 @@
 					"costs": [],
 					"effects": [
 						{
-							"kind": "add_shields",
-							"target": "chosen_ally",
-							"amount": 4
+							"kind": "add_cover",
+							"target": "chosen_slot",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "relay",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Guard",
+						"exclude_owner": "Yes"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "event_slot",
+							"amount": 2
 						}
 					],
 					"modifiers": [],
@@ -4309,9 +4422,9 @@
 		},
 		{
 			"id": "reserve_covering_fire",
-			"name": "Reserve Covering Fire",
+			"name": "Layered Barricade",
 			"owner": "breakwater",
-			"type": "Attack",
+			"type": "Guard",
 			"traits": [],
 			"cost": 1,
 			"pays": 1,
@@ -4334,11 +4447,9 @@
 					"costs": [],
 					"effects": [
 						{
-							"kind": "attack",
-							"target": "chosen_enemy",
-							"damage": 2,
-							"hits": 1,
-							"range": "Short"
+							"kind": "add_cover",
+							"target": "chosen_slot",
+							"amount": 2
 						}
 					],
 					"modifiers": [],
@@ -4347,19 +4458,21 @@
 					"zone": "circle"
 				},
 				{
-					"id": "followup",
+					"id": "linked",
 					"trigger": {
 						"kind": "on_play",
 						"subject": "self_card"
 					},
 					"conditions": {
-						"kind": "always"
+						"kind": "adjacent",
+						"card_type": "Guard",
+						"minimum": 1
 					},
 					"costs": [],
 					"effects": [
 						{
-							"kind": "add_shields",
-							"target": "owner",
+							"kind": "add_cover",
+							"target": "chosen_slot",
 							"amount": 2
 						}
 					],
@@ -5348,8 +5461,7 @@
 			"field_orders"
 		],
 		"basic_actions": {
-			"repair": 2,
-			"revive_threshold": 4
+			"repair": 2
 		},
 		"mana_capacity": 1,
 		"mana_reward": 1,

@@ -47,13 +47,13 @@ The shipped encounter starts at level 2 with Iona, Rook, and Voss, a 24-card fle
 
 ### Formation, attacks, and basic actions
 
-Both sides use Front, Upper Middle, Lower Middle, and Rear diamond positions. Short attacks cannot originate from Rear or target Rear. Movement earlier in an action changes the legal origin. Enemy attacks choose their matching position, except Rear attacks Front; otherwise they choose the first legal occupied position in Front, Upper, Lower, Rear order.
+Both sides use Front, Upper Middle, Lower Middle, and Rear diamond positions. Short attacks cannot originate from Rear, target Rear, or cross between opposite flanks. Movement earlier in an action changes the legal origin. Enemy attacks choose their matching position, except Rear attacks Front; otherwise they choose the first legal occupied position in Front, Upper, Lower, Rear order.
 
 Each attack locks one target. Hits stop when it dies. Each hit resolves **slot cover → armour → shields → hull**. Armour reduces every hit without being consumed. Generic attack bonuses apply to the first hit; per-hit bonuses are separate chunks. Damage-threshold reactions use actual hull loss. Enemy-phase attacks retain escalation: +1 damage per round after round 3.
 
 The effect editor also offers **Beam attack** (Front/Rear pierces both opposing ends; flanks hit their matching flank) and **Explosion** (separate ordered effects for the main target and each adjacent unit). Both respect range, armour, previews and reaction timing. All attacks have an editable presentation (Auto, Ranged, Beam, Explosion, Melee) and named origin marker. Auto makes monsters swoop to strike and return; player attacks use their normal projectile/cyan beam/orange blast. A player ram can select Melee independently of range and targeting. Edit named part-attached points in Sprites & animation using marker drag mode. Explosion child effects use `area_target`; Stun can use `area_reaction` for that target's first visible reaction. See `docs/RULE_CHUNKS.md` for an example.
 
-Drag a ship's own card onto it for a basic repair, onto an adjacent living ally to swap, or onto an adjacent empty position to move. These actions resolve immediately on drop and discard the card without paying its printed mana cost or running its On Play rules. There is no separate manoeuvre or confirmation button. Repair restores 2 hull. A defeated ship accumulates recovery and revives with 4 hull when it reaches 4 recovery, occupying its former position if free, otherwise the first empty position. Recovery and movement have appropriate highlights and tooltips. The basic discard and actual repair/revival/movement can trigger authored rules.
+Drag a ship's own card onto it for a basic repair, onto an adjacent living ally to swap, or onto an adjacent empty position to move. These actions resolve immediately on drop and discard the card without paying its printed mana cost or running its On Play rules. There is no separate manoeuvre or confirmation button. Repair restores 2 hull. A disabled ship can receive repairs while out of formation and rejoins when it reaches at least 6 hull. It occupies its former position if free, otherwise the first empty position. Recovery and movement have appropriate highlights and tooltips. The basic discard and actual repair/revival/movement can trigger authored rules.
 
 ### Magic circle, persistence, and rounds
 
@@ -69,7 +69,7 @@ After enemy actions, shields and cover expire, persistence cleanup runs, turn li
 
 ### Control and hidden information
 
-**Stun** suppresses one selected visible reaction until fleet-phase end; enemy activity continues. **Confuse** discards and replaces one selected row card. **Scry** reveals up to X available deck cards, takes Y into hand, and lets you order the rest back on top or discard them. Mandatory discard and scry suspend the committed queue. Revealed decisions must be completed; Cancel Play cannot undo hidden information.
+**Stun** suppresses one selected visible reaction until fleet-phase end; enemy activity continues. **Confuse** discards and replaces one selected row card. **Scry X** reveals up to X deck cards. Discard any of them, shuffle the rest, and put them back on top. A separate **Draw** effect can follow Scry. Mandatory discard and scry suspend the committed queue. Revealed decisions must be completed; Cancel Play cannot undo hidden information.
 
 Previews run the same registered effects on detached state. They show known public effects and mark uncertainty, without consuming live RNG or revealing draw/replacement identities.
 

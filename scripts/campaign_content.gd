@@ -29,9 +29,9 @@ static func document(source: Dictionary) -> Dictionary:
 		if Catalog.index_by_id(doc.leviathans, enemy.id) < 0: doc.leviathans.append(enemy)
 	update_grassland_boss(doc)
 	update_stance_decks(doc)
-	_add_captain(doc, RECRUITS[1], "Brin Reed", "Reed Barrage", "Attack", "weapon_damage", _attack(4, "chosen_enemy"))
-	_add_captain(doc, RECRUITS[2], "Tess Fen", "Fen Bulwark", "Guard", "armour", {"kind":"add_shields","target":"chosen_ally","amount":4})
-	_add_captain(doc, RECRUITS[3], "Hale Brook", "Brook Repairs", "Support", "repair_amount", {"kind":"repair","target":"chosen_ally","amount":3})
+	_add_captain(doc, RECRUITS[1], "Brin Reed", "Reed Barrage", "Attack", "weapon_damage", _attack(4, "chosen_enemy"), "Manoeuvre", {"kind":"gain_resource","target":"event_actor","amount":1})
+	_add_captain(doc, RECRUITS[2], "Tess Fen", "Fen Bulwark", "Guard", "armour", {"kind":"add_shields","target":"chosen_ally","amount":4}, "Attack", _shields(2, "event_actor"))
+	_add_captain(doc, RECRUITS[3], "Hale Brook", "Brook Repairs", "Support", "repair_amount", {"kind":"repair","target":"chosen_ally","amount":3}, "Guard", _repair(1, "event_actor"))
 	return doc
 
 static func update_stance_decks(doc: Dictionary) -> void:
@@ -124,15 +124,18 @@ static func _enemy(id: String, name: String, hull: int, rig: String, intent: Str
 		"default_action":fallback,
 	}
 
-static func _add_captain(doc: Dictionary, id: String, name: String, card_name: String, type: String, stat: String, effect: Dictionary) -> void:
+static func _add_captain(doc: Dictionary, id: String, name: String, card_name: String, type: String, stat: String, effect: Dictionary, link_type: String, link_effect: Dictionary) -> void:
 	if Catalog.index_by_id(doc.captains, id) >= 0: return
 	var card_id := id + "_orders"
 	var passive := Rules.rule("passive", [], "captain")
 	passive.trigger.subject = "owner"
 	passive.modifiers = [{"kind":stat,"target":"owner","amount":1}]
 	doc.captains.append({"id":id,"name":name,"tier":1,"card":card_id,"passive":passive})
+	var relay := Rules.rule("adjacent_card_played", [link_effect])
+	relay.id = "relay"
+	relay.trigger = {"kind":"adjacent_card_played","subject":"adjacent","card_type":link_type,"exclude_owner":"Yes"}
 	doc.cards.append({"id":card_id,"name":card_name,"owner":id,"type":type,"traits":[],"cost":1,"pays":1,
-		"positions":Geometry.POSITIONS.duplicate(),"rules":[Rules.rule("on_play",[effect])]})
+		"positions":Geometry.POSITIONS.duplicate(),"rules":[Rules.rule("on_play",[effect]), relay]})
 
 static func encounter(seed_value: int, node: Dictionary, stars: int) -> Array:
 	var ids: Array

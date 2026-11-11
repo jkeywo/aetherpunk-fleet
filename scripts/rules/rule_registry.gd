@@ -23,6 +23,7 @@ static func ensure() -> void:
 		catalog[category] = {}
 	for event in ["on_play", "adjacent_card_played", "attack_started", "hit_resolved", "hull_damaged", "armour_absorbed", "cover_absorbed", "shields_absorbed", "moved", "repaired", "revived", "discarded", "reaction_resolved", "turn_start", "turn_end", "resource_changed", "shields_added", "cards_drawn"]:
 		add("trigger", event, event.replace("_", " ").capitalize(), {"subject": field("enum", "owner", 0, ["owner", "actor", "target", "self_card", "adjacent", "allied", "enemy", "any"]), "card_type": field("enum", "", 0, [""] + TYPES), "reason": field("enum", "", 0, ["", "mana", "basic", "effect", "refresh"]), "minimum": field("int", 1)}, _trigger.bind(event), [], ZONES)
+	catalog.trigger.adjacent_card_played.fields["exclude_owner"] = field("enum", "No", 0, ["No", "Yes"])
 	add("trigger", "passive", "While active", {"subject": field("enum", "owner", 0, ["owner", "self_card", "any"])}, _passive, [], ZONES)
 	add("condition", "always", "Always", {}, _always)
 	add("condition", "reaction_trigger", "Common reaction trigger", {"family": field("enum", "card_type", 0, ["card_type", "position", "damaged", "healed"]), "card_type": field("enum", "Attack", 0, TYPES), "position": field("enum", "front", 0, ["front", "flank", "rear", "upper", "lower"])}, _common_reaction)
@@ -53,7 +54,7 @@ static func ensure() -> void:
 	add("effect", "rear_to_front", "Move rearmost ally to front", {}, _rear_to_front)
 	add("effect", "draw", "Draw cards", {"amount": field("value", 1)}, _draw)
 	add("effect", "discard", "Discard cards from hand", {"amount": field("value", 1)}, _discard)
-	add("effect", "scry", "Scry and choose cards", {"look": field("value", 3, 1), "take": field("value", 1)}, _scry)
+	add("effect", "scry", "Scry", {"look": field("value", 3, 1)}, _scry)
 	add("effect", "stun", "Suppress a visible reaction", {"target": field("target", "chosen_reaction", 0, ["chosen_reaction", "event_reaction", "area_reaction"])}, _stun)
 	add("effect", "confuse", "Discard and replace a visible stance", {"target": field("target", "chosen_stance", 0, ["chosen_stance", "event_stance"])}, _confuse)
 	add("effect", "add_persistence", "Add persistence tokens", {"target": field("target", "self_card", 0, ["self_card", "chosen_circle_card", "adjacent_cards"]), "amount": field("value", 1)}, _add_persistence)
@@ -120,7 +121,9 @@ static func descriptor(category: String, kind: String) -> Dictionary:
 
 static func ids(category: String) -> Array:
 	ensure()
-	return catalog.get(category, {}).keys()
+	var result: Array = catalog.get(category, {}).keys()
+	if category == "effect": result.erase("recovery")
+	return result
 
 
 static func fresh(category: String, kind: String) -> Dictionary:
@@ -188,6 +191,7 @@ static func validate_spec(category: String, spec: Variant, where: String, errors
 		errors.append(where + ": unknown " + category + " '" + str(spec.get("kind", "")) + "'.")
 		return
 	for key in spec:
+		if category == "effect" and spec.kind == "scry" and key == "take": continue
 		if key != "kind" and not desc.fields.has(key):
 			errors.append(where + ": unsupported field '" + key + "'.")
 	for key in desc.fields:
@@ -211,8 +215,8 @@ static func validate_spec(category: String, spec: Variant, where: String, errors
 				else:
 					for i in value.size():
 						validate_spec({"conditions":"condition", "values":"value", "effects":"effect"}[meta.type], value[i], where + "." + key + "[" + str(i) + "]", errors, depth + 1)
-	if category == "effect" and spec.kind == "scry" and spec.get("look", 3) is int and spec.get("take", 1) is int and spec.get("take", 1) > spec.get("look", 3):
-		errors.append(where + ": scry take cannot exceed look.")
+	if category == "effect" and spec.kind == "scry" and spec.has("take"):
+		validate_spec("value", spec.take, where + ".take", errors, depth + 1)
 	if category == "effect" and spec.kind in ["attack", "beam"] and spec.get("hits", 1) is int and spec.get("hits", 1) < 1:
 		errors.append(where + ": an attack needs at least one hit.")
 
@@ -357,6 +361,8 @@ static func _trigger(p: Dictionary, c: Dictionary, kind: String) -> bool:
 	if kind == "adjacent_card_played":
 		if actual != "on_play" or int(c.get("uid", -1)) < 0 or int(event.get("uid", -1)) < 0:
 			return false
+		if p.get("exclude_owner", "No") == "Yes" and int(event.get("actor", -1)) == int(c.owner):
+			return false
 		if not c.state.are_adjacent_cards(c.uid, event.uid):
 			return false
 	elif actual != kind:
@@ -444,9 +450,9 @@ static func _status(p: Dictionary, c: Dictionary) -> bool:
 		var u: Dictionary = c.state.unit(id)
 		match p.get("status", "alive"):
 			"alive":
-				if u.get("hull", 0) > 0: return true
+				if c.state.is_operational(id): return true
 			"defeated":
-				if u.get("hull", 0) <= 0: return true
+				if not c.state.is_operational(id): return true
 			"shielded":
 				if u.get("guard", 0) > 0: return true
 			"stunned":
@@ -574,7 +580,7 @@ static func _formatted(category: String, p: Dictionary) -> String:
 				return "Explosion [%s]: main target {%s}; each adjacent {%s}" % [p.get("range", "weapon"), "; ".join(primary) if not primary.is_empty() else "none", "; ".join(splash) if not splash.is_empty() else "none"]
 			"add_shields": return "+" + amount + " shields" + target
 			"repair": return "Repair " + amount + target
-			"recovery": return "Repair/recover " + amount + target
+			"recovery": return "Repair " + amount + target
 			"add_cover": return "+" + amount + " cover" + ("" if p.get("target", "source_slot") == "source_slot" else target)
 			"gain_resource": return "Gain " + amount + " resource" + target
 			"spend_resource": return "Spend " + amount + " resource" + target
@@ -582,7 +588,7 @@ static func _formatted(category: String, p: Dictionary) -> String:
 			"swap": return "Swap adjacent ships" + ("; both gain " + _raw_text("value", p.get("guard", 0)) + " shields" if _raw_text("value", p.get("guard", 0)) != "0" else "")
 			"draw": return "Draw " + amount
 			"discard": return "Discard " + amount + " from hand"
-			"scry": return "Scry " + _raw_text("value", p.get("look", 3)) + ", take " + _raw_text("value", p.get("take", 1)) + "; order top/discard"
+			"scry": return "Scry " + _raw_text("value", p.get("look", 3)) + (", Draw " + _raw_text("value", p.take) if p.has("take") else "")
 			"stun": return "Stun area target’s first visible reaction until fleet phase ends" if p.get("target") == "area_reaction" else "Stun one visible reaction until fleet phase ends"
 			"confuse": return "Confuse: replace a visible stance"
 			"add_persistence": return "+" + amount + " persistence" + ("" if p.get("target", "self_card") == "self_card" else target)

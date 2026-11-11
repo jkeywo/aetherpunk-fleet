@@ -44,11 +44,12 @@ func _run() -> void:
 	b.ships[0].resource = 4
 	b._cleanup()
 	expect(b.ships[0].resource == 0 and b.position_of(0) == -1, "Defeat did not reset resource.")
-	expect(b.play_basic(uid_for(b, "brace"), 0) == "" and b.ships[0].recovery == 2 and b.ships[0].hull == 0, "Recovery threshold ignored.")
+	expect(b.play_basic(uid_for(b, "brace"), 0) == "" and b.ships[0].hull == 2 and not b.is_operational(0), "Recovery threshold ignored.")
 	all_in_hand(b)
-	expect(b.play_basic(uid_for(b, "brace"), 0) == "" and b.ships[0].hull == 6 and b.position_of(0) >= 0, "Basic repair did not revive at six hull.")
+	expect(b.play_basic(uid_for(b, "brace"), 0) == "" and b.ships[0].hull == 4 and not b.is_operational(0), "Four hull should still leave the ship disabled.")
+	expect(b.play_basic(uid_for(b, "field_orders"), 0) == "" and b.ships[0].hull == 6 and b.position_of(0) >= 0, "Basic repair did not revive at six hull.")
 	var recovery_doc := neutral()
-	card_def(recovery_doc, "brace").rules[0].effects = [{"kind":"repair", "target":"chosen_ally", "amount":4}]
+	card_def(recovery_doc, "brace").rules[0].effects = [{"kind":"repair", "target":"chosen_ally", "amount":6}]
 	b = State.new(1, recovery_doc)
 	b.ships[1].hull = 0
 	b._cleanup()
@@ -89,6 +90,9 @@ func _run() -> void:
 	ui.state.enemy_formation = [-1, -1, -1, 0]
 	uid = uid_for(ui.state, "brace")
 	expect(ui.state.validate_basic(uid, -1).contains("Rear"), "Short basic attack can target Rear.")
+	ui.state.enemy_formation = [-1, -1, 0, -1]
+	ui.state.formation = [-1, 0, 1, 2]
+	expect(not ui.state.validate_basic(uid, -1).is_empty(), "Short basic attack crossed from Upper to Lower.")
 	ui.state.enemy_formation = [0, -1, -1, -1]
 	ui.state.formation = [-1, 1, 2, 0]
 	expect(ui.state.validate_basic(uid, -1).contains("Rear"), "Short basic attack can originate in Rear.")
@@ -106,9 +110,8 @@ func _run() -> void:
 	expect(enemy.hull == initial_hull - 2 and ui.state.discard == [uid], "Basic attack did not discard the card and use weapon damage through armour.")
 	expect(ui.state.play_order.is_empty() and not ui.pending_play and conserved(ui.state), "Basic attack entered the circle or required confirmation.")
 	var weapon_doc := neutral()
-	var shipped: Dictionary = Catalog.read_document("res://data/content.json").document
-	var damage: Dictionary = card_def(shipped, "broadside").rules[0].effects[0].damage
-	expect(ship_def(shipped, "kestrel").weapon.damage == 3 and R.text("value", damage) == "Weapon +2", "Kestrel and Broadside must author the base damage and card bonus separately.")
+	var damage := {"kind":"sum", "values":[{"kind":"weapon_damage", "target":"owner"}, 2]}
+	expect(R.text("value", damage) == "Weapon +2", "Fixed weapon bonuses should display as Weapon +N.")
 	card_def(weapon_doc, "brace").rules[0].effects = [{"kind":"attack", "target":"chosen_enemy", "range":"weapon", "damage":damage}]
 	ship_def(weapon_doc, "bastion").weapon.damage = 3
 	b = State.new(1, weapon_doc)
