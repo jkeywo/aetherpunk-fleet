@@ -53,7 +53,7 @@ func _run() -> void:
 	await drag(bench(prep.captain_bank,"captain_id","iona"),prep.formation.target_widget(0))
 	expect(prep.draft.setup.fleet[0].captain=="iona" and not prep.launch_button.disabled and bench(prep.captain_bank,"captain_id","iona")==null,"Benched captain could not be reassigned.")
 	await drag(prep.formation.target_widget(0),prep.unassign_ship_slot)
-	expect(prep.draft.setup.fleet[0].ship=="" and prep.draft.setup.fleet[0].captain=="" and prep.launch_button.disabled,"Unassign ship did not free both ship and captain.")
+	expect(prep.draft.setup.fleet[0].ship=="" and prep.draft.setup.fleet[0].captain=="" and not prep.launch_button.disabled,"Unassign ship did not free both ship and captain.")
 	expect(bench(prep.ship_bank,"ship_id","bastion")!=null and bench(prep.captain_bank,"captain_id","iona")!=null,"Freed ship/captain missing from available slots.")
 	var point: int=Geometry.POSITIONS.find(prep.draft.setup.fleet[0].position)
 	await drag(bench(prep.ship_bank,"ship_id","bastion"),prep.formation.widgets[point])
@@ -71,7 +71,7 @@ func _run() -> void:
 	prep._back();await scene_changed
 	current_scene.get_node("%PrimaryButton").pressed.emit();await scene_changed
 	prep=current_scene
-	expect(prep.draft.setup.fleet==partial and prep.launch_button.disabled,"Returning to preparation lost incomplete fleet draft.")
+	expect(prep.draft.setup.fleet==partial and not prep.launch_button.disabled,"Returning to preparation lost incomplete fleet draft.")
 	prep._reset();await flush()
 	expect(prep.draft.setup.fleet==fixture.setup.fleet and not prep.launch_button.disabled,"Reset failed from incomplete setup.")
 	for id in ["bastion","kestrel","lamplighter"]: prep._unassign({"kind":"ship","ship":id,"preparation":prep.get_instance_id()},"ship")

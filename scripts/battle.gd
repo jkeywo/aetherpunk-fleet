@@ -219,6 +219,7 @@ func _build_ui() -> void:
 		elif id == 3: _navigate("res://scenes/victory.tscn")
 		elif id == 4: _navigate("res://scenes/defeat.tscn"))
 	history_dialog = AcceptDialog.new()
+	history_dialog.get_ok_button().hide()
 	history_dialog.title = "Action history"
 	history_dialog.min_size = Vector2i(780, 460)
 	add_child(history_dialog)
@@ -1138,7 +1139,7 @@ func _show_discard() -> void:
 	discard_dialog = AcceptDialog.new()
 	discard_dialog.name = "DiscardViewer"
 	discard_dialog.title = "Discard pile / %d cards" % state.discard.size()
-	discard_dialog.get_ok_button().text = "Close"
+	discard_dialog.get_ok_button().hide()
 	add_child(discard_dialog)
 	var body := VBoxContainer.new()
 	discard_dialog.add_child(body)

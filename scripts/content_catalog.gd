@@ -331,8 +331,8 @@ static func _check_card(cards: Dictionary, id: Variant, owner: String, where: St
 static func _validate_setup(doc: Dictionary, ships: Dictionary, captains: Dictionary, cards: Dictionary, monsters: Dictionary, errors: Array) -> void:
 	if not doc.get("setup") is Dictionary: errors.append("Configure Battle Setup."); return
 	var setup: Dictionary = doc.setup
-	if not setup.get("fleet") is Array or setup.get("fleet", []).size() != 3:
-		errors.append("Choose exactly three ships.")
+	if not setup.get("fleet") is Array or setup.get("fleet", []).size() not in range(1, 5):
+		errors.append("Choose one to four ships.")
 		return
 	var seen_ships: Array = []
 	var seen_captains: Array = []
@@ -378,9 +378,10 @@ static func _validate_setup(doc: Dictionary, ships: Dictionary, captains: Dictio
 	if not errors.is_empty(): return
 	var compiled := compile(doc)
 	var deck: Array = compiled.deck_keys
-	if deck.size() < 7: errors.append("Fleet deck must contain at least seven cards.")
+	if deck.is_empty(): errors.append("Fleet deck must contain at least one card.")
 	if setup.fixed_hand:
-		if setup.opening_hand.size() != 7: errors.append("Fixed opening hand needs exactly seven cards.")
+		var opening_size: int = 4 + setup.fleet.size()
+		if setup.opening_hand.size() != opening_size: errors.append("Fixed opening hand needs exactly %d cards." % opening_size)
 		for id in setup.opening_hand:
 			var position := deck.find(id)
 			if position < 0: errors.append("Opening hand exceeds available copies of " + str(id) + ".")
@@ -409,27 +410,9 @@ static func compile(source: Dictionary) -> Dictionary:
 	var result := {"ships": [], "cards": {}, "enemies": [], "deck_keys": [], "positions": [], "setup": doc.setup.duplicate(true), "basic_actions": basic_rules(doc), "fixed_hand": doc.setup.fixed_hand, "opening_hand": doc.setup.opening_hand.duplicate()}
 	for i in doc.setup.fleet.size():
 		var entry: Dictionary = doc.setup.fleet[i]
-		var ship: Dictionary = doc.ships[index_by_id(doc.ships, entry.ship)].duplicate(true)
-		var captain: Dictionary = doc.captains[index_by_id(doc.captains, entry.captain)].duplicate(true)
-		ship["captain"] = captain
-		ship["level"] = entry.level
-		ship["active_rules"] = ship.get("rules", []).duplicate(true) + ship.resource.get("rules", []).duplicate(true)
-		ship.active_rules.append(captain.passive.duplicate(true))
+		var ship := compile_ship(doc, entry)
 		result.positions.append(entry.position)
-		var loadout: Array = [{"card": ship.starter, "count": 2}]
-		if ship.get("starter_two","")!="":loadout.append({"card":ship.starter_two,"count":2})
-		loadout.append({"card":captain.card,"count":2})
-		for level in ["two", "three"]:
-			if int(entry.level) < (2 if level == "two" else 3): continue
-			var package_index: int = index_by_id(ship.levels[level], entry.get("level_2" if level == "two" else "level_3", ""))
-			if package_index < 0: continue
-			var package: Dictionary = ship.levels[level][package_index]
-			loadout.append({"card": package.card, "count": 2})
-			ship.active_rules.append(package.rule.duplicate(true))
-			ship.active_rules.append(package.passive.duplicate(true))
-		if ship.has("legacy_loadout"): loadout = ship.legacy_loadout.duplicate(true)
-		ship["loadout"] = loadout
-		for slot in loadout:
+		for slot in ship.loadout:
 			var definition: Dictionary = doc.cards[index_by_id(doc.cards, slot.card)]
 			result.cards[definition.id] = present_card(definition, i, ship.name)
 			for copy in int(slot.count): result.deck_keys.append(definition.id)
@@ -444,6 +427,30 @@ static func compile(source: Dictionary) -> Dictionary:
 	result["enemy_position"] = result.enemies[0].position if not result.enemies.is_empty() else 0
 	result["stances"] = result.monster.get("stances", [])
 	return result
+
+
+static func compile_ship(doc: Dictionary, entry: Dictionary) -> Dictionary:
+	var ship: Dictionary = doc.ships[index_by_id(doc.ships, entry.ship)].duplicate(true)
+	var captain_index := index_by_id(doc.captains, entry.captain)
+	var captain: Dictionary = doc.captains[captain_index].duplicate(true) if captain_index >= 0 else {"name": "Unassigned"}
+	ship["captain"] = captain
+	ship["level"] = entry.level
+	ship["active_rules"] = ship.get("rules", []).duplicate(true) + ship.resource.get("rules", []).duplicate(true)
+	if captain_index >= 0: ship.active_rules.append(captain.passive.duplicate(true))
+	var loadout: Array = [{"card": ship.starter, "count": 2}]
+	if ship.get("starter_two","")!="":loadout.append({"card":ship.starter_two,"count":2})
+	if captain_index >= 0: loadout.append({"card":captain.card,"count":2})
+	for level in ["two", "three"]:
+		if int(entry.level) < (2 if level == "two" else 3): continue
+		var package_index: int = index_by_id(ship.levels[level], entry.get("level_2" if level == "two" else "level_3", ""))
+		if package_index < 0: continue
+		var package: Dictionary = ship.levels[level][package_index]
+		loadout.append({"card": package.card, "count": 2})
+		ship.active_rules.append(package.rule.duplicate(true))
+		ship.active_rules.append(package.passive.duplicate(true))
+	if ship.has("legacy_loadout"): loadout = ship.legacy_loadout.duplicate(true)
+	ship["loadout"] = loadout
+	return ship
 
 
 static func present_card(source: Dictionary, owner: int = 0, owner_name: String = "") -> Dictionary:

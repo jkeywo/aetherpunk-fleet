@@ -53,7 +53,7 @@ func _ready() -> void:
 	if remembered.get("fingerprint","") == fingerprint and draft.has("setup"):
 		draft.setup.fleet = remembered.fleet.duplicate(true)
 		prefer_fixed = remembered.prefer_fixed
-		selected_ship = clampi(remembered.get("selected_ship",0),0,2)
+		selected_ship = clampi(remembered.get("selected_ship",0),0,draft.setup.fleet.size()-1)
 	theme = Ui.make()
 	_build()
 	_render()
@@ -90,10 +90,10 @@ func _build() -> void:
 	margin.add_child(outer)
 	var header := HBoxContainer.new()
 	outer.add_child(header)
-	_label(header,"FLEET PREPARATION",26).modulate = Color("#e8bd77")
-	_button(header,"Reset to Saved Fleet",_reset)
 	var back := _button(header,"Back",_back)
 	back.name = "BackButton"
+	_label(header,"FLEET PREPARATION",26).modulate = Color("#e8bd77")
+	_button(header,"Reset to Saved Fleet",_reset)
 	var arrow_image := Image.new()
 	arrow_image.load_svg_from_string('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M16 6L8 14l8 8M8 14h14" fill="none" stroke="#fff2d5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>')
 	back.icon = ImageTexture.create_from_image(arrow_image)
@@ -142,11 +142,11 @@ func _build() -> void:
 	_button(captains_header,"Compare Captains",_show_captains)
 	ship_info_dialog=AcceptDialog.new()
 	ship_info_dialog.name="ShipDetails"
-	ship_info_dialog.get_ok_button().text="Close"
+	ship_info_dialog.get_ok_button().hide()
 	add_child(ship_info_dialog)
 	var info_scroll:=ScrollContainer.new()
 	info_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	info_scroll.offset_left=14;info_scroll.offset_top=14;info_scroll.offset_right=-14;info_scroll.offset_bottom=-60
+	info_scroll.offset_left=14;info_scroll.offset_top=14;info_scroll.offset_right=-14;info_scroll.offset_bottom=-14
 	info_scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
 	ship_info_dialog.add_child(info_scroll)
 	var info_columns:=HBoxContainer.new()
@@ -169,6 +169,7 @@ func _build() -> void:
 	var card_scroll := ScrollContainer.new()
 	card_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	card_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	card_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	deck_preview.add_child(card_scroll)
 	deck_cards = HBoxContainer.new()
 	deck_cards.add_theme_constant_override("separation", 12)
@@ -353,7 +354,7 @@ func _valid_drop(data: Variant, point: int) -> bool:
 		if slot.position==Geometry.POSITIONS[point] and not slot.ship.is_empty(): occupied=true
 	if data.get("kind")=="captain": return occupied and Catalog.index_by_id(draft.captains,data.get("captain",""))>=0
 	if data.get("kind")!="ship" or Catalog.index_by_id(draft.ships,data.get("ship",""))<0: return false
-	return occupied or draft.setup.fleet.any(func(slot): return slot.ship==data.ship or slot.ship.is_empty())
+	return true
 
 func _show_drag_targets(data: Dictionary) -> void:
 	var notes: Dictionary={}
@@ -385,9 +386,11 @@ func _drop_at(_local: Vector2, data: Variant, point: int) -> void:
 			if target < 0:
 				for i in draft.setup.fleet.size():
 					if draft.setup.fleet[i].ship.is_empty(): target=i; break
-			if target >= 0:
-				draft.setup.fleet[target].position=Geometry.POSITIONS[point]
-				_change(data.ship,target,"ship")
+			if target < 0:
+				target = draft.setup.fleet.size()
+				draft.setup.fleet.append({"ship": "", "captain": "", "level": 1, "level_2": "", "level_3": "", "position": Geometry.POSITIONS[point]})
+			draft.setup.fleet[target].position = Geometry.POSITIONS[point]
+			_change(data.ship, target, "ship")
 
 func _notification(what: int) -> void:
 	if what==NOTIFICATION_DRAG_END:
@@ -400,11 +403,12 @@ func _notification(what: int) -> void:
 
 func _candidate() -> Dictionary:
 	var result := draft.duplicate(true)
+	result.setup.fleet = result.setup.fleet.filter(func(slot): return not slot.ship.is_empty())
 	result.setup.fixed_hand = false
 	fixed_available = false
 	if Catalog.validate(result).is_empty() and source.setup.fixed_hand:
 		var pool: Array = Catalog.compile(result).deck_keys.duplicate()
-		fixed_available = source.setup.opening_hand.size() == 7
+		fixed_available = source.setup.opening_hand.size() == 4 + result.setup.fleet.size()
 		for id in source.setup.opening_hand:
 			if not pool.has(id): fixed_available = false; break
 			pool.erase(id)
@@ -419,26 +423,40 @@ func _update() -> void:
 	if not errors.is_empty():
 		status.text = "Cannot launch: " + str(errors[0])
 		_render_incomplete_formation()
-		fleet_deck_summary.text = "Assign three airships and a captain to each before launching."
+		fleet_deck_summary.text = "Assign at least one airship and a captain to each placed ship."
 		_clear(fleet_deck_body)
 		return
 	var compiled := Catalog.compile(candidate)
 	_render_fleet_deck(compiled, candidate)
 	var sim = State.new(0,candidate)
 	var board: Dictionary = sim.board_snapshot()
-	formation.configure(board,false)
-	_wire_formation(board)
-	formation.show_rule_preview({},selected_ship)
-	var ship: Dictionary = compiled.ships[selected_ship]
-	_render_deck_preview(compiled, ship, candidate.setup.fleet[selected_ship])
-	var unit_data: Dictionary = board.ships[selected_ship]
+	var display_board := board.duplicate(true)
+	display_board.ships.resize(draft.setup.fleet.size())
+	for index in draft.setup.fleet.size():
+		var point: int = Geometry.POSITIONS.find(draft.setup.fleet[index].position)
+		var compiled_index: int = board.formation[point]
+		if compiled_index < 0:
+			display_board.ships[index] = {"hull": 1}
+			continue
+		display_board.formation[point] = index
+		display_board.ships[index] = board.ships[compiled_index]
+	_show_preparation_formation(display_board)
+	status.text = "%d ships / %d cards" % [compiled.ships.size(),compiled.deck_keys.size()]
+	status.modulate = Color("#91c8ad")
+	if details.is_empty():
+		return
+	var selected_point: int = Geometry.POSITIONS.find(draft.setup.fleet[selected_ship].position)
+	var selected_index: int = board.formation[selected_point]
+	var ship: Dictionary = compiled.ships[selected_index]
+	_render_deck_preview(compiled, ship, candidate.setup.fleet[selected_index])
+	var unit_data: Dictionary = board.ships[selected_index]
 	var lines: Array = ["%s · HULL %d · ARMOUR %d" % [ship.role,unit_data.max_hull,unit_data.armour],"Weapon %d · %s / %s %d" % [unit_data.weapon.damage,unit_data.weapon.range,ship.resource.name,unit_data.resource_capacity]]
 	for pair in ship.loadout:
 		lines.append("%d × %s" % [pair.count,compiled.cards[pair.card].name])
 	details[0].text = "\n".join(lines)
 	details[0].tooltip_text = "\n".join(ship.loadout.map(func(pair): return compiled.cards[pair.card].effect))
 	var rewards: Array = ["Captain: " + Rules.rule_text(ship.captain.passive, ship.name)]
-	var slot: Dictionary = candidate.setup.fleet[selected_ship]
+	var slot: Dictionary = candidate.setup.fleet[selected_index]
 	for tier in ["two","three"]:
 		if slot.level < (2 if tier == "two" else 3): continue
 		var package: Dictionary = ship.levels[tier][Catalog.index_by_id(ship.levels[tier],slot["level_2" if tier == "two" else "level_3"])]
@@ -446,8 +464,6 @@ func _update() -> void:
 		rewards.append(Rules.rule_text(package.rule, ship.name))
 	details[1].text = "\n".join(rewards)
 	if ship.has("legacy_loadout"): details[1].text += "\nImported card loadout retained."
-	status.text = "%d ships / %d cards" % [compiled.ships.size(),compiled.deck_keys.size()]
-	status.modulate = Color("#91c8ad")
 
 
 func _remember() -> void:
@@ -456,6 +472,7 @@ func _remember() -> void:
 
 func _reset() -> void:
 	draft = source.duplicate(true)
+	selected_ship = 0
 	prefer_fixed = source.setup.fixed_hand
 	_render()
 
@@ -524,7 +541,7 @@ func _show_upgrades(tier: String) -> void:
 		upgrade_dialog.queue_free()
 	upgrade_dialog = AcceptDialog.new()
 	upgrade_dialog.name = "UpgradeComparison"
-	upgrade_dialog.get_ok_button().text = "Close"
+	upgrade_dialog.get_ok_button().hide()
 	(ship_info_dialog if ship_info_dialog.visible else self).add_child(upgrade_dialog)
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, slot.ship)]
@@ -612,7 +629,7 @@ func _show_captains() -> void:
 		captain_dialog.queue_free()
 	captain_dialog = AcceptDialog.new()
 	captain_dialog.name = "CaptainComparison"
-	captain_dialog.get_ok_button().text = "Close"
+	captain_dialog.get_ok_button().hide()
 	add_child(captain_dialog)
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, slot.ship)]
@@ -684,7 +701,7 @@ func _show_ships() -> void:
 		ship_dialog.queue_free()
 	ship_dialog = AcceptDialog.new()
 	ship_dialog.name = "ShipComparison"
-	ship_dialog.get_ok_button().text = "Close"
+	ship_dialog.get_ok_button().hide()
 	add_child(ship_dialog)
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	ship_dialog.title = slot.position.capitalize() + " / Compare ships"
@@ -758,7 +775,7 @@ func _ship_card_groups(ship: Dictionary, slot: Dictionary) -> Array:
 	else:
 		groups.append({"label": "Starter / Level 1", "card": ship.starter, "count": 2})
 		if ship.get("starter_two","")!="":groups.append({"label":"Starter / Level 1 / second pair","card":ship.starter_two,"count":2})
-		groups.append({"label": "Captain / " + ship.captain.name + " / Tier " + str(ship.captain.tier), "card": ship.captain.card, "count": 2})
+		if ship.captain.has("card"): groups.append({"label": "Captain / " + ship.captain.name + " / Tier " + str(ship.captain.tier), "card": ship.captain.card, "count": 2})
 		for tier in ["two", "three"]:
 			var level := 2 if tier == "two" else 3
 			if slot.level < level: continue
@@ -874,41 +891,39 @@ func _unassign(data: Dictionary, kind: String) -> void:
 	_render()
 
 
-func _render_incomplete_formation() -> void:
-	var preview := draft.duplicate(true)
-	preview.setup.fixed_hand = false
-	var ships_used: Array = preview.setup.fleet.map(func(slot): return slot.ship)
-	var captains_used: Array = preview.setup.fleet.map(func(slot): return slot.captain)
-	for slot in preview.setup.fleet:
-		if slot.ship.is_empty():
-			for ship in preview.ships:
-				if not ships_used.has(ship.id): slot.ship=ship.id; ships_used.append(ship.id); break
-			Catalog.repair_fleet_branch(slot,preview.ships[Catalog.index_by_id(preview.ships,slot.ship)])
-		if slot.captain.is_empty():
-			for captain in preview.captains:
-				if captains_used.has(captain.id): continue
-				slot.captain=captain.id
-				captains_used.append(captain.id)
-				captain.passive=Rules.rule("passive",[],"captain")
-				captain.passive.modifiers=[{"kind":"armour","target":"owner","amount":0}]
-				break
-	if not Catalog.validate(preview).is_empty(): return
-	var sim = State.new(0,preview)
-	var board: Dictionary = sim.board_snapshot()
-	for i in draft.setup.fleet.size():
-		var slot: Dictionary = draft.setup.fleet[i]
-		if slot.ship.is_empty(): board.formation[Geometry.POSITIONS.find(slot.position)] = -1
-		if slot.captain.is_empty(): board.ships[i].captain.name = "Unassigned"
-	formation.configure(board,false)
+func _show_preparation_formation(board: Dictionary) -> void:
+	formation.configure(board, false)
 	_wire_formation(board)
-	formation.show_rule_preview({},selected_ship)
-	_clear(deck_cards)
-	deck_summary.text = "Complete fleet assignments to preview the deck."
-	if not details.is_empty():
-		details[0].text = board.ships[selected_ship].name + " / Captain " + str(board.ships[selected_ship].captain.name)
-		details[1].text = "Drag an available captain onto each airship."
-	status.text = "Fleet incomplete: fill the empty airship and captain slots."
-	status.modulate = Color("#e8bd77")
+	formation.show_rule_preview({}, selected_ship)
+
+
+func _render_incomplete_formation() -> void:
+	var board := {"ships": [], "formation": [-1, -1, -1, -1]}
+	for index in draft.setup.fleet.size():
+		var slot: Dictionary = draft.setup.fleet[index]
+		if slot.ship.is_empty():
+			board.ships.append({"hull": 1})
+			continue
+		var ship := Catalog.compile_ship(draft, slot)
+		var display_ship := ship.duplicate(true)
+		display_ship["resource_name"] = ship.resource.name
+		display_ship["resource_capacity"] = ship.resource.capacity
+		display_ship["resource"] = 0
+		display_ship["mechanic_text"] = "\n".join(ship.resource.rules.map(func(rule): return Rules.rule_text(rule, ship.name)))
+		board.ships.append(display_ship)
+		board.formation[Geometry.POSITIONS.find(slot.position)] = index
+	_show_preparation_formation(board)
+	if details.is_empty():
+		return
+	var selected: Dictionary = board.ships[selected_ship]
+	var cards: Dictionary = {}
+	for pair in selected.loadout:
+		var design: Dictionary = draft.cards[Catalog.index_by_id(draft.cards, pair.card)]
+		cards[pair.card] = Catalog.present_card(design, selected_ship, selected.name)
+	_render_deck_preview({"cards": cards}, selected, draft.setup.fleet[selected_ship])
+	details[0].text = "%s · Hull %d · Armour %d" % [selected.role, selected.hull, selected.armour]
+	if selected.captain.has("passive"):
+		details[1].text = Rules.rule_text(selected.captain.passive, selected.name)
 
 
 func _show_captain_info(id: String, ship_index: int = -1) -> void:
@@ -917,7 +932,7 @@ func _show_captain_info(id: String, ship_index: int = -1) -> void:
 	if is_instance_valid(captain_info_dialog): captain_info_dialog.hide(); captain_info_dialog.queue_free()
 	captain_info_dialog=AcceptDialog.new()
 	captain_info_dialog.title="Captain details"
-	captain_info_dialog.get_ok_button().text="Close"
+	captain_info_dialog.get_ok_button().hide()
 	(ship_info_dialog if ship_info_dialog.visible else self).add_child(captain_info_dialog)
 	var captain: Dictionary=draft.captains[index]
 	var owner: Dictionary={"name":"Unassigned","color":"#a88b62"}

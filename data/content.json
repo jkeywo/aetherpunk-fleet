@@ -1078,6 +1078,514 @@
 				]
 			},
 			"starter_two": "supply_run"
+		},
+		{
+			"id": "breakwater",
+			"name": "Breakwater",
+			"role": "BULWARK",
+			"hull": 28,
+			"color": "#9dbdc4",
+			"armour": 2,
+			"weapon": {
+				"damage": 4,
+				"range": "Short"
+			},
+			"resource": {
+				"name": "Resolve",
+				"capacity": 6,
+				"rules": [
+					{
+						"id": "gain",
+						"trigger": {
+							"kind": "armour_absorbed",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [],
+						"effects": [
+							{
+								"kind": "gain_resource",
+								"target": "owner",
+								"amount": 1
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "automatic_spend",
+						"trigger": {
+							"kind": "on_play",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "card_matches",
+							"target": "event_card",
+							"card_type": "Guard"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "add_shields",
+								"target": "owner",
+								"amount": 3
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": false,
+						"zone": "ship"
+					},
+					{
+						"id": "optional_boost",
+						"trigger": {
+							"kind": "on_play",
+							"subject": "owner"
+						},
+						"conditions": {
+							"kind": "always"
+						},
+						"costs": [
+							{
+								"kind": "ship_resource",
+								"target": "owner",
+								"amount": 2
+							}
+						],
+						"effects": [
+							{
+								"kind": "add_cover",
+								"target": "source_slot",
+								"amount": 2
+							}
+						],
+						"modifiers": [],
+						"limit": "once_per_action",
+						"optional": true,
+						"zone": "ship"
+					}
+				]
+			},
+			"starter": "reserve_brace",
+			"rules": [],
+			"levels": {
+				"two": [
+					{
+						"id": "defence",
+						"name": "Bastion Plating",
+						"card": "reserve_escort",
+						"blocks": "artillery",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "repaired",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "assault",
+						"name": "Vanguard Drive",
+						"card": "reserve_advance",
+						"blocks": "bulwark",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "moved",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				],
+				"three": [
+					{
+						"id": "bulwark",
+						"name": "Citadel",
+						"card": "reserve_resonant_bulwark",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "cover_absorbed",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "armour",
+									"target": "owner",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "artillery",
+						"name": "Dreadnought",
+						"card": "reserve_ramming_prow",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "hull_damaged",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "weapon_damage",
+									"target": "owner",
+									"amount": 2,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					},
+					{
+						"id": "conductor",
+						"name": "Aegis Network",
+						"card": "reserve_anchor_field",
+						"rule": {
+							"id": "special",
+							"trigger": {
+								"kind": "turn_start",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [
+								{
+									"kind": "gain_resource",
+									"target": "owner",
+									"amount": 1
+								}
+							],
+							"modifiers": [],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						},
+						"passive": {
+							"id": "passive",
+							"trigger": {
+								"kind": "passive",
+								"subject": "owner"
+							},
+							"conditions": {
+								"kind": "always"
+							},
+							"costs": [],
+							"effects": [],
+							"modifiers": [
+								{
+									"kind": "mana_capacity",
+									"target": "fleet",
+									"amount": 1,
+									"card_type": ""
+								}
+							],
+							"limit": "once_per_action",
+							"optional": false,
+							"zone": "ship"
+						}
+					}
+				]
+			},
+			"starter_two": "reserve_covering_fire",
+			"visual_rig": {
+				"id": "ship-breakwater",
+				"name": "Breakwater",
+				"kind": "ship",
+				"atlas": "ship-bastion-atlas.png",
+				"canvas": [
+					1000,
+					650
+				],
+				"parts": [
+					{
+						"id": "hull",
+						"region": [
+							291,
+							391,
+							1370,
+							414
+						],
+						"size": [
+							710,
+							214.5547
+						],
+						"pivot": [
+							0.5,
+							0.5
+						],
+						"pivot_px": [
+							685.0,
+							207.0
+						],
+						"z": 0,
+						"motion": {
+							"degrees": 0.16,
+							"bob_y": 2,
+							"period": 10.5,
+							"phase": 0.0
+						},
+						"position": [
+							510,
+							465
+						]
+					},
+					{
+						"id": "balloon",
+						"region": [
+							52,
+							33,
+							1823,
+							317
+						],
+						"size": [
+							920,
+							159.9781
+						],
+						"pivot": [
+							0.5,
+							0.5
+						],
+						"pivot_px": [
+							911.5,
+							158.5
+						],
+						"z": 1,
+						"motion": {
+							"degrees": 0.24,
+							"bob_y": 1.1,
+							"period": 12.5,
+							"phase": 1.4
+						},
+						"parent": "hull",
+						"anchor": [
+							0.5,
+							0.5
+						],
+						"offset": [
+							-5,
+							-280
+						]
+					}
+				],
+				"cables": [
+					{
+						"from": "balloon",
+						"from_uv": [
+							0.22,
+							0.93
+						],
+						"to": "hull",
+						"to_uv": [
+							0.12,
+							0.34
+						]
+					},
+					{
+						"from": "balloon",
+						"from_uv": [
+							0.37,
+							0.93
+						],
+						"to": "hull",
+						"to_uv": [
+							0.33,
+							0.32
+						]
+					},
+					{
+						"from": "balloon",
+						"from_uv": [
+							0.54,
+							0.93
+						],
+						"to": "hull",
+						"to_uv": [
+							0.52,
+							0.33
+						]
+					},
+					{
+						"from": "balloon",
+						"from_uv": [
+							0.72,
+							0.93
+						],
+						"to": "hull",
+						"to_uv": [
+							0.66,
+							0.34
+						]
+					}
+				],
+				"markers": [
+					{
+						"id": "attack",
+						"part": "hull",
+						"uv": [
+							0.96,
+							0.5
+						]
+					},
+					{
+						"id": "impact",
+						"part": "hull",
+						"uv": [
+							0.5,
+							0.5
+						]
+					}
+				]
+			}
 		}
 	],
 	"captains": [
@@ -1160,6 +1668,35 @@
 						"kind": "attack_damage",
 						"target": "owner",
 						"amount": 2,
+						"card_type": ""
+					}
+				],
+				"limit": "once_per_action",
+				"optional": false,
+				"zone": "captain"
+			}
+		},
+		{
+			"id": "mara",
+			"name": "Mara Flint",
+			"tier": 1,
+			"card": "reserve_field_orders",
+			"passive": {
+				"id": "captain_passive",
+				"trigger": {
+					"kind": "passive",
+					"subject": "owner"
+				},
+				"conditions": {
+					"kind": "always"
+				},
+				"costs": [],
+				"effects": [],
+				"modifiers": [
+					{
+						"kind": "repair_amount",
+						"target": "owner",
+						"amount": 1,
 						"card_type": ""
 					}
 				],
@@ -2837,6 +3374,546 @@
 						{
 							"kind": "draw",
 							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_brace",
+			"name": "Reserve Brace for Impact",
+			"owner": "breakwater",
+			"type": "Guard",
+			"traits": [],
+			"cost": 1,
+			"pays": 2,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "owner",
+							"amount": 6
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_escort",
+			"name": "Reserve Escort Screen",
+			"owner": "breakwater",
+			"type": "Guard",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "chosen_ally",
+							"amount": 4
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "repaired",
+						"subject": "owner"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "gain_resource",
+							"target": "owner",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_advance",
+			"name": "Reserve Shield Advance",
+			"owner": "breakwater",
+			"type": "Manoeuvre",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "move",
+							"target": "owner",
+							"destination": "chosen_slot",
+							"guard": 0
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Attack",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": {
+								"kind": "weapon_damage",
+								"target": "owner"
+							},
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_resonant_bulwark",
+			"name": "Reserve Resonant Bulwark",
+			"owner": "breakwater",
+			"type": "Guard",
+			"traits": [],
+			"cost": 0,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "owner",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "hull_damaged",
+						"subject": "adjacent"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "event_actor",
+							"amount": 3
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "adjacent_cover",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Guard"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_ramming_prow",
+			"name": "Reserve Ramming Prow",
+			"owner": "breakwater",
+			"type": "Attack",
+			"traits": [],
+			"cost": 2,
+			"pays": 2,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": {
+								"kind": "sum",
+								"values": [
+									{
+										"kind": "weapon_damage",
+										"target": "owner"
+									},
+									3
+								]
+							},
+							"hits": 1,
+							"range": "weapon"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Guard",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "formation_bonus",
+					"trigger": {
+						"kind": "passive",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Manoeuvre",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [],
+					"modifiers": [
+						{
+							"kind": "attack_damage",
+							"target": "self_card",
+							"amount": 2,
+							"card_type": ""
+						}
+					],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_anchor_field",
+			"name": "Reserve Anchor Field",
+			"owner": "breakwater",
+			"type": "Support",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_cover",
+							"target": "source_slot",
+							"amount": 4
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "bonus",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "adjacent",
+						"card_type": "Guard",
+						"minimum": 1
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_persistence",
+							"target": "self_card",
+							"amount": 1
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "adjacent_shields",
+					"trigger": {
+						"kind": "adjacent_card_played",
+						"subject": "adjacent",
+						"card_type": "Guard"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "event_actor",
+							"amount": 2
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_field_orders",
+			"name": "Reserve Field Orders",
+			"owner": "mara",
+			"type": "Guard",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "chosen_ally",
+							"amount": 4
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				}
+			]
+		},
+		{
+			"id": "reserve_covering_fire",
+			"name": "Reserve Covering Fire",
+			"owner": "breakwater",
+			"type": "Attack",
+			"traits": [],
+			"cost": 1,
+			"pays": 1,
+			"positions": [
+				"front",
+				"upper",
+				"lower",
+				"rear"
+			],
+			"rules": [
+				{
+					"id": "play",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_enemy",
+							"damage": 2,
+							"hits": 1,
+							"range": "Short"
+						}
+					],
+					"modifiers": [],
+					"limit": "once_per_action",
+					"optional": false,
+					"zone": "circle"
+				},
+				{
+					"id": "followup",
+					"trigger": {
+						"kind": "on_play",
+						"subject": "self_card"
+					},
+					"conditions": {
+						"kind": "always"
+					},
+					"costs": [],
+					"effects": [
+						{
+							"kind": "add_shields",
+							"target": "owner",
+							"amount": 2
 						}
 					],
 					"modifiers": [],

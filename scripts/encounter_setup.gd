@@ -46,9 +46,9 @@ func _build() -> void:
 	margin.add_child(outer)
 	var header := HBoxContainer.new()
 	outer.add_child(header)
+	_button(header, "Back to Fleet", _back)
 	var title := _label(header, "ENCOUNTER SETUP", 26)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_button(header, "Back to Fleet", _back)
 	_label(outer, "Drag monsters onto the formation. Rearrange placed monsters by dragging them between slots. Click a monster to inspect its stats and cards.")
 	var columns := HBoxContainer.new()
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL

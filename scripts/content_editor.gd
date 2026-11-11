@@ -106,6 +106,7 @@ func _build() -> void:
 	add_child(margin)
 	var outer := _box(margin)
 	var header := _box(outer, true)
+	_button(header, "Back", _request_menu)
 	var title := _label(header, "CONTENT EDITOR", 24)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dirty_label = _label(header, "", 13)
@@ -115,7 +116,6 @@ func _build() -> void:
 	save_button = _button(header, "Save All", _save)
 	revert_button = _button(header, "Revert Unsaved Changes", _revert)
 	test_button = _button(header, "Save & Test Battle", _test_battle)
-	_button(header, "Main Menu", _request_menu)
 	status = RichTextLabel.new()
 	status.custom_minimum_size.y = 44
 	status.fit_content = false
@@ -564,14 +564,17 @@ func _build_setup() -> void:
 	for key in ["repair", "revive_threshold"]:
 		setup_controls["basic_" + key] = _number(setup_form, key.replace("_", " ").capitalize(), int(draft.setup.basic_actions[key]), func(value): _edit(draft.setup.basic_actions, key, value), "", 1)
 	var fixed := CheckBox.new()
-	fixed.text = "Fixed seven-card opening hand"
+	var opening_size: int = 4 + draft.setup.fleet.size()
+	fixed.text = "Fixed %d-card opening hand" % opening_size
 	fixed.button_pressed = draft.setup.fixed_hand
 	setup_form.add_child(fixed)
 	setup_controls.fixed_hand = fixed
 	fixed.toggled.connect(func(value): draft.setup.fixed_hand = value; _dirty(); _build_setup.call_deferred())
 	if draft.setup.fixed_hand:
-		while draft.setup.opening_hand.size() < 7: draft.setup.opening_hand.append("")
-		for i in 7:
+		draft.setup.opening_hand.resize(opening_size)
+		for i in opening_size:
+			if draft.setup.opening_hand[i] == null: draft.setup.opening_hand[i] = ""
+		for i in opening_size:
 			setup_controls["opening_" + str(i)] = _menu(setup_form, "Card " + str(i + 1), _options("cards"), draft.setup.opening_hand[i], func(value): draft.setup.opening_hand[i] = value; _dirty())
 	_label(setup_form, "Shared enemy row draws three physical cards. More contributed copies mean more activation opportunities. Save validates pair ownership, counts, positions, and all references.", 12)
 
