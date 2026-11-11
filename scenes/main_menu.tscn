@@ -84,7 +84,7 @@ autowrap_mode = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
-text = "Start Game"
+text = "Custom Battle"
 
 [node name="EditorButton" type="Button" parent="Center/Panel/Margin/Content"]
 unique_name_in_owner = true

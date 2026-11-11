@@ -837,7 +837,7 @@ func _save() -> bool:
 	draft = ContentStore.snapshot()
 	_refresh()
 	_dirty()
-	_message("Saved project content. Start Game, Retry, and playtests use this setup. No Git commit was created.")
+	_message("Saved project content. Custom Battle, Retry, and playtests use this setup. No Git commit was created.")
 	return true
 
 
