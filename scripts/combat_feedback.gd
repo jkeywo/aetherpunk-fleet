@@ -4,6 +4,7 @@ signal enemy_presentation_started(kind: String, presentation: Dictionary)
 signal enemy_presentation_finished
 signal finished
 signal attack_started(attacker: int, target: int)
+signal area_attack_started(style: String, targets: Array)
 signal movement_started(paths: Dictionary)
 var duration_scale := 1.0
 var running := false
@@ -69,6 +70,8 @@ func play(events: Array, battle_view: Control) -> void:
 				await _apply_board(event.board)
 			"cards_drawn":
 				await _draw_cards(event.uids)
+			"area_attack":
+				await _area_attack_effect(event)
 			"damage", "repair", "guard":
 				await _stat_change(event)
 			"movement":
@@ -163,7 +166,11 @@ func _unit(id: int) -> Control:
 
 
 func _stat_change(event: Dictionary) -> void:
-	if event.kind=="damage":await _attack_effect(event)
+	if event.kind == "damage":
+		if event.get("attack_style", "") == "": await _attack_effect(event)
+		else:
+			attack_started.emit(int(event.get("attacker", -999)), int(event.target))
+			_flash_defences(event, _unit(int(event.target)))
 	await _apply_board(event.board)
 	var unit := _unit(event.target)
 	if unit == null:
@@ -258,18 +265,43 @@ func _attack_effect(event: Dictionary) -> void:
 	effect.start=_art_centre(source) if source!=null else effect.finish+Vector2(45 if attacker<0 else -45,0)
 	effect.tint=Color("#ffac79") if attacker<0 else Color("#8ceaff")
 	overlay.add_child(effect)
-	effect.impacted.connect(func():
-		if int(event.get("shields_absorbed",0))>0 and is_instance_valid(target):target.shield_fx.flash()
-		if int(event.get("cover_absorbed",0))>0:
-			var side: Control=view.enemies if int(event.target)<0 else view.allies
-			var formation: Array=event.board.enemy_formation if int(event.target)<0 else event.board.formation
-			var point: int=formation.find(-1-int(event.target) if int(event.target)<0 else int(event.target))
-			if side.cover_clouds.has(point):side.cover_clouds[point].flash())
+	effect.impacted.connect(func(): _flash_defences(event, target))
 	attack_started.emit(attacker,int(event.target))
 	var tween:=create_tween()
 	tween.tween_property(effect,"progress",1.0,_time(.30))
 	await tween.finished
 	effect.queue_free()
+
+func _flash_defences(event: Dictionary, target: Control) -> void:
+	if not is_instance_valid(target): return
+	if int(event.get("shields_absorbed", 0)) > 0: target.shield_fx.flash()
+	if int(event.get("cover_absorbed", 0)) > 0:
+		var side: Control = view.enemies if int(event.target) < 0 else view.allies
+		var formation: Array = event.board.enemy_formation if int(event.target) < 0 else event.board.formation
+		var point: int = formation.find(-1 - int(event.target) if int(event.target) < 0 else int(event.target))
+		if side.cover_clouds.has(point): side.cover_clouds[point].flash()
+
+
+func _area_attack_effect(event: Dictionary) -> void:
+	var effect = preload("res://scripts/visuals/area_attack_vfx.gd").new()
+	effect.style = event.style
+	effect.set_meta("area_vfx", event.style)
+	var source := _unit(int(event.attacker))
+	var target := _unit(int(event.target))
+	if target == null: effect.free(); return
+	effect.centre = _art_centre(target)
+	effect.start = _art_centre(source) if source != null else effect.centre + Vector2(-80, 0)
+	for id in event.targets:
+		var victim := _unit(int(id))
+		if victim != null: effect.impacts.append(_art_centre(victim))
+	effect.tint = Color("#ffac79") if event.style == "explosion" else Color("#8ceaff")
+	overlay.add_child(effect)
+	area_attack_started.emit(event.style, event.targets.duplicate())
+	var tween := create_tween()
+	tween.tween_property(effect, "progress", 1.0, _time(.55 if event.style == "explosion" else .45))
+	await tween.finished
+	effect.queue_free()
+
 
 func _art_centre(unit: Control) -> Vector2:
 	return unit.art.global_position+unit.art.size/2 if "art" in unit else unit.get_global_rect().get_center()

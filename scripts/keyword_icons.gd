@@ -3,6 +3,8 @@ extends RefCounted
 static var textures: Dictionary = {}
 static var matcher: RegEx
 const DEFINITIONS := {
+	"beam": ["Beam", "#8ceaff", "A piercing line: from Front or Rear hits enemy Front and Rear; from a flank hits the matching flank. Short range still excludes Rear.", "M2 8h20M2 12h20M2 16h20M8 5v14M17 5v14"],
+	"explosion": ["Explosion", "#ffac79", "Separate ordered effects on the main target and each occupied adjacent position. Targets are locked before the blast; empty slots are skipped.", "M12 2l2 6 6-4-3 7 5 2-7 2 3 7-6-4-5 4 2-7-7-2 6-2-3-7 7 4z"],
 	"cost": ["Cost", "#f0d49b", "Mana cost: pay with other hand cards and temporary mana crystals. Excess payment is lost.", "M12 3a9 9 0 110 18 9 9 0 010-18M10 8h3v9M9 17h7"],
 	"attack": ["Attack", "#ec756b", "Attack card / deal damage. Each hit resolves cover, armour, shields, then hull.", "M5 19L19 5M12 5h7v7M5 12v7h7"],
 	"guard": ["Guard", "#76b8fa", "Guard card: a defensive card type.", "M12 3L20 6v6c0 5-8 9-8 9S4 17 4 12V6z"],

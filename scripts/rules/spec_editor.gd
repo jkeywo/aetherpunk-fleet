@@ -93,7 +93,7 @@ func _build() -> void:
 				row.add_child(nested)
 				nested.configure("condition", spec[key], depth + 1)
 				nested.changed.connect(func(): changed.emit())
-			"conditions", "values":
+			"conditions", "values", "effects":
 				if not spec.has(key): spec[key] = initial.duplicate(true)
 				_list(row, key, meta.type)
 
@@ -129,10 +129,10 @@ func _value(parent: Node, initial: Variant, update: Callable) -> void:
 func _list(parent: Node, key: String, type: String) -> void:
 	var list: Array = spec[key]
 	var add := Button.new()
-	add.text = "Add condition" if type == "conditions" else "Add value"
+	add.text = {"conditions":"Add condition", "values":"Add value", "effects":"Add effect"}[type]
 	parent.add_child(add)
 	add.pressed.connect(func():
-		list.append({"kind": "always"} if type == "conditions" else 1)
+		list.append({"kind": "always"} if type == "conditions" else (R.fresh("effect", "attack").merged({"target":"area_target"}, true) if type == "effects" else 1))
 		_build()
 		changed.emit())
 	for index in list.size():
@@ -156,10 +156,10 @@ func _list(parent: Node, key: String, type: String) -> void:
 						list.insert(destination, item)
 				_build()
 				changed.emit())
-		if type == "conditions":
+		if type in ["conditions", "effects"]:
 			var nested = get_script().new()
 			column.add_child(nested)
-			nested.configure("condition", list[index], depth + 1)
+			nested.configure("condition" if type == "conditions" else "effect", list[index], depth + 1)
 			nested.changed.connect(func(): changed.emit())
 		else:
 			_value(column, list[index], func(value): list[index] = value; changed.emit())

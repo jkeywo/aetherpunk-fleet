@@ -301,13 +301,16 @@ static func validate(source: Variant) -> Array:
 	return errors
 
 
-static func _validate_effects(list: Variant, where: String, errors: Array) -> void:
+static func _validate_effects(list: Variant, where: String, errors: Array, depth: int = 0) -> void:
+	if depth > 16: return
 	if not list is Array: errors.append(where + " must be a list."); return
 	for effect in list:
 		Rules.validate_spec("effect", effect, where, errors)
 		if effect is Dictionary:
 			var desc := Rules.descriptor("effect", effect.get("kind", ""))
 			if not desc.is_empty() and not desc.contexts.has("stance"): errors.append(where + ": " + desc.title + " cannot execute as enemy stance/default activity.")
+			if effect.get("kind") == "explosion":
+				for key in ["main_effects", "adjacent_effects"]: _validate_effects(effect.get(key, []), where + "." + key, errors, depth + 1)
 
 
 static func _validate_unit(unit: Dictionary, where: String, errors: Array) -> void:

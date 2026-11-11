@@ -53,3 +53,29 @@ Modifier amounts add to their named statistic; cost amounts are discounts floore
 Common enemy reactions use the registered `reaction_trigger` condition chunk, with `family` of `card_type`, `position`, `damaged`, or `healed`. Only type and position have a choice parameter. Origin positions are captured when a card commits: Front=0, Upper Flank=1, Lower Flank=2, Rear=3. Type and position conditions require a genuinely played card; basic costs and payment discards do not count. Damaged means this enemy actually loses hull, and healed means a player ship regains hull (including basic repair/revival). All checks still happen after the completed action and its chains. Existing legacy condition trees continue to load unchanged, and the enemy editor offers four common families plus Custom trigger. Custom mode persists `custom_trigger: true`, exposes the full condition tree, and renders the old text layout.
 
 Reaction art lives in `assets/generated/reactions/`. `reaction_badge.gd` draws the shared imagegen frame around the existing card-type glyph or the generated position/damage/heal glyph. Standalone position glyphs use the player formation (Front right, Rear left). On reaction cards, `monster_portrait.gd` draws the position glyph behind the owning monster and mirrors it for enemy facing: Front left, Rear right, Upper/Lower Flanks up/down. Damage uses the Stormmaw leviathan, not an airship. Tooltips supply full trigger text. Row cards and enlarged presentations carry a detached `owner_visual` definition and reuse the same rig art as the owning monster.
+
+
+## Area effects
+
+`beam` is an attack with configurable `damage`, `hits`, and `range` (`weapon`, `Short`, or `Long`). It needs no target click. Resolve its lane using the attacker's current position after preceding movement: Front/Rear hits occupied opposing Front and Rear; Upper/Lower hits only the matching flank. Empty positions do not block it. Short range still cannot originate from Rear or hit Rear. Each victim receives its own normal attack and per-hit cover/armour/shields calculation; first-hit bonuses apply once per victim.
+
+`explosion` selects a main unit (`target`, normally `chosen_enemy`) and has a range plus two independently ordered lists: `main_effects` and `adjacent_effects`. Lock the main and occupied adjacent unit identities when the explosion starts. Complete main effects first, then apply the splash list separately to each neighbour in formation order. Defeating the main unit does not cancel splash; empty positions and defeated victims are skipped. A short explosion cannot originate from Rear or affect Rear. Nested attacks also respect their own range. The area queue supports normal draw/discard/scry suspension and resumes with the same bound targets.
+
+Inside those lists, `area_target` means the current main/splash unit. For Stun, `area_reaction` selects that unit's first unstunned visible reaction in row order; it suppresses one reaction for the fleet phase and has no effect if none is visible. Main-target stun and splash damage can therefore be authored independently:
+
+```json
+{
+  "kind": "explosion",
+  "target": "chosen_enemy",
+  "range": "Long",
+  "main_effects": [
+    {"kind": "attack", "target": "area_target", "damage": 6, "hits": 1, "range": "Long"},
+    {"kind": "stun", "target": "area_reaction"}
+  ],
+  "adjacent_effects": [
+    {"kind": "attack", "target": "area_target", "damage": 2, "hits": 1, "range": "Long"}
+  ]
+}
+```
+
+Both chunks appear in the generated effect editor. Each explosion list has Add effect, Remove, Up, and Down controls. Nested chunks retain validation and context restrictions. Both run through detached previews, normal trigger limits, payment/cancellation, and post-action monster reactions. Beam has a sustained cyan line through its victims; explosion has an orange projectile, shockwave, and radial sparks. Area feedback groups its visual while each victim keeps normal damage, defence, and hull-loss flash feedback. Keyword icons and tooltips distinguish both patterns. Existing content and immutable fixtures are unchanged.

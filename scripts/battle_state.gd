@@ -240,6 +240,7 @@ func targets(selector: String, c: Dictionary) -> Array:
 	match selector:
 		"owner": return [c.owner] if not unit(c.get("owner", -999)).is_empty() else []
 		"event_actor": return [event.actor] if not unit(event.get("actor", -999)).is_empty() else []
+		"area_target": return [c.area_target] if not unit(c.get("area_target", -999)).is_empty() else []
 		"event_target": return [event.target] if not unit(event.get("target", -999)).is_empty() else []
 		"chosen_ally": return [c.ally] if not unit(c.get("ally", -999)).is_empty() else []
 		"chosen_pair_first": return [c.pair_first] if c.get("pair_first", -1) >= 0 else []
@@ -276,6 +277,13 @@ func targets(selector: String, c: Dictionary) -> Array:
 		"event_stance": return [event.stance_uid] if enemy_row.has(event.get("stance_uid", -1)) else []
 		"chosen_reaction": return [c.reaction_target] if str(c.get("reaction_target", "")) != "" else []
 		"event_reaction": return [event.get("reaction_key", "")] if event.has("reaction_key") else []
+		"area_reaction":
+			for token in enemy_row:
+				if int(stance_cards[token].owner) != int(c.get("area_target", -999)): continue
+				for reaction in row_card(token).reactions:
+					var key := str(token) + "/" + str(reaction.id)
+					if not stunned.has(key): return [key]
+			return []
 	return []
 
 
@@ -420,7 +428,7 @@ func active_effects(uid: int, slot: int = -1, options: Dictionary = {}) -> Array
 
 func choice_flags(uid: int, slot: int = -1, options: Dictionary = {}) -> Dictionary:
 	var flags := {"ally": false, "movement": uid < 0, "adjacent": uid < 0, "enemy": false, "circle": false, "stance": false, "reaction": false, "slot": false, "recovery": false, "swap": false, "pair": false, "exclude_owner": false}
-	for effect in active_effects(uid, slot, options):
+	for effect in Rules.effect_tree(active_effects(uid, slot, options)):
 		for key in ["target", "first", "second"]:
 			match effect.get(key, ""):
 				"chosen_ally": flags.ally = true
@@ -534,9 +542,9 @@ func _effect_path(effects: Array, c: Dictionary, points: Array) -> String:
 			if occupied.size() > 1:
 				from = occupied.back()
 				to = occupied.front() if effect.kind == "swap_ends" else 0
-		elif effect.kind == "attack":
+		elif effect.kind in ["attack", "beam", "explosion"]:
 			var range_text: String = weapon_range(owner, c) if effect.get("range", "weapon") == "weapon" else effect.range
-			if range_text == "Short" and (points.find(owner) == 3 or (c.enemy != -999 and position_of(c.enemy) == 3)):
+			if range_text == "Short" and (points.find(owner) == 3 or (effect.kind != "beam" and c.enemy != -999 and position_of(c.enemy) == 3)):
 				return "Short attacks cannot originate from Rear or target Rear."
 		if from >= 0 and to >= 0:
 			var other: int = points[to]
@@ -617,9 +625,9 @@ func boost_options(uid: int, c: Dictionary = {}) -> Array:
 		context["event"] = event.duplicate(true)
 		var trigger_kind: String = source.rule.trigger.kind
 		var possible: bool = trigger_kind == "on_play"
-		if trigger_kind == "attack_started": possible = active_effects(uid, c.get("slot", first_slot())).any(func(e): return e.kind == "attack")
-		if trigger_kind == "moved": possible = uid < 0 or active_effects(uid, c.get("slot", first_slot())).any(func(e): return e.kind in ["move", "swap"])
-		if trigger_kind == "repaired": possible = c.has("basic_type") or active_effects(uid, c.get("slot", first_slot())).any(func(e): return e.kind in ["repair", "recovery"])
+		if trigger_kind == "attack_started": possible = Rules.effect_tree(active_effects(uid, c.get("slot", first_slot()))).any(func(e): return e.kind in ["attack", "beam"])
+		if trigger_kind == "moved": possible = uid < 0 or Rules.effect_tree(active_effects(uid, c.get("slot", first_slot()))).any(func(e): return e.kind in ["move", "swap"])
+		if trigger_kind == "repaired": possible = c.has("basic_type") or Rules.effect_tree(active_effects(uid, c.get("slot", first_slot()))).any(func(e): return e.kind in ["repair", "recovery"])
 		context.event.kind = trigger_kind
 		if possible and Rules.matches(source.rule.trigger, context) and Rules.condition(source.rule.get("conditions", {"kind": "always"}), context):
 			result.append(context)
@@ -699,6 +707,8 @@ func _emit(kind: String, c: Dictionary, extra: Dictionary = {}) -> void:
 		if source.rule.get("trigger", {}).get("kind") == "passive" or source.rule.get("optional", false): continue
 		var ctx := c.duplicate(true)
 		ctx.merge(source, true)
+		# A triggered rule is a fresh source, outside its cause's area envelope.
+		for key in ["attack_style", "area_range", "area_target"]: ctx.erase(key)
 		ctx["state"] = self
 		ctx["event"] = event.duplicate(true)
 		var ancestry: Array = c.get("ancestry", [])
@@ -771,6 +781,7 @@ func _drain() -> void:
 				elif c.uid < 0:
 					_record("ship_rule", {"target": c.owner, "rule_key":c.key, "rule_text":Rules.rule_text(rule,unit(c.owner).name), "title": c.title})
 				_prepend(_effect_jobs(rule.get("effects", []), c))
+			"area_visual": _record("area_attack", {"style":job.style, "attacker":int(c.owner), "target":job.target, "targets":job.targets})
 			"effect": Rules.execute(job.spec, c)
 			"hit": _hit(job, c)
 			"reaction_done":
@@ -916,15 +927,72 @@ func _enemy_target(owner: int, range_text: String) -> int:
 	return -999
 
 
-func effect_attack(p: Dictionary, c: Dictionary) -> bool:
+func _area_range(p: Dictionary, c: Dictionary) -> String:
+	if c.get("area_range") == "Short": return "Short"
+	return weapon_range(c.owner, c) if p.get("range", "weapon") == "weapon" else p.range
+
+
+func _area_legal(owner: int, target: int, range_text: String) -> bool:
+	return unit(target).get("hull", 0) > 0 and (range_text != "Short" or (position_of(owner) != 3 and position_of(target) != 3))
+
+
+func effect_beam(p: Dictionary, c: Dictionary) -> bool:
+	var origin := position_of(c.owner)
+	if origin < 0 or unit(c.owner).get("hull", 0) <= 0: return false
+	var points: Array = [0, 3] if origin in [0, 3] else [origin]
+	var opposing: Array = enemy_formation if int(c.owner) >= 0 else formation
+	var victims: Array = []
+	for point in points:
+		if opposing[point] < 0: continue
+		var target: int = -1 - int(opposing[point]) if int(c.owner) >= 0 else int(opposing[point])
+		if _area_legal(c.owner, target, _area_range(p, c)): victims.append(target)
+	if victims.is_empty(): return false
+	_record("area_attack", {"style":"beam", "attacker":int(c.owner), "targets":victims.duplicate(), "target":victims[0]})
+	var ctx := c.duplicate(true)
+	ctx["attack_style"] = "beam"
+	return effect_attack(p, ctx, victims)
+
+
+func effect_explosion(p: Dictionary, c: Dictionary) -> bool:
+	var configured: Dictionary = Rules.fresh("effect", "explosion").merged(p, true)
+	p = configured
+	if unit(c.owner).get("hull", 0) <= 0: return false
+	var range_text := _area_range(p, c)
+	var centres: Array = selected(p.merged({"target":p.get("target", "chosen_enemy")}), c)
+	if int(c.owner) < 0 and p.get("target", "chosen_enemy") in ["chosen_ally", "chosen_enemy"]:
+		var target := _enemy_target(c.owner, range_text)
+		centres = [target] if target != -999 else []
+	var jobs: Array = []
+	for centre in centres:
+		if not _area_legal(c.owner, centre, range_text): continue
+		var opposing: Array = enemy_formation if int(centre) < 0 else formation
+		var neighbours: Array = []
+		for point in Geometry.unit_neighbours(position_of(centre)):
+			if opposing[point] < 0: continue
+			var target: int = -1 - int(opposing[point]) if int(centre) < 0 else int(opposing[point])
+			if _area_legal(c.owner, target, range_text): neighbours.append(target)
+		# Freeze affected identities before the primary effects can move or defeat anything.
+		jobs.append({"kind":"area_visual", "ctx":c, "style":"explosion", "target":centre, "targets":[centre] + neighbours})
+		for target in [centre] + neighbours:
+			var ctx := c.duplicate(true)
+			ctx["area_target"] = target
+			ctx["attack_style"] = "explosion"
+			ctx["area_range"] = range_text
+			jobs.append_array(_effect_jobs(p.get("main_effects" if target == centre else "adjacent_effects", []), ctx))
+	_prepend(jobs)
+	return false
+
+
+func effect_attack(p: Dictionary, c: Dictionary, locked_targets: Variant = null) -> bool:
 	var owner: int = c.owner
 	if unit(owner).get("hull", 0) <= 0: return false
 	var range_text: String = weapon_range(owner, c) if p.get("range", "weapon") == "weapon" else p.range
-	var targets_list: Array = selected(p.merged({"target": p.get("target", "chosen_enemy")}), c)
-	if owner < 0 and p.get("target", "chosen_ally") in ["chosen_ally", "chosen_enemy"]:
+	var targets_list: Array = selected(p.merged({"target": p.get("target", "chosen_enemy")}), c) if locked_targets == null else locked_targets
+	if c.get("area_range") == "Short": range_text = "Short"
+	if locked_targets == null and owner < 0 and p.get("target", "chosen_ally") in ["chosen_ally", "chosen_enemy"]:
 		var target := _enemy_target(owner, range_text)
 		targets_list = [target] if target != -999 else []
-	elif targets_list.is_empty() and owner >= 0 and not p.has("filter"):
+	elif locked_targets == null and targets_list.is_empty() and owner >= 0 and not p.has("filter") and p.get("target", "chosen_enemy") != "area_target":
 		var fallback: int = int(c.get("event", {}).get("target", -999))
 		if fallback < 0 and not unit(fallback).is_empty() and unit(fallback).hull > 0: targets_list = [fallback]
 		else:
@@ -969,7 +1037,7 @@ func _hit(job: Dictionary, c: Dictionary) -> void:
 	u.hull -= hull_lost
 	if _mode == "player" and target < 0:
 		root_context.damage[target] = int(root_context.damage.get(target, 0)) + hull_lost
-	var metrics := {"attacker": int(c.owner), "incoming_damage": incoming, "target": target, "amount": hull_lost, "hull_damage": hull_lost, "cover_absorbed": cover_absorbed, "armour_absorbed": armour_absorbed, "shields_absorbed": shields_absorbed, "blocked": cover_absorbed + armour_absorbed + shields_absorbed, "hit_id": hit_id, "hit_index": job.index, "hit_total": job.total}
+	var metrics := {"attacker": int(c.owner), "incoming_damage": incoming, "target": target, "amount": hull_lost, "hull_damage": hull_lost, "cover_absorbed": cover_absorbed, "armour_absorbed": armour_absorbed, "shields_absorbed": shields_absorbed, "blocked": cover_absorbed + armour_absorbed + shields_absorbed, "hit_id": hit_id, "hit_index": job.index, "hit_total": job.total, "attack_style": c.get("attack_style", "")}
 	if _mode == "player" and target < 0:
 		if not root_context.has("metrics"): root_context["metrics"] = {}
 		if not root_context.metrics.has(target): root_context.metrics[target] = {}

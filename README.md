@@ -49,6 +49,8 @@ Both sides use Front, Upper Middle, Lower Middle, and Rear diamond positions. Sh
 
 Each attack locks one target. Hits stop when it dies. Each hit resolves **slot cover → armour → shields → hull**. Armour reduces every hit without being consumed. Generic attack bonuses apply to the first hit; per-hit bonuses are separate chunks. Damage-threshold reactions use actual hull loss. Enemy-phase attacks retain escalation: +1 damage per round after round 3.
 
+The effect editor also offers **Beam attack** (Front/Rear pierces both opposing ends; flanks hit their matching flank) and **Explosion** (separate ordered effects for the main target and each adjacent unit). Both respect range, armour, previews and reaction timing, with distinct cyan beam and orange shockwave effects. Explosion child effects use `area_target`; Stun can use `area_reaction` for that target's first visible reaction. See `docs/RULE_CHUNKS.md` for an example.
+
 Drag a ship's own card onto it for a basic repair, onto an adjacent living ally to swap, or onto an adjacent empty position to move. These actions resolve immediately on drop and discard the card without paying its printed mana cost or running its On Play rules. There is no separate manoeuvre or confirmation button. Repair restores 2 hull. A defeated ship accumulates recovery and revives with 4 hull when it reaches 4 recovery, occupying its former position if free, otherwise the first empty position. Recovery and movement have appropriate highlights and tooltips. The basic discard and actual repair/revival/movement can trigger authored rules.
 
 ### Magic circle, persistence, and rounds

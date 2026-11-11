@@ -3,7 +3,7 @@ extends RefCounted
 static var catalog: Dictionary = {}
 const TYPES := ["Attack", "Guard", "Manoeuvre", "Support"]
 const LIMITS := ["once_per_action", "once_per_turn", "once_per_hit"]
-const UNIT_TARGETS := ["owner", "event_actor", "event_target", "chosen_ally", "chosen_enemy", "all_allies", "all_enemies", "fleet_front", "fleet_rear", "fleet_ends", "fleet_middle"]
+const UNIT_TARGETS := ["owner", "event_actor", "event_target", "area_target", "chosen_ally", "chosen_enemy", "all_allies", "all_enemies", "fleet_front", "fleet_rear", "fleet_ends", "fleet_middle"]
 const TARGETS := ["owner", "event_actor", "event_target", "chosen_ally", "chosen_enemy", "all_allies", "all_enemies", "source_slot", "chosen_slot", "event_slot", "self_card", "chosen_circle_card", "adjacent_cards", "chosen_stance", "chosen_reaction"]
 const ZONES := ["circle", "discard_top", "hand", "discard", "ship", "captain", "stance", "any"]
 
@@ -42,6 +42,8 @@ static func ensure() -> void:
 	add("condition", "persistence_at_least", "Persistence at least", {"target": field("target", "self_card", 0, ["self_card", "chosen_circle_card"]), "amount": field("value", 1)}, _persistence)
 	add("condition", "metric_at_least", "Event metric at least", {"metric": field("enum", "hull_damage", 0, ["amount", "hull_damage", "cover_absorbed", "armour_absorbed", "shields_absorbed", "printed_cost", "healed"]), "amount": field("value", 1)}, _metric)
 	add("effect", "attack", "Attack", {"target": field("target", "chosen_enemy", 0, UNIT_TARGETS), "damage": field("value", {"kind": "weapon_damage", "target": "owner"}), "hits": field("value", 1, 1), "range": field("enum", "weapon", 0, ["weapon", "Short", "Long"])}, _attack, UNIT_TARGETS)
+	add("effect", "beam", "Beam attack", {"damage": field("value", {"kind": "weapon_damage", "target": "owner"}), "hits": field("value", 1, 1), "range": field("enum", "weapon", 0, ["weapon", "Short", "Long"])}, _beam)
+	add("effect", "explosion", "Explosion", {"target": field("target", "chosen_enemy", 0, UNIT_TARGETS), "range": field("enum", "weapon", 0, ["weapon", "Short", "Long"]), "main_effects": field("effects", [{"kind":"attack", "target":"area_target", "damage":4, "hits":1, "range":"weapon"}]), "adjacent_effects": field("effects", [{"kind":"attack", "target":"area_target", "damage":2, "hits":1, "range":"weapon"}])}, _explosion, UNIT_TARGETS)
 	for kind in ["add_shields", "repair", "recovery", "gain_resource", "spend_resource"]:
 		add("effect", kind, kind.replace("_", " ").capitalize(), {"target": field("target", "owner", 0, UNIT_TARGETS), "amount": field("value", 2)}, _unit_effect.bind(kind), UNIT_TARGETS)
 	add("effect", "add_cover", "Add slot cover", {"target": field("target", "source_slot", 0, ["source_slot", "chosen_slot", "event_slot"]), "amount": field("value", 2)}, _cover, ["source_slot", "chosen_slot", "event_slot"])
@@ -52,7 +54,7 @@ static func ensure() -> void:
 	add("effect", "draw", "Draw cards", {"amount": field("value", 1)}, _draw)
 	add("effect", "discard", "Discard cards from hand", {"amount": field("value", 1)}, _discard)
 	add("effect", "scry", "Scry and choose cards", {"look": field("value", 3, 1), "take": field("value", 1)}, _scry)
-	add("effect", "stun", "Suppress a visible reaction", {"target": field("target", "chosen_reaction", 0, ["chosen_reaction", "event_reaction"])}, _stun)
+	add("effect", "stun", "Suppress a visible reaction", {"target": field("target", "chosen_reaction", 0, ["chosen_reaction", "event_reaction", "area_reaction"])}, _stun)
 	add("effect", "confuse", "Discard and replace a visible stance", {"target": field("target", "chosen_stance", 0, ["chosen_stance", "event_stance"])}, _confuse)
 	add("effect", "add_persistence", "Add persistence tokens", {"target": field("target", "self_card", 0, ["self_card", "chosen_circle_card", "adjacent_cards"]), "amount": field("value", 1)}, _add_persistence)
 	add("effect", "gain_mana", "Gain temporary mana", {"amount": field("value", 1)}, _gain_mana)
@@ -87,7 +89,7 @@ static func ensure() -> void:
 			d.fields["filter"] = field("condition", {"kind": "always"})
 
 	for id in catalog.effect:
-		if id not in ["attack", "add_shields", "repair", "add_cover", "swap_ends", "rear_to_front"]:
+		if id not in ["attack", "beam", "explosion", "add_shields", "repair", "add_cover", "swap_ends", "rear_to_front"]:
 			catalog.effect[id].contexts = ["card", "ship", "captain", "upgrade"]
 
 	for category in catalog:
@@ -199,16 +201,28 @@ static func validate_spec(category: String, spec: Variant, where: String, errors
 					errors.append(where + "." + key + ": needs text.")
 			"value", "condition":
 				validate_spec(meta.type, value, where + "." + key, errors, depth + 1)
-			"conditions", "values":
+			"conditions", "values", "effects":
 				if not value is Array:
 					errors.append(where + "." + key + ": needs a list.")
 				else:
 					for i in value.size():
-						validate_spec("condition" if meta.type == "conditions" else "value", value[i], where + "." + key + "[" + str(i) + "]", errors, depth + 1)
+						validate_spec({"conditions":"condition", "values":"value", "effects":"effect"}[meta.type], value[i], where + "." + key + "[" + str(i) + "]", errors, depth + 1)
 	if category == "effect" and spec.kind == "scry" and spec.get("look", 3) is int and spec.get("take", 1) is int and spec.get("take", 1) > spec.get("look", 3):
 		errors.append(where + ": scry take cannot exceed look.")
-	if category == "effect" and spec.kind == "attack" and spec.get("hits", 1) is int and spec.get("hits", 1) < 1:
+	if category == "effect" and spec.kind in ["attack", "beam"] and spec.get("hits", 1) is int and spec.get("hits", 1) < 1:
 		errors.append(where + ": an attack needs at least one hit.")
+
+
+static func effect_tree(effects: Array, depth: int = 0) -> Array:
+	var result: Array = []
+	if depth > 16: return result
+	for effect in effects:
+		if not effect is Dictionary: continue
+		result.append(effect)
+		if effect.get("kind") == "explosion":
+			for key in ["main_effects", "adjacent_effects"]:
+				if effect.get(key, []) is Array: result.append_array(effect_tree(effect.get(key, []), depth + 1))
+	return result
 
 
 static func validate_rule(value: Variant, where: String, errors: Array, context: String = "") -> void:
@@ -232,7 +246,7 @@ static func validate_rule(value: Variant, where: String, errors: Array, context:
 	if context != "":
 		var zones: Array = ["circle", "hand", "discard", "discard_top", "any"] if context == "card" else ["ship", "captain", "any"]
 		if not zones.has(value.get("zone", "circle")): errors.append(where + ": zone is incompatible with " + context + ".")
-		for effect in value.get("effects", []):
+		for effect in effect_tree(value.get("effects", [])):
 			if not effect is Dictionary: continue
 			var desc := descriptor("effect", effect.get("kind", ""))
 			if not desc.is_empty() and not desc.contexts.has(context): errors.append(where + ": " + desc.title + " is incompatible with " + context + ".")
@@ -255,7 +269,7 @@ static func validate_rule(value: Variant, where: String, errors: Array, context:
 
 
 static func _target_text(selector: String) -> String:
-	return {"owner": "{{rule_owner}}", "event_actor": "that card's owner", "event_target": "that target", "chosen_ally": "chosen ally", "chosen_enemy": "chosen enemy", "all_allies": "all player ships", "all_enemies": "all enemies", "self_card": "this card", "adjacent_cards": "adjacent cards", "source_slot": "this slot", "fleet": "the fleet"}.get(selector, selector.replace("_", " "))
+	return {"owner": "{{rule_owner}}", "event_actor": "that card's owner", "event_target": "that target", "area_target": "area target", "chosen_ally": "chosen ally", "chosen_enemy": "chosen enemy", "all_allies": "all player ships", "all_enemies": "all enemies", "self_card": "this card", "adjacent_cards": "adjacent cards", "source_slot": "this slot", "fleet": "the fleet"}.get(selector, selector.replace("_", " "))
 
 
 static func _named_text(value: String, owner_name: String) -> String:
@@ -434,6 +448,8 @@ static func _persistence(p: Dictionary, c: Dictionary) -> bool:
 	return false
 static func _metric(p: Dictionary, c: Dictionary) -> bool: return int(c.get("event", {}).get(p.get("metric", "hull_damage"), 0)) >= number(p.get("amount", 1), c)
 static func _attack(p: Dictionary, c: Dictionary) -> bool: return c.state.effect_attack(p, c)
+static func _beam(p: Dictionary, c: Dictionary) -> bool: return c.state.effect_beam(p, c)
+static func _explosion(p: Dictionary, c: Dictionary) -> bool: return c.state.effect_explosion(p, c)
 static func _unit_effect(p: Dictionary, c: Dictionary, kind: String) -> bool: return c.state.effect_unit(kind, p, c)
 static func _cover(p: Dictionary, c: Dictionary) -> bool: return c.state.effect_cover(p, c)
 static func _move(p: Dictionary, c: Dictionary) -> bool: return c.state.effect_move(p, c)
@@ -532,6 +548,14 @@ static func _formatted(category: String, p: Dictionary) -> String:
 		var target: String = "" if p.get("target", "owner") == "chosen_ally" else " → " + _target_text(p.get("target", "owner"))
 		match kind:
 			"attack": return "Attack %s × %s [%s]" % [_raw_text("value", p.get("hits", 1)), _raw_text("value", p.get("damage", {"kind": "weapon_damage"})), p.get("range", "weapon")] + ("" if p.get("target", "chosen_enemy") in ["chosen_enemy", "chosen_ally"] else " → " + _target_text(p.get("target", "chosen_enemy")))
+			"beam": return "Beam %s × %s [%s]; Front/Rear pierces both ends, flank hits matching flank" % [_raw_text("value", p.get("hits", 1)), _raw_text("value", p.get("damage", {"kind":"weapon_damage"})), p.get("range", "weapon")]
+			"explosion":
+				p = fresh("effect", "explosion").merged(p, true)
+				var primary: Array = []
+				var splash: Array = []
+				for effect in p.get("main_effects", []): primary.append(_raw_text("effect", effect))
+				for effect in p.get("adjacent_effects", []): splash.append(_raw_text("effect", effect))
+				return "Explosion [%s]: main target {%s}; each adjacent {%s}" % [p.get("range", "weapon"), "; ".join(primary) if not primary.is_empty() else "none", "; ".join(splash) if not splash.is_empty() else "none"]
 			"add_shields": return "+" + amount + " shields" + target
 			"repair": return "Repair " + amount + target
 			"recovery": return "Repair/recover " + amount + target
@@ -543,7 +567,7 @@ static func _formatted(category: String, p: Dictionary) -> String:
 			"draw": return "Draw " + amount
 			"discard": return "Discard " + amount + " from hand"
 			"scry": return "Scry " + _raw_text("value", p.get("look", 3)) + ", take " + _raw_text("value", p.get("take", 1)) + "; order top/discard"
-			"stun": return "Stun one visible reaction until fleet phase ends"
+			"stun": return "Stun area target’s first visible reaction until fleet phase ends" if p.get("target") == "area_reaction" else "Stun one visible reaction until fleet phase ends"
 			"confuse": return "Confuse: replace a visible stance"
 			"add_persistence": return "+" + amount + " persistence" + ("" if p.get("target", "self_card") == "self_card" else target)
 			"gain_mana": return "Gain " + amount + " temporary mana"
