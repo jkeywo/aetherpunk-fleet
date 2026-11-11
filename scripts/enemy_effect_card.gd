@@ -28,7 +28,21 @@ func configure(kind: String, data: Dictionary) -> void:
 	header.add_theme_font_size_override("font_size",15)
 	header.modulate = style.border_color
 	column.add_child(header)
-	for pair in [[data.get("owner_name","Enemy"),16],[data.get("name","Enemy activity"),24],[data.get("stance_name",""),13]]:
+	var owner_row:=HBoxContainer.new()
+	column.add_child(owner_row)
+	var position_condition: Dictionary = data.get("conditions",{}) if not data.get("custom_trigger",false) else {}
+	var is_position: bool = position_condition.get("kind")=="reaction_trigger" and position_condition.get("family")=="position"
+	var portrait:=preload("res://scripts/monster_portrait.gd").new()
+	portrait.configure(data.get("owner_visual",{}),position_condition,Vector2(140,68) if is_position else Vector2(72,34))
+	portrait.rig.set_meta("owner_portrait",data.get("owner",-999))
+	owner_row.add_child(portrait)
+	var owner_label:=Label.new()
+	owner_label.text=data.get("owner_name","Enemy")
+	owner_label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+	owner_label.set_meta("plain_text",true)
+	owner_label.add_theme_font_size_override("font_size",16)
+	owner_row.add_child(owner_label)
+	for pair in [[data.get("name","Enemy activity"),24],[data.get("stance_name",""),13]]:
 		if str(pair[0]).is_empty(): continue
 		var label := Label.new()
 		label.set_meta("plain_text",true)
@@ -37,10 +51,17 @@ func configure(kind: String, data: Dictionary) -> void:
 		label.add_theme_font_size_override("font_size",pair[1])
 		column.add_child(label)
 	if kind == "reaction_triggered":
-		var condition := Text.new()
-		condition.fit_content = true
-		condition.configure(Rules.reaction_condition_text(data.get("conditions",{"kind":"always"}),data.get("owner_name","")),16)
-		column.add_child(condition)
+		if data.get("conditions",{}).get("kind") == "reaction_trigger" and not data.get("custom_trigger",false):
+			if not is_position:
+				var badge:=preload("res://scripts/reaction_badge.gd").new()
+				badge.configure(data.conditions,64)
+				badge.size_flags_horizontal=Control.SIZE_SHRINK_BEGIN
+				column.add_child(badge)
+		else:
+			var condition := Text.new()
+			condition.fit_content = true
+			condition.configure(Rules.reaction_condition_text(data.get("conditions",{"kind":"always"}),data.get("owner_name","")),16)
+			column.add_child(condition)
 	column.add_child(HSeparator.new())
 	effects_text = Text.new()
 	effects_text.fit_content = true
@@ -52,5 +73,5 @@ func configure(kind: String, data: Dictionary) -> void:
 	_ignore_mouse(self)
 
 func _ignore_mouse(node: Node) -> void:
-	if node is Control: node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if node is Control: node.mouse_filter = Control.MOUSE_FILTER_PASS if node.has_meta("reaction_badge") else Control.MOUSE_FILTER_IGNORE
 	for child in node.get_children(): _ignore_mouse(child)

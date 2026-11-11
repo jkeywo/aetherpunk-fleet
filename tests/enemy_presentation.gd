@@ -19,6 +19,7 @@ func _run() -> void:
 		if attacker<0: visible_during_attacks = visible_during_attacks and is_instance_valid(b.feedback.enemy_card) and b.feedback.enemy_card.visible)
 	stage_card(b,"brace",0)
 	await settle(b)
+	expect(opened.all(func(item):return item.data.get("owner_visual",{}).get("id","")==b.state.unit(item.data.owner).id),"Enlarged enemy card lost its owning monster visual identity.")
 	expect(not opened.is_empty() and opened.all(func(item):return item.kind=="reaction_triggered" and item.data.name=="Counterstrike"),"Reactions did not show their own full-size effect card.")
 	expect(centered and visible_during_attacks and not unlocked_during_effect,"Enemy card was not centered or disappeared/unlocked during attack animation.")
 	expect(not is_instance_valid(b.feedback.enemy_card) and b.feedback.overlay.get_child_count()==1,"Reaction presentation leaked nodes after resolving.")

@@ -53,21 +53,46 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 		var margin := MarginContainer.new()
 		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 8)
+		for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 6)
 		button.add_child(margin)
 		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation",2)
 		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		margin.add_child(column)
+		var owner_row:=HBoxContainer.new()
+		owner_row.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		column.add_child(owner_row)
+		var portrait:=preload("res://scripts/rig_view.gd").new()
+		portrait.custom_minimum_size=Vector2(48,24)
+		portrait.set_meta("owner_portrait",stance.get("owner",-999))
+		portrait.configure_data(stance.get("owner_visual",{}),true)
+		owner_row.add_child(portrait)
 		var heading := Label.new()
+		heading.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 		heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		heading.add_theme_font_size_override("font_size", 11)
 		heading.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		heading.text = "%d: %s · %s" % [index + 1, stance.get("owner_name", "Enemy"), stance.name]
-		column.add_child(heading)
+		owner_row.add_child(heading)
 		for reaction in stance.get("reactions",[]):
 			var react := Button.new()
 			var key := str(stance.uid)+"/"+str(reaction.id)
 			react.text=("Stunned: " if stunned.has(key) else "Reaction: ")+Rules.reaction_condition_text(reaction.conditions,stance.get("owner_name", ""))+" → "+Catalog.effects_text(reaction.effects, stance.get("owner_name", ""))
+			if reaction.conditions.get("kind") == "reaction_trigger" and not reaction.get("custom_trigger",false):
+				react.text=("Stunned: " if stunned.has(key) else "")+"→ "+Catalog.effects_text(reaction.effects,stance.get("owner_name",""))
+				react.custom_minimum_size.y=36
+				react.set_meta("keyword_left_padding",44)
+				var badge: Control
+				if reaction.conditions.get("family")=="position":
+					badge=preload("res://scripts/monster_portrait.gd").new()
+					badge.configure(stance.get("owner_visual",{}),reaction.conditions,Vector2(44,34))
+					react.set_meta("keyword_left_padding",54)
+				else:
+					badge=preload("res://scripts/reaction_badge.gd").new()
+					badge.configure(reaction.conditions,34)
+				badge.position=Vector2(4,1)
+				react.add_child(badge)
+				if stunned.has(key):badge.modulate=Color("#83929b")
 			react.add_theme_font_size_override("font_size",10)
 			react.clip_text=true
 			for state in ["normal","hover","pressed","hover_pressed"]:
@@ -88,7 +113,8 @@ func configure(cards: Array, stunned: Dictionary = {}, highlighted: int = -1) ->
 		body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		body.add_theme_font_size_override("font_size", 10)
 		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		body.max_lines_visible = 5
+		body.max_lines_visible = 1
+		body.text_overrun_behavior=TextServer.OVERRUN_TRIM_ELLIPSIS
 		body.text = "Intent: " + Catalog.effects_text(stance.get("effects",[]), stance.get("owner_name", ""))
 		column.add_child(body)
 		button.tooltip_text = "%s: %s\n" % [stance.get("owner_name", "Enemy"), stance.name]

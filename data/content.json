@@ -2876,14 +2876,9 @@
 							"name": "Buffeting Wings",
 							"category": "Disruption",
 							"conditions": {
-								"kind": "all",
-								"items": [
-									{
-										"kind": "card_matches",
-										"target": "event_card",
-										"trait": "Movement"
-									}
-								]
+								"kind": "reaction_trigger",
+								"family": "card_type",
+								"card_type": "Manoeuvre"
 							},
 							"effects": [
 								{
@@ -2915,14 +2910,8 @@
 							"name": "Violent Recoil",
 							"category": "Retaliation",
 							"conditions": {
-								"kind": "all",
-								"items": [
-									{
-										"kind": "metric_at_least",
-										"metric": "hull_damage",
-										"amount": 8
-									}
-								]
+								"kind": "reaction_trigger",
+								"family": "damaged"
 							},
 							"effects": [
 								{
@@ -2954,24 +2943,9 @@
 							"name": "Predator’s Lunge",
 							"category": "Retaliation",
 							"conditions": {
-								"kind": "all",
-								"items": [
-									{
-										"kind": "card_matches",
-										"target": "event_card",
-										"trait": "Attack"
-									},
-									{
-										"kind": "any",
-										"items": [
-											{
-												"kind": "position",
-												"target": "event_actor",
-												"position": "front"
-											}
-										]
-									}
-								]
+								"kind": "reaction_trigger",
+								"family": "position",
+								"position": "front"
 							},
 							"effects": [
 								{
@@ -3007,14 +2981,8 @@
 							"name": "Aether Scent",
 							"category": "Retaliation",
 							"conditions": {
-								"kind": "all",
-								"items": [
-									{
-										"kind": "metric_at_least",
-										"metric": "healed",
-										"amount": 1
-									}
-								]
+								"kind": "reaction_trigger",
+								"family": "healed"
 							},
 							"effects": [
 								{
@@ -3049,14 +3017,9 @@
 							"name": "Gathering Static",
 							"category": "Retaliation",
 							"conditions": {
-								"kind": "all",
-								"items": [
-									{
-										"kind": "metric_at_least",
-										"metric": "printed_cost",
-										"amount": 2
-									}
-								]
+								"kind": "reaction_trigger",
+								"family": "position",
+								"position": "rear"
 							},
 							"effects": [
 								{
@@ -3088,14 +3051,9 @@
 							"name": "Tail Sweep",
 							"category": "Disruption",
 							"conditions": {
-								"kind": "all",
-								"items": [
-									{
-										"kind": "card_matches",
-										"target": "event_card",
-										"trait": "Guard"
-									}
-								]
+								"kind": "reaction_trigger",
+								"family": "card_type",
+								"card_type": "Guard"
 							},
 							"effects": [
 								{
@@ -3164,16 +3122,50 @@
 			"stances": [
 				{
 					"id": "strike",
-					"name": "Hunting Pass",
+					"name": "Upper Flank Pass",
 					"reactions": [
 						{
 							"id": "counter",
-							"name": "Type Counter",
+							"name": "Upper Flank Watch",
 							"category": "Retaliation",
 							"conditions": {
-								"kind": "card_matches",
-								"target": "event_card",
-								"card_type": "Attack"
+								"kind": "reaction_trigger",
+								"family": "position",
+								"position": "upper"
+							},
+							"effects": [
+								{
+									"kind": "attack",
+									"target": "chosen_ally",
+									"damage": 2,
+									"hits": 1,
+									"range": "Short"
+								}
+							]
+						}
+					],
+					"effects": [
+						{
+							"kind": "attack",
+							"target": "chosen_ally",
+							"damage": 4,
+							"hits": 1,
+							"range": "Short"
+						}
+					]
+				},
+				{
+					"id": "lower_pass",
+					"name": "Lower Flank Pass",
+					"reactions": [
+						{
+							"id": "counter",
+							"name": "Lower Flank Watch",
+							"category": "Retaliation",
+							"conditions": {
+								"kind": "reaction_trigger",
+								"family": "position",
+								"position": "lower"
 							},
 							"effects": [
 								{
@@ -3200,7 +3192,11 @@
 			"stance_loadout": [
 				{
 					"stance": "strike",
-					"count": 3
+					"count": 2
+				},
+				{
+					"stance": "lower_pass",
+					"count": 1
 				}
 			]
 		},
@@ -3232,8 +3228,8 @@
 							"name": "Type Counter",
 							"category": "Retaliation",
 							"conditions": {
-								"kind": "card_matches",
-								"target": "event_card",
+								"kind": "reaction_trigger",
+								"family": "card_type",
 								"card_type": "Attack"
 							},
 							"effects": [

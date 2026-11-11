@@ -485,7 +485,7 @@ func _enemy_form(form: Node, entry: Dictionary) -> void:
 	var add := _box(form, true)
 	_label(add, "REACTIONS / first matching rule per enemy", 14)
 	_button(add, "Add Reaction", func():
-		stance.reactions.append({"id": _id(stance.reactions, "reaction"), "name": "New Reaction", "category": "Retaliation", "conditions": {"kind": "card_matches", "target": "event_card", "card_type": "Attack"}, "effects": [{"kind": "attack", "target": "chosen_ally", "damage": 2, "hits": 1, "range": "weapon"}]})
+		stance.reactions.append({"id": _id(stance.reactions, "reaction"), "name": "New Reaction", "category": "Retaliation", "conditions": {"kind": "reaction_trigger", "family": "card_type", "card_type": "Attack"}, "effects": [{"kind": "attack", "target": "chosen_ally", "damage": 2, "hits": 1, "range": "weapon"}]})
 		_dirty(); _rebuild_form())
 	for index in stance.reactions.size():
 		var reaction: Dictionary = stance.reactions[index]
@@ -493,10 +493,24 @@ func _enemy_form(form: Node, entry: Dictionary) -> void:
 		_tools(column, stance.reactions, index)
 		_line(column, "Name", reaction, "name")
 		_line(column, "Category", reaction, "category")
-		var spec := Spec.new()
-		column.add_child(spec)
-		spec.configure("condition", reaction.conditions)
-		spec.changed.connect(func(): _dirty(); _live_preview())
+		var labels: Array=[{"label":"Played card type","value":"card_type"},{"label":"Played from position","value":"position"},{"label":"On monster damaged","value":"damaged"},{"label":"On heal","value":"healed"}]
+		var family: String = reaction.conditions.get("family", "custom") if reaction.conditions.get("kind") == "reaction_trigger" and not reaction.get("custom_trigger",false) else "custom"
+		labels.append({"label":"Custom trigger","value":"custom"})
+		_menu(column,"Trigger",labels,family,func(value):
+			if value == "custom":
+				reaction.custom_trigger=true
+			else:
+				reaction.erase("custom_trigger")
+				reaction.conditions={"kind":"reaction_trigger","family":value,"card_type":"Attack","position":"front"}
+			_dirty(); _rebuild_form(); _live_preview(), "reaction_trigger_" + reaction.id)
+		if family == "card_type": _menu(column,"Card type",R.TYPES,reaction.conditions.get("card_type","Attack"),func(value): reaction.conditions.card_type=value; _dirty(); _live_preview(),"reaction_type_"+reaction.id)
+		elif family == "position": _menu(column,"Played from",[{"label":"Front","value":"front"},{"label":"Upper Flank","value":"upper"},{"label":"Lower Flank","value":"lower"},{"label":"Rear","value":"rear"}],reaction.conditions.get("position","front"),func(value): reaction.conditions.position=value; _dirty(); _live_preview(),"reaction_position_"+reaction.id)
+		elif family == "custom":
+			var spec:=Spec.new()
+			spec.set_meta("custom_reaction",reaction.id)
+			column.add_child(spec)
+			spec.configure("condition",reaction.conditions)
+			spec.changed.connect(func(): _dirty(); _live_preview())
 		_effects(column, reaction.effects)
 	_effects(form, stance.effects, "ENEMY-PHASE ACTIVATION")
 
@@ -648,6 +662,8 @@ func _live_preview() -> void:
 			var stance: Dictionary = entry.stances[index].duplicate(true)
 			stance["uid"] = 0
 			stance["owner_name"] = entry.name
+			stance["owner_visual"] = {"id":entry.id}
+			if entry.has("visual_rig"): stance.owner_visual["visual_rig"] = entry.visual_rig.duplicate(true)
 			row.configure([stance])
 			_label(preview_form, "Default: " + Catalog.effects_text(entry.default_action, entry.name), 12)
 		else:

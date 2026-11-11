@@ -1,0 +1,35 @@
+{
+  "generator": "Built-in image_gen",
+  "reference": "https://reggiegames.com/pages/downloads",
+  "reference_use": "Primal core rulebook reaction icon style only; original artwork. Damage glyph references this game's Stormmaw atlas. Card-type glyphs are reused unchanged from the game.",
+  "assets": [
+    {
+      "file": "border.png",
+      "prompt": "Use case: logo-brand. Asset type: original small in-game reaction-trigger UI icon, one asset only on a square transparent canvas. Reference image: Primal rulebook page, STYLE REFERENCE ONLY for the tiny high-contrast reaction icons, not the monster illustration or page. Match its economical heavy silhouettes and readable negative space, create original aetherpunk symbols rather than reproduce the game art. Only a shared reaction BORDER FRAME, no glyph in its centre: an original angular diamond-shaped ring in warm amber/gold with dark oxblood outer contour and four short thornlike corner notches. The large central 65 percent is completely TRANSPARENT. Bold solid flat silhouette, tiny ink wear at edges only. This will enclose existing colored card-type icons, so do not draw ANY symbol, diamond fill, backdrop, letters, arrows or picture in the central hole. Centered composition taking up 85 percent of canvas. Flat game pictogram, hard clean antialiased edges, no gradients, no glow, no shadows, no bevels, no background, no labels, no lettering, no watermark. Must be legible at 40px. Transparent background is essential."
+    },
+    {
+      "file": "front.png",
+      "prompt": "Edit target: supplied generated reaction glyph. Rotate the entire formation glyph CLOCKWISE by exactly 90 degrees: the large bright filled diamond must be at the RIGHT, and the three grey hollow circles at TOP, LEFT, BOTTOM. This is Front, facing right toward enemies. Preserve the original bold flat white/ivory and muted grey icon style. Genuine transparent square background; preserve transparency. Center the symbol at the same scale. No text or labels, no gradients, no frame, no added decoration."
+    },
+    {
+      "file": "upper.png",
+      "prompt": "Edit this formation-position icon to distinguish just ONE flank. TOP dot is a bright filled ivory diamond. LEFT, RIGHT and BOTTOM dots are muted grey hollow circles. Four nodes form a diamond linked by bold grey lines. No other highlights. Keep the exact clean ivory/grey flat pictogram style and proportions; square canvas, transparent alpha background, no border, no text, no shadows. Whole symbol centred with 10 percent padding. Do not stretch or squash the diamond. This is a single in-game icon."
+    },
+    {
+      "file": "lower.png",
+      "prompt": "Edit this formation-position icon to distinguish just ONE flank. BOTTOM dot is a bright filled ivory diamond. LEFT, RIGHT and TOP dots are muted grey hollow circles. Four nodes form a diamond linked by bold grey lines. No other highlights. Keep the exact clean ivory/grey flat pictogram style and proportions; square canvas, transparent alpha background, no border, no text, no shadows. Whole symbol centred with 10 percent padding. Do not stretch or squash the diamond. This is a single in-game icon."
+    },
+    {
+      "file": "rear.png",
+      "prompt": "Edit target: supplied generated reaction glyph. Rotate the entire formation glyph CLOCKWISE by exactly 90 degrees: the bright filled diamond must be at LEFT, and the three grey hollow circles at TOP, RIGHT, BOTTOM. This is Rear, facing left away from enemies. Preserve the original bold flat white/ivory and muted grey icon style. Genuine transparent square background; preserve transparency. Center the symbol at the same scale. No text or labels, no gradients, no frame, no added decoration."
+    },
+    {
+      "file": "damaged.png",
+      "prompt": "Create one original ON MONSTER DAMAGED UI glyph on a transparent square canvas. Reference image 1 is OUR ACTUAL Stormmaw leviathan sprite atlas: use its biological design, NOT a generic dragon or wolf. Assemble/interpret it as one coherent flying shark/whale leviathan: long broad blunt sharklike snout, open toothy jaw, elongated tapering fish body, sweeping dorsal fins, flippers, forked fin tail. Draw a simplified FULL CREATURE side silhouette facing LEFT, with one clear red zigzag wound across its torso. Reference 2 is the rejected damaged icon: use ONLY its bold ivory/white flat high-contrast pictogram treatment, not its animal anatomy. No wolf head, fur, canine muzzle, animal ears, antlers, dragon horns, legs, wings, boat, balloon or airship. Compact broad silhouette, heavy negative-space cuts, legible at 40px, no background, no border/frame, no text, no shadows or gradients. Transparent alpha."
+    },
+    {
+      "file": "healed.png",
+      "prompt": "Use case: logo-brand. Asset type: original small in-game reaction-trigger UI icon, one asset only on a square transparent canvas. Reference image: Primal rulebook page, STYLE REFERENCE ONLY for the tiny high-contrast reaction icons, not the monster illustration or page. Match its economical heavy silhouettes and readable negative space, create original aetherpunk symbols rather than reproduce the game art. ON HEAL glyph: a bold ivory airship hull silhouette (simple horizontal boat-like gondola) with a single large green plus sign above it. Instantly readable solid silhouette. No border frame. No other marks or text. Centered composition taking up 85 percent of canvas. Flat game pictogram, hard clean antialiased edges, no gradients, no glow, no shadows, no bevels, no background, no labels, no lettering, no watermark. Must be legible at 40px. Transparent background is essential."
+    }
+  ]
+}

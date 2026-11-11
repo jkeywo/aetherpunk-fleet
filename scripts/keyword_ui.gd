@@ -36,7 +36,7 @@ func _process(_delta: float) -> void:
 			renderer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			renderer.mouse_force_pass_scroll_events = true
 			if node is Button:
-				renderer.offset_left = 8
+				renderer.offset_left = float(node.get_meta("keyword_left_padding",8))
 				renderer.offset_right = -8
 				renderer.offset_top = 2
 				renderer.offset_bottom = -2

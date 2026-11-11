@@ -25,6 +25,7 @@ static func ensure() -> void:
 		add("trigger", event, event.replace("_", " ").capitalize(), {"subject": field("enum", "owner", 0, ["owner", "actor", "target", "self_card", "adjacent", "allied", "enemy", "any"]), "card_type": field("enum", "", 0, [""] + TYPES), "reason": field("enum", "", 0, ["", "mana", "basic", "effect", "refresh"]), "minimum": field("int", 1)}, _trigger.bind(event), [], ZONES)
 	add("trigger", "passive", "While active", {"subject": field("enum", "owner", 0, ["owner", "self_card", "any"])}, _passive, [], ZONES)
 	add("condition", "always", "Always", {}, _always)
+	add("condition", "reaction_trigger", "Common reaction trigger", {"family": field("enum", "card_type", 0, ["card_type", "position", "damaged", "healed"]), "card_type": field("enum", "Attack", 0, TYPES), "position": field("enum", "front", 0, ["front", "upper", "lower", "rear"])}, _common_reaction)
 	add("condition", "all", "All conditions", {"items": field("conditions", [])}, _all)
 	add("condition", "any", "Any condition", {"items": field("conditions", [])}, _any)
 	add("condition", "not", "Not", {"condition": field("condition", {"kind": "always"})}, _not)
@@ -512,6 +513,7 @@ static func _formatted(category: String, p: Dictionary) -> String:
 			"cards_drawn": return "After cards are drawn"
 	if category == "condition":
 		match kind:
+			"reaction_trigger": return common_reaction_text(p)
 			"always": return "always"
 			"adjacent": return "at least %d adjacent %s%s%s" % [p.get("minimum", 1), p.get("card_type", "") if p.get("card_type", "") != "" else "card", " with " + p.trait if p.get("trait", "") != "" else "", " (" + p.card_id + ")" if p.get("card_id", "") != "" else ""]
 			"resource_at_least": return _target_text(p.get("target", "owner")) + " has " + _raw_text("value", p.get("amount", 1)) + "+ resource"
@@ -567,3 +569,25 @@ static func reaction_condition_text(condition: Dictionary, owner_name: String = 
 			return (" AND " if condition.kind=="all" else " OR ").join(parts) if not parts.is_empty() else "always"
 		"not":return "not ("+reaction_condition_text(condition.get("condition",{}),owner_name)+")"
 	return text("condition",condition,owner_name)
+
+
+static func common_reaction_text(spec: Dictionary) -> String:
+	match spec.get("family","card_type"):
+		"card_type": return "Played " + spec.get("card_type","Attack") + " card"
+		"position": return "Played card from " + {"front":"Front","upper":"Upper Flank","lower":"Lower Flank","rear":"Rear"}.get(spec.get("position","front"),str(spec.get("position","")).capitalize())
+		"damaged": return "On monster damaged"
+		"healed": return "On heal"
+	return "Unknown reaction trigger"
+
+
+static func _common_reaction(p: Dictionary, c: Dictionary) -> bool:
+	var event: Dictionary = c.get("event",{})
+	match p.get("family","card_type"):
+		"card_type": return event.get("played_card",false) and event.get("card",{}).get("type","") == p.get("card_type","Attack")
+		"position":
+			if not event.get("played_card",false): return false
+			var point: int = event.get("played_from",-1)
+			return point == {"front":0,"upper":1,"lower":2,"rear":3}.get(p.get("position","front"),-999)
+		"damaged": return int(event.get("hull_damage",0)) > 0
+		"healed": return int(event.get("player_healed",0)) > 0
+	return false

@@ -182,6 +182,7 @@ func row_card(uid: int) -> Dictionary:
 	definition["uid"] = uid
 	definition["owner"] = physical.owner
 	definition["owner_name"] = owner.name
+	definition["owner_visual"] = _enemy_visual(physical.owner)
 	return definition
 
 
@@ -632,6 +633,9 @@ func _start_action(context: Dictionary, mode: String = "player") -> void:
 	root_context["damage"] = {}
 	root_context["metrics"] = {}
 	root_context["healed"] = 0
+	root_context["player_healed"] = 0
+	root_context["played_from"] = position_of(context.owner)
+	root_context["played_card"] = int(context.get("uid",-1)) >= 0 and not context.get("basic",false)
 	root_context["printed_cost"] = int(card(context.uid).cost) if int(context.get("uid", -1)) >= 0 else 0
 	_mode = mode
 	_stage = "allied"
@@ -821,7 +825,7 @@ func _advance_stage() -> bool:
 					for reaction in row_card(uid).reactions:
 						var key := str(uid) + "/" + str(reaction.id)
 						if stunned.has(key): continue
-						var event := {"kind": "action_completed", "uid": root_context.get("uid", -1), "actor": root_context.owner, "target": root_context.get("ally", -999), "card": root_context.get("event_card", card(root_context.get("uid", -1))), "hull_damage": int(root_context.damage.get(owner, 0)), "healed": root_context.healed, "printed_cost": root_context.printed_cost, "amount": 1}
+						var event := {"kind": "action_completed", "uid": root_context.get("uid", -1), "actor": root_context.owner, "target": root_context.get("ally", -999), "card": root_context.get("event_card", card(root_context.get("uid", -1))), "played_card": root_context.get("played_card",false), "played_from": root_context.get("played_from",-1), "player_healed": root_context.get("player_healed",0), "hull_damage": int(root_context.damage.get(owner, 0)), "healed": root_context.healed, "printed_cost": root_context.printed_cost, "amount": 1}
 						var c := root_context.duplicate(true)
 						event.merge(root_context.get("metrics", {}).get(owner, {}), true)
 						event.target = owner if root_context.get("metrics", {}).has(owner) else (root_context.get("enemy", -999) if root_context.get("enemy", -999) != -999 else root_context.get("ally", -999))
@@ -833,7 +837,7 @@ func _advance_stage() -> bool:
 						c["ancestry"] = []
 						if not Rules.condition(reaction.conditions, c): continue
 						history.append(row_card(uid).owner_name + " reaction: " + reaction.name)
-						_record("reaction_triggered", {"title": row_card(uid).owner_name + " / " + reaction.name, "stance_uid": uid, "reaction_key": key, "presentation": {"owner_name": row_card(uid).owner_name, "owner": owner, "name": reaction.name, "stance_name": row_card(uid).name, "conditions": reaction.conditions, "effects": reaction.effects}})
+						_record("reaction_triggered", {"title": row_card(uid).owner_name + " / " + reaction.name, "stance_uid": uid, "reaction_key": key, "presentation": {"owner_name": row_card(uid).owner_name, "owner_visual": _enemy_visual(owner), "owner": owner, "name": reaction.name, "custom_trigger": reaction.get("custom_trigger",false), "stance_name": row_card(uid).name, "conditions": reaction.conditions, "effects": reaction.effects}})
 						tasks.append_array(_effect_jobs(reaction.effects, c))
 						tasks.append({"kind": "reaction_done", "ctx": c, "stance_uid": uid, "category": reaction.get("category", ""), "reaction_key": key})
 						return true
@@ -849,7 +853,7 @@ func _advance_stage() -> bool:
 				if unit(owner).hull <= 0: continue
 				_next_enemy_action()
 				_activated.append(owner)
-				_record("intent_triggered", {"title": row.owner_name + " / " + row.name, "stance_uid": uid, "presentation": {"owner_name": row.owner_name, "owner": owner, "name": row.name, "effects": row.effects}})
+				_record("intent_triggered", {"title": row.owner_name + " / " + row.name, "stance_uid": uid, "presentation": {"owner_name": row.owner_name, "owner_visual": _enemy_visual(owner), "owner": owner, "name": row.name, "effects": row.effects}})
 				var c := _enemy_context(owner)
 				tasks.append_array(_effect_jobs(row.effects, c))
 				tasks.append({"kind": "activation_done", "ctx": c, "stance_uid": uid})
@@ -861,7 +865,7 @@ func _advance_stage() -> bool:
 			if not _defaults.is_empty():
 				var owner: int = _defaults.pop_front()
 				_next_enemy_action()
-				_record("intent_triggered", {"title": unit(owner).name + " / weaker default action", "presentation": {"owner_name": unit(owner).name, "owner": owner, "name": "Default action", "effects": unit(owner).default_action}})
+				_record("intent_triggered", {"title": unit(owner).name + " / weaker default action", "presentation": {"owner_name": unit(owner).name, "owner_visual": _enemy_visual(owner), "owner": owner, "name": "Default action", "effects": unit(owner).default_action}})
 				tasks.append_array(_effect_jobs(unit(owner).default_action, _enemy_context(owner)))
 				tasks.append({"kind":"default_done","ctx":_enemy_context(owner)})
 				return true
@@ -1003,6 +1007,7 @@ func effect_unit(kind: String, p: Dictionary, c: Dictionary) -> bool:
 				_record("repair", {"target": id, "amount": healed})
 				if healed > 0:
 					root_context.healed = int(root_context.get("healed", 0)) + healed
+					if id >= 0: root_context["player_healed"] = int(root_context.get("player_healed",0)) + healed
 					root_context["ally"] = id
 					_emit("repaired", c, {"target": id, "actor": c.owner, "amount": healed, "healed": healed})
 			"gain_resource", "spend_resource":
@@ -1267,6 +1272,7 @@ func _recover(id: int, amount: int, c: Dictionary) -> void:
 	ship.recovery = 0
 	ship.resource = 0
 	root_context.healed = int(root_context.get("healed", 0)) + int(ship.hull)
+	root_context["player_healed"] = int(root_context.get("player_healed",0)) + int(ship.hull)
 	root_context["ally"] = id
 	_record("revived", {"target": id, "amount": ship.hull, "title": ship.name})
 	_emit("revived", c, {"target": id, "actor": id, "amount": 1})
@@ -1670,3 +1676,10 @@ func _trigger_cues(sim, result: Dictionary) -> Dictionary:
 			var description: String=event.get("rule_text",event.title)
 			if not result.ships[owner].has(description):result.ships[owner].append(description)
 	return result
+
+
+func _enemy_visual(owner: int) -> Dictionary:
+	var data: Dictionary = unit(owner)
+	var visual: Dictionary = {"id":data.get("id","")}
+	if data.has("visual_rig"): visual["visual_rig"] = data.visual_rig.duplicate(true)
+	return visual
