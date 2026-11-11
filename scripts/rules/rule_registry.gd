@@ -63,7 +63,6 @@ static func ensure() -> void:
 	add("cost", "ship_resource", "Spend personal resource", {"target": field("target", "owner", 0, ["owner"]), "amount": field("value", 2)}, _resource_cost, ["owner"])
 	add("value", "constant", "Constant", {"amount": field("int", 1)}, _constant)
 	add("value", "weapon_damage", "Weapon damage", {"target": field("target", "owner", 0, UNIT_TARGETS)}, _weapon_value, UNIT_TARGETS)
-	add("value", "basic_weapon_damage", "Basic weapon damage", {"target": field("target", "owner", 0, UNIT_TARGETS)}, _basic_weapon_value, UNIT_TARGETS)
 	add("value", "resource_count", "Personal resource count", {"target": field("target", "owner", 0, UNIT_TARGETS)}, _resource_value, UNIT_TARGETS)
 	add("value", "missing_hp", "Missing hull", {"target": field("target", "chosen_ally", 0, UNIT_TARGETS)}, _missing_value, UNIT_TARGETS)
 	add("value", "adjacent_count", "Matching adjacent cards", {"card_type": field("enum", "", 0, [""] + TYPES), "trait": field("string", ""), "card_id": field("string", "")}, _adjacent_value)
@@ -483,12 +482,6 @@ static func _constant(p: Dictionary, _c: Dictionary) -> int: return int(p.get("a
 static func _weapon_value(p: Dictionary, c: Dictionary) -> int:
 	var units: Array = c.state.targets(p.get("target", "owner"), c)
 	return c.state.stat(units[0], "weapon_damage", c) if not units.is_empty() else 0
-static func basic_weapon_damage(damage: int) -> int:
-	return ceili(damage / 2.0)
-
-static func _basic_weapon_value(p: Dictionary, c: Dictionary) -> int:
-	return basic_weapon_damage(_weapon_value(p, c))
-
 static func _resource_value(p: Dictionary, c: Dictionary) -> int:
 	var units: Array = c.state.targets(p.get("target", "owner"), c)
 	return int(c.state.unit(units[0]).get("resource", 0)) if not units.is_empty() else 0
@@ -517,14 +510,16 @@ static func _formatted(category: String, p: Dictionary) -> String:
 	if category == "value":
 		match kind:
 			"constant": return str(p.get("amount", 1))
-			"weapon_damage": return "weapon damage"
-			"basic_weapon_damage": return "basic weapon damage"
+			"weapon_damage": return "Weapon"
 			"resource_count": return "current resource"
 			"missing_hp": return "missing hull"
 			"adjacent_count": return "matching adjacent cards"
 			"sum", "product", "min", "max":
+				var operands: Array = p.get("values", [])
+				if kind == "sum" and operands.size() == 2 and operands[0] is Dictionary and operands[0].get("kind") == "weapon_damage" and (operands[1] is int or operands[1] is float):
+					return "Weapon %+d" % int(operands[1])
 				var values: Array = []
-				for item in p.get("values", []): values.append(_raw_text("value", item))
+				for item in operands: values.append(_raw_text("value", item))
 				return "(" + (" + " if kind == "sum" else (" × " if kind == "product" else " " + kind + " ")).join(values) + ")"
 	if category == "trigger":
 		var owner: String = p.get("subject", "owner")

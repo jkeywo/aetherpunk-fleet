@@ -916,15 +916,11 @@ func _update_basic_highlights(uid: int = -1, hovered: int = -999) -> void:
 		allies.show_basic_targets()
 		enemies.show_basic_targets()
 		return
-	var hints: Dictionary = {}
-	var valid: Array = []
+	var previews: Dictionary = {}
 	for ship_id in state.basic_targets():
-		var preview: Dictionary = state.basic_preview(uid, ship_id)
-		hints[ship_id] = preview.text
-		if preview.ok:
-			valid.append(ship_id)
-	allies.show_basic_targets(hints, valid, hovered, int(state.card(uid).owner))
-	enemies.show_basic_targets(hints, valid, hovered, int(state.card(uid).owner))
+		previews[ship_id] = state.basic_preview(uid, ship_id)
+	allies.show_basic_targets(previews, hovered)
+	enemies.show_basic_targets(previews, hovered)
 
 
 func _stage_circle(uid: int, slot: int) -> void:

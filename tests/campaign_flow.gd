@@ -167,7 +167,7 @@ func _progression() -> void:
 	var reserve_hull: int = campaign.run.ships.lamplighter.hull
 	expect(campaign.launch("grassland_boss", sortie), campaign.last_error)
 	b = _battle()
-	expect(b.enemy_formation == [0, 1, 2, 3] and b.stat(-1, "armour") == 3 and b.stat(-1, "weapon_damage") == 5, "Crown Grazer did not occupy all four slots with independent stats.")
+	expect(b.enemy_formation == [0, 1, 2, 3] and b.stat(-1, "armour") == 3 and b.stat(-1, "weapon_damage") == 3, "Crown Grazer did not occupy all four slots with independent stats.")
 	expect(b.stance_cards.size() == 8, "Crown Grazer did not contribute two cards per part.")
 	for owner in [-1, -2, -3, -4]:
 		expect(b.stance_cards.filter(func(card): return card.owner == owner).size() == 2, "A boss part lost its own stance cards.")

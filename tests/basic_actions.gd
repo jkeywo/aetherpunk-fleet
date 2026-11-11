@@ -85,7 +85,7 @@ func _run() -> void:
 	var enemy: Dictionary = ui.state.unit(-1)
 	var initial_hull: int = enemy.hull
 	enemy.armour = 1
-	ui.state.ships[0].weapon = {"damage": 6, "range": "Short"}
+	ui.state.ships[0].weapon = {"damage": 3, "range": "Short"}
 	ui.state.enemy_formation = [-1, -1, -1, 0]
 	uid = uid_for(ui.state, "brace")
 	expect(ui.state.validate_basic(uid, -1).contains("Rear"), "Short basic attack can target Rear.")
@@ -98,17 +98,22 @@ func _run() -> void:
 	point = await hover_ship(ui, -1)
 	expect(ui.drag_hover_ship == -1 and ui.enemies.target_widget(-1).tooltip_text.contains("attacks"), "Enemy drag preview is missing.")
 	expect(enemy.hull == initial_hull and ui.state.hand.has(uid), "Attack preview spent the card or damaged the enemy.")
+	var circle: Panel = ui.enemies.basic_indicators.get(-1)
+	expect(circle != null and is_equal_approx(circle.size.x, circle.size.y) and is_equal_approx(float(circle.get_theme_stylebox("panel").corner_radius_top_left), circle.size.x / 2.0) and "attack" in circle.get_child(0).icon_keys and "3" in circle.get_child(0).source_text, "Basic attack did not show its effect and icon inside a circle.")
 	await mouse(point, false)
 	await settle(ui)
+	expect(ui.enemies.basic_indicators.is_empty(), "Basic target circles remained after the drop.")
 	expect(enemy.hull == initial_hull - 2 and ui.state.discard == [uid], "Basic attack did not discard the card and use weapon damage through armour.")
 	expect(ui.state.play_order.is_empty() and not ui.pending_play and conserved(ui.state), "Basic attack entered the circle or required confirmation.")
 	var weapon_doc := neutral()
-	card_def(weapon_doc, "brace").rules[0].effects = [{"kind":"attack", "target":"chosen_enemy", "range":"weapon", "damage":{"kind":"weapon_damage"}}]
+	var shipped: Dictionary = Catalog.read_document("res://data/content.json").document
+	var damage: Dictionary = card_def(shipped, "broadside").rules[0].effects[0].damage
+	expect(ship_def(shipped, "kestrel").weapon.damage == 3 and R.text("value", damage) == "Weapon +2", "Kestrel and Broadside must author the base damage and card bonus separately.")
+	card_def(weapon_doc, "brace").rules[0].effects = [{"kind":"attack", "target":"chosen_enemy", "range":"weapon", "damage":damage}]
+	ship_def(weapon_doc, "bastion").weapon.damage = 3
 	b = State.new(1, weapon_doc)
-	b.ships[0].weapon.damage = 5
 	var enemy_hull: int = b.unit(-1).hull
-	expect(b.play_basic(uid_for(b, "brace"), -1) == "" and b.unit(-1).hull == enemy_hull - 3, "Odd basic weapon damage did not round up.")
+	expect(b.play_basic(uid_for(b, "brace"), -1) == "" and b.unit(-1).hull == enemy_hull - 3, "Basic attacks should use authored weapon damage.")
 	b = State.new(1, weapon_doc)
-	b.ships[0].weapon.damage = 5
-	expect(b.play(uid_for(b, "brace"), [], -1, -1, 0) == "" and b.unit(-1).hull == enemy_hull - 5, "Weapon-based card should retain full weapon damage.")
+	expect(b.play(uid_for(b, "brace"), [], -1, -1, 0) == "" and b.unit(-1).hull == enemy_hull - 5, "Weapon-based cards should apply their authored bonus.")
 	done("Basic attack, recovery and movement")

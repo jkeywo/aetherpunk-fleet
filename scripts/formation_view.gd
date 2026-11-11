@@ -10,8 +10,11 @@ const Geometry = preload("res://scripts/battle_geometry.gd")
 const Catalog = preload("res://scripts/content_catalog.gd")
 const Unit = preload("res://scripts/unit_view.gd")
 const Rig = preload("res://scripts/rig_view.gd")
+const KeywordText = preload("res://scripts/keyword_text.gd")
+const BASIC_CIRCLE_SIZE := 84.0
 var widgets: Dictionary = {}
 var wreck_widgets: Dictionary = {}
+var basic_indicators: Dictionary = {}
 var large_cards := false
 var large_unit_height := 166.0
 var drop_check: Callable
@@ -33,6 +36,7 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 		child.queue_free()
 	widgets.clear()
 	wreck_widgets.clear()
+	basic_indicators.clear()
 	cover_clouds.clear()
 	shared_rig = null
 	if enemy:
@@ -133,6 +137,8 @@ func _arrange() -> void:
 		wreck.size = Vector2(size.x / maxf(1, wreck_widgets.size()) - 6, 48)
 		index += 1
 	_layout_clouds()
+	for id in basic_indicators:
+		_position_basic_indicator(id, basic_indicators[id])
 	queue_redraw()
 
 
@@ -163,13 +169,7 @@ func _wire_target(widget: Button, ship_id: int) -> void:
 				widget.tooltip_text += "\nDrop a ship card here to attack with that ship’s weapon. Discards the card."
 			else:
 				widget.tooltip_text += "\nDrag its own card here to repair, or an adjacent living ship's card to swap. Release to act immediately; this discards the dragged card."
-		widget.set_meta("base_guard_text", widget.guard_label.text)
-		widget.set_meta("base_guard_visible",widget.guard_label.visible)
 	widget.set_meta("base_tooltip", widget.tooltip_text)
-	var styles: Dictionary = {}
-	for key in ["normal","hover","pressed","hover_pressed"]:
-		if widget.has_theme_stylebox_override(key): styles[key] = widget.get_theme_stylebox(key)
-	widget.set_meta("base_styles",styles)
 	widget.set_drag_forwarding(Callable(), _can_drop_on_ship.bind(ship_id), _drop_on_ship.bind(ship_id))
 	widget.mouse_exited.connect(func(): ship_drag_exited.emit(ship_id))
 
@@ -196,43 +196,46 @@ func _drop_on_ship(_point: Vector2, data: Variant, ship_id: int) -> void:
 		ship_dropped.emit(ship_id, data)
 
 
-func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship: int = -1, actor: int = -1) -> void:
-	var candidates: Array = []
+func show_basic_targets(previews: Dictionary = {}, hovered: int = -999) -> void:
+	for indicator in basic_indicators.values():
+		remove_child(indicator)
+		indicator.queue_free()
+	basic_indicators.clear()
+	var candidates: Array = wreck_widgets.keys()
 	for point in widgets:
-		if widgets[point].has_meta("ship_index"): candidates.append(widgets[point].get_meta("ship_index"))
+		var widget: Button = widgets[point]
+		if widget.has_meta("ship_index"): candidates.append(widget.get_meta("ship_index"))
 		elif not enemy: candidates.append(100 + int(point))
-	candidates.append_array(wreck_widgets.keys())
-	for ship_id in candidates:
-		var widget := target_widget(ship_id) as Button
-		if widget == null:
-			continue
-		for key in ["normal", "hover", "pressed", "hover_pressed"]:
-			if widget.get_meta("base_styles",{}).has(key): widget.add_theme_stylebox_override(key,widget.get_meta("base_styles")[key])
-			else: widget.remove_theme_stylebox_override(key)
-		widget.tooltip_text = str(widget.get_meta("base_tooltip", ""))
-		if widget is Unit:
-			widget.guard_label.text = str(widget.get_meta("base_guard_text", ""))
-			widget.guard_label.visible=widget.get_meta("base_guard_visible",false)
-		if not hints.has(ship_id) or (widget.get_meta("empty_slot",false) and not valid.has(ship_id)):
-			continue
-		widget.tooltip_text = str(hints[ship_id])
-		var tint := Color("#8a535b")
-		var fill := Color("#241d26")
-		if valid.has(ship_id):
-			tint = Color("#9ce6b7") if ship_id == actor else Color("#67bdd4")
-			if widget is Unit:
-				widget.guard_label.text = "ATTACK (discard 1 card)" if ship_id < 0 else ("REPAIR (discard 1 card)" if ship_id == actor else "SWAP (discard 1 card)")
-				widget.guard_label.show()
-			fill = Color("#153329") if ship_id == actor else Color("#102b36")
-			if selected_ship == ship_id:
-				tint = Color("#e8bd77")
-		for key in ["normal", "hover", "pressed", "hover_pressed"]:
-			var style := StyleBoxFlat.new()
-			style.bg_color = fill.lightened(0.08) if key in ["hover", "hover_pressed"] else fill
-			style.border_color = tint
-			style.set_border_width_all(3 if valid.has(ship_id) else 1)
-			style.set_corner_radius_all(5)
-			widget.add_theme_stylebox_override(key, style)
+	for id in candidates:
+		var widget := target_widget(id) as Button
+		if widget == null: continue
+		var preview: Dictionary = previews.get(id, {})
+		widget.tooltip_text = preview.get("text", widget.get_meta("base_tooltip", ""))
+		if not preview.get("ok", false): continue
+		var circle := Panel.new()
+		circle.name = "BasicActionCircle"
+		circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		circle.size = Vector2.ONE * BASIC_CIRCLE_SIZE
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("#132b38")
+		style.border_color = Color("#e8bd77") if id == hovered else Color("#67bdd4")
+		style.set_border_width_all(3 if id == hovered else 2)
+		style.set_corner_radius_all(roundi(BASIC_CIRCLE_SIZE / 2))
+		circle.add_theme_stylebox_override("panel", style)
+		add_child(circle)
+		basic_indicators[id] = circle
+		_position_basic_indicator(id, circle)
+		var label := KeywordText.new()
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.configure(preview.indicator, 11, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, false, true)
+		circle.add_child(label)
+		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+func _position_basic_indicator(id: int, circle: Control) -> void:
+	var widget: Control = target_widget(id)
+	if widget != null:
+		circle.position = widget.position + (widget.size - circle.size) / 2.0
 
 
 

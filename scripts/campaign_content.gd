@@ -68,10 +68,10 @@ static func _alternate_stances() -> Dictionary:
 
 static func _crown_grazer_parts() -> Array:
 	var designs := [
-		["Body", "body", 32, 3, 5, 2, _stance("crown_charge", "Crown Charge", [_grazer_attack(5)], {"family":"position","position":"front"}, "Antler Feint", [_grazer_attack(2)])],
-		["Far Claw", "far_limb", 12, 1, 2, 1, _stance("twin_rake", "Twin Rake", [_grazer_attack(2, 2)], {"family":"position","position":"flank"}, "Side Swipe", [_grazer_attack(2)])],
-		["Near Claw", "near_limb", 12, 1, 2, 1, _stance("meadow_mantle", "Meadow Mantle", [_shields(3), _repair(2)], {"family":"healed"}, "Feeding Pulse", [_repair(2)])],
-		["Tail", "tail", 14, 1, 3, 1, _stance("tail_sweep", "Tail Sweep", [{"kind":"swap_ends", "fallback_damage":2}, _grazer_attack(2)], {"family":"damaged"}, "Tail Recoil", [_shields(2)])],
+		["Body", "body", 32, 3, 3, 2, _stance("crown_charge", "Crown Charge", [_grazer_attack(5)], {"family":"position","position":"front"}, "Antler Feint", [_grazer_attack(2)])],
+		["Far Claw", "far_limb", 12, 1, 1, 1, _stance("twin_rake", "Twin Rake", [_grazer_attack(2, 2)], {"family":"position","position":"flank"}, "Side Swipe", [_grazer_attack(2)])],
+		["Near Claw", "near_limb", 12, 1, 1, 1, _stance("meadow_mantle", "Meadow Mantle", [_shields(3), _repair(2)], {"family":"healed"}, "Feeding Pulse", [_repair(2)])],
+		["Tail", "tail", 14, 1, 2, 1, _stance("tail_sweep", "Tail Sweep", [{"kind":"swap_ends", "fallback_damage":2}, _grazer_attack(2)], {"family":"damaged"}, "Tail Recoil", [_shields(2)])],
 	]
 	var result: Array = []
 	for i in designs.size():
@@ -117,7 +117,7 @@ static func _attack(amount: int, target: String = "chosen_ally", hits: int = 1) 
 
 static func _enemy(id: String, name: String, hull: int, rig: String, intent: String, effects: Array, fallback: Array) -> Dictionary:
 	return {
-		"id":id, "name":name, "hull":hull, "armour":0, "weapon":{"damage":2,"range":"Long"},
+		"id":id, "name":name, "hull":hull, "armour":0, "weapon":{"damage":1,"range":"Long"},
 		"visual_rig":Art.rig(rig, true).duplicate(true),
 		"stances":[{"id":"action","name":intent,"effects":effects,"reactions":[]}],
 		"stance_loadout":[{"stance":"action","count":3}],

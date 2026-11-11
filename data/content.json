@@ -9,7 +9,7 @@
 			"color": "#d8b477",
 			"armour": 2,
 			"weapon": {
-				"damage": 4,
+				"damage": 2,
 				"range": "Short"
 			},
 			"resource": {
@@ -511,7 +511,7 @@
 			"color": "#79b9d0",
 			"armour": 0,
 			"weapon": {
-				"damage": 5,
+				"damage": 3,
 				"range": "Long"
 			},
 			"resource": {
@@ -1015,7 +1015,7 @@
 			"color": "#91c8ad",
 			"armour": 1,
 			"weapon": {
-				"damage": 3,
+				"damage": 2,
 				"range": "Long"
 			},
 			"resource": {
@@ -1516,7 +1516,7 @@
 			"color": "#9dbdc4",
 			"armour": 2,
 			"weapon": {
-				"damage": 4,
+				"damage": 2,
 				"range": "Short"
 			},
 			"resource": {
@@ -2285,8 +2285,14 @@
 							"kind": "attack",
 							"target": "chosen_enemy",
 							"damage": {
-								"kind": "weapon_damage",
-								"target": "owner"
+								"kind": "sum",
+								"values": [
+									{
+										"kind": "weapon_damage",
+										"target": "owner"
+									},
+									2
+								]
 							},
 							"hits": 1,
 							"range": "weapon"
@@ -2419,7 +2425,7 @@
 										"kind": "weapon_damage",
 										"target": "owner"
 									},
-									3
+									5
 								]
 							},
 							"hits": 1,
@@ -2598,8 +2604,14 @@
 							"kind": "attack",
 							"target": "chosen_enemy",
 							"damage": {
-								"kind": "weapon_damage",
-								"target": "owner"
+								"kind": "sum",
+								"values": [
+									{
+										"kind": "weapon_damage",
+										"target": "owner"
+									},
+									2
+								]
 							},
 							"hits": 1,
 							"range": "weapon"
@@ -2648,7 +2660,7 @@
 										"kind": "weapon_damage",
 										"target": "owner"
 									},
-									5
+									7
 								]
 							},
 							"hits": 1,
@@ -3561,8 +3573,14 @@
 							"kind": "attack",
 							"target": "chosen_enemy",
 							"damage": {
-								"kind": "weapon_damage",
-								"target": "owner"
+								"kind": "sum",
+								"values": [
+									{
+										"kind": "weapon_damage",
+										"target": "owner"
+									},
+									2
+								]
 							},
 							"hits": 1,
 							"range": "weapon"
@@ -3961,8 +3979,14 @@
 							"kind": "attack",
 							"target": "chosen_enemy",
 							"damage": {
-								"kind": "weapon_damage",
-								"target": "owner"
+								"kind": "sum",
+								"values": [
+									{
+										"kind": "weapon_damage",
+										"target": "owner"
+									},
+									2
+								]
 							},
 							"hits": 1,
 							"range": "weapon"
@@ -4095,7 +4119,7 @@
 										"kind": "weapon_damage",
 										"target": "owner"
 									},
-									3
+									5
 								]
 							},
 							"hits": 1,
@@ -4354,7 +4378,7 @@
 			"hull": 70,
 			"armour": 2,
 			"weapon": {
-				"damage": 6,
+				"damage": 3,
 				"range": "Long"
 			},
 			"default_action": [
@@ -4757,7 +4781,7 @@
 			"hull": 20,
 			"armour": 1,
 			"weapon": {
-				"damage": 4,
+				"damage": 2,
 				"range": "Short"
 			},
 			"default_action": [
@@ -5006,7 +5030,7 @@
 			"hull": 12,
 			"armour": 0,
 			"weapon": {
-				"damage": 3,
+				"damage": 2,
 				"range": "Long"
 			},
 			"default_action": [

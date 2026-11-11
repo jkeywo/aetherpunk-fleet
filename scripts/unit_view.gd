@@ -1,5 +1,4 @@
 extends Button
-const Rules = preload("res://scripts/rules/rule_registry.gd")
 ## Compact unit presentation shared by battle diamonds and editor previews.
 var name_label: Label
 var hull_label: Label
@@ -123,7 +122,6 @@ func configure(data: Dictionary, enemy: bool = false) -> void:
 	tooltip_text += "\nArmour %d" % data.get("armour",0)
 	if int(data.get("guard",0))>0:tooltip_text+="\nShields %d" % data.guard
 	tooltip_text+="\nWeapon %d %s" % [weapon.damage,weapon.range]
-	if not enemy: tooltip_text += "\nBasic attack damage %d" % Rules.basic_weapon_damage(int(weapon.damage))
 	if enemy: tooltip_text += "\nDefault if not activated: " + data.get("default_text", "None")
 	else:
 		tooltip_text += "\nLevel %d / Captain %s\n%s %d/%d" % [data.get("level", 1), data.get("captain", {}).get("name", "Unassigned"), data.get("resource_name", "Charge"), data.get("resource", 0), data.get("resource_capacity", 6)]

@@ -1479,7 +1479,7 @@ func play_basic(uid: int, recipient: int, options: Dictionary = {}) -> String:
 	_record("basic_action", {"uid": uid, "target": actor if empty_move else recipient, "position": c.slot_target, "source": actor, "action": action, "title": "Basic %s / %s" % [action.capitalize(), ships[actor].name]})
 	_reserve_boosts(uid, c, options.get("boosts", []))
 	if attack:
-		tasks.append({"kind": "effect", "spec": {"kind": "attack", "target": "chosen_enemy", "range": "weapon", "damage": {"kind":"basic_weapon_damage"}}, "ctx": c})
+		tasks.append({"kind": "effect", "spec": {"kind": "attack", "target": "chosen_enemy", "range": "weapon"}, "ctx": c})
 	elif repair:
 		tasks.append({"kind": "effect", "spec": {"kind": "repair", "target": "owner", "amount": definitions.basic_actions.repair}, "ctx": c})
 	elif empty_move:
@@ -1666,27 +1666,38 @@ func basic_preview(uid: int, recipient: int, options: Dictionary = {}) -> Dictio
 	if error != "": return {"ok": false, "text": error, "action": ""}
 	var actor: int = card(uid).owner
 	var title: String
-	if recipient < 0: title = "%s attacks %s with its %s weapon (%d basic damage)" % [ships[actor].name, unit(recipient).name, weapon_range(actor).to_lower(), Rules.basic_weapon_damage(stat(actor, "weapon_damage"))]
-	elif recipient >= 100: title = "Move %s → %s" % [ships[actor].name, Geometry.POSITION_NAMES[recipient - 100]]
-	elif actor != recipient: title = "Swap %s ↔ %s" % [ships[actor].name, ships[recipient].name]
+	var indicator: String
+	if recipient < 0:
+		var damage := stat(actor, "weapon_damage")
+		title = "%s attacks %s with its %s weapon (%d basic damage)" % [ships[actor].name, unit(recipient).name, weapon_range(actor).to_lower(), damage]
+		indicator = "Attack\n%d Damage" % damage
+	elif recipient >= 100:
+		title = "Move %s → %s" % [ships[actor].name, Geometry.POSITION_NAMES[recipient - 100]]
+		indicator = "Move"
+	elif actor != recipient:
+		title = "Swap %s ↔ %s" % [ships[actor].name, ships[recipient].name]
+		indicator = "Swap"
 	elif ships[actor].hull > 0:
 		var amount: int = mini(int(definitions.basic_actions.repair) + _bonus("repair_amount", actor), int(ships[actor].max_hull) - int(ships[actor].hull))
 		title = "Repair %s: +%d hull" % [ships[actor].name, amount]
+		indicator = "Repair\n+%d Hull" % amount
 	else:
 		title = "Recover " + ships[actor].name
+		indicator = "Recovery\n+%d" % int(definitions.basic_actions.repair)
 	var sim = _simulation()
 	error = sim.play_basic(uid, recipient, options)
 	if error != "": return {"ok": false, "text": error, "action": ""}
 	for event in sim.feedback_events:
 		if event.kind == "revived" and event.target == actor:
 			title += ". REVIVE with %d hull" % event.amount
+			indicator = "Revive\n%d Hull" % event.amount
 			break
 	var text: String = title + ". Discard " + card(uid).name + "; no extra mana payment. Printed cost/effects/position restrictions are ignored. "
 	text += " ".join(_preview_changes(sim))
 	for event in sim.feedback_events:
 		if event.kind == "reaction_triggered": text += " REACTION: " + event.title + "; replacement hidden."
 	if recipient >= 0 and recipient < 100 and sim.ships[recipient].hull <= 0: text += " Disabled ship recovery %d / %d." % [sim.ships[recipient].recovery, definitions.basic_actions.revive_threshold]
-	return {"ok": true, "text": text, "action": "Attack" if recipient < 0 else ("Repair / Recover" if actor == recipient else ("Move Ship" if recipient >= 100 else "Swap Ships"))}
+	return {"ok": true, "text": text, "indicator": indicator, "action": "Attack" if recipient < 0 else ("Repair / Recover" if actor == recipient else ("Move Ship" if recipient >= 100 else "Swap Ships"))}
 
 
 func contribution_details(uid: int, slot: int, simulated: Dictionary = {}) -> Dictionary:
