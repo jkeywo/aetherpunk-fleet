@@ -188,6 +188,11 @@ func _stat_change(event: Dictionary) -> void:
 	var tween := create_tween().set_parallel(true)
 	unit.self_modulate = tint
 	tween.tween_property(unit, "self_modulate", Color.WHITE, _time(0.32))
+	if event.kind == "damage" and amount > 0:
+		# Modulate the artwork subtree: self_modulate on the unit frame does not tint its rig.
+		var resting_tint: Color = unit.art.modulate
+		unit.art.modulate = Color("#ff5050")
+		tween.tween_property(unit.art, "modulate", resting_tint, _time(0.32))
 	if event.kind != "guard":
 		var final_value: int = event.board.enemies[-1 - event.target].hull if event.target < 0 else event.board.ships[event.target].hull
 		tween.tween_property(unit.bar, "value", final_value, _time(0.28))

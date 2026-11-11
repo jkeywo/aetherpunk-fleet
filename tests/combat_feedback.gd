@@ -1,5 +1,6 @@
 extends "res://tests/support/v3_test.gd"
 var beats: Array=[]
+var flashed_sides: Dictionary={}
 func _run() -> void:
 	var doc:=neutral()
 	card_def(doc,"brace").rules[0].effects=[attack(6),{"kind":"add_shields","target":"owner","amount":2}]
@@ -7,11 +8,23 @@ func _run() -> void:
 	await open_battle(doc)
 	var b=current_scene
 	b.feedback.beat_started.connect(func(kind): beats.append(kind))
+	b.feedback.duration_scale = 0.25
 	stage_card(b,"brace",0)
 	await flush()
 	expect(b.busy and b.get_node("%EndPhaseButton").disabled,"Automatic feedback did not lock input.")
 	b._commit()
-	await settle(b)
+	while b.busy:
+		for side in [b.allies, b.enemies]:
+			for unit in side.widgets.values():
+				if "art" in unit and unit.art.modulate.g < 0.75 and unit.art.modulate.r > 0.95:
+					flashed_sides[side.enemy] = true
+		await process_frame
+	await flush()
+	expect(flashed_sides.has(false), "Damaged ship artwork did not flash red.")
+	expect(flashed_sides.has(true), "Damaged monster artwork did not flash red.")
+	for side in [b.allies, b.enemies]:
+		for unit in side.widgets.values():
+			if "art" in unit: expect(unit.art.modulate == Color.WHITE, "Damage flash left artwork tinted.")
 	expect(b.state.monster_hull==64 and b.state.ships[0].hull==25,"Automatic feedback repeated/changed resolution.")
 	expect(beats.has("damage") and beats.has("guard") and beats.has("reaction_triggered"),"Combat feedback beats missing.")
 	expect(beats.find("reaction_triggered")<beats.find("stance_changed"),"Replacement shown before reaction.")
