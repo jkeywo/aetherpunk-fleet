@@ -25,7 +25,7 @@ static func ensure() -> void:
 		add("trigger", event, event.replace("_", " ").capitalize(), {"subject": field("enum", "owner", 0, ["owner", "actor", "target", "self_card", "adjacent", "allied", "enemy", "any"]), "card_type": field("enum", "", 0, [""] + TYPES), "reason": field("enum", "", 0, ["", "mana", "basic", "effect", "refresh"]), "minimum": field("int", 1)}, _trigger.bind(event), [], ZONES)
 	add("trigger", "passive", "While active", {"subject": field("enum", "owner", 0, ["owner", "self_card", "any"])}, _passive, [], ZONES)
 	add("condition", "always", "Always", {}, _always)
-	add("condition", "reaction_trigger", "Common reaction trigger", {"family": field("enum", "card_type", 0, ["card_type", "position", "damaged", "healed"]), "card_type": field("enum", "Attack", 0, TYPES), "position": field("enum", "front", 0, ["front", "upper", "lower", "rear"])}, _common_reaction)
+	add("condition", "reaction_trigger", "Common reaction trigger", {"family": field("enum", "card_type", 0, ["card_type", "position", "damaged", "healed"]), "card_type": field("enum", "Attack", 0, TYPES), "position": field("enum", "front", 0, ["front", "flank", "rear", "upper", "lower"])}, _common_reaction)
 	add("condition", "all", "All conditions", {"items": field("conditions", [])}, _all)
 	add("condition", "any", "Any condition", {"items": field("conditions", [])}, _any)
 	add("condition", "not", "Not", {"condition": field("condition", {"kind": "always"})}, _not)
@@ -33,7 +33,7 @@ static func ensure() -> void:
 	for kind in ["resource_at_least", "health_at_most", "health_at_least", "missing_health_at_least", "shields_at_least", "armour_at_least"]:
 		add("condition", kind, kind.replace("_", " ").capitalize(), {"target": field("target", "owner", 0, UNIT_TARGETS), "amount": field("value", 1)}, _unit_condition.bind(kind), UNIT_TARGETS)
 	add("condition", "card_matches", "Card matches", {"target": field("enum", "event_card", 0, ["self_card", "event_card"]), "card_type": field("enum", "", 0, [""] + TYPES), "trait": field("string", ""), "card_id": field("string", "")}, _card_condition)
-	add("condition", "position", "Unit occupies position", {"target": field("target", "owner", 0, UNIT_TARGETS), "position": field("enum", "front", 0, ["front", "upper", "lower", "rear"])}, _position, UNIT_TARGETS)
+	add("condition", "position", "Unit occupies position", {"target": field("target", "owner", 0, UNIT_TARGETS), "position": field("enum", "front", 0, ["front", "upper", "lower", "rear", "flank"])}, _position, UNIT_TARGETS)
 	add("condition", "identity", "Unit identity matches", {"target": field("target", "owner", 0, UNIT_TARGETS), "id": field("string", "")}, _identity, UNIT_TARGETS)
 	add("condition", "status", "Unit status", {"target": field("target", "chosen_enemy", 0, UNIT_TARGETS), "status": field("enum", "alive", 0, ["alive", "defeated", "shielded", "stunned"])}, _status, UNIT_TARGETS)
 	add("condition", "hand_count", "Hand count at least", {"amount": field("value", 2)}, _hand_count)
@@ -63,6 +63,7 @@ static func ensure() -> void:
 	add("cost", "ship_resource", "Spend personal resource", {"target": field("target", "owner", 0, ["owner"]), "amount": field("value", 2)}, _resource_cost, ["owner"])
 	add("value", "constant", "Constant", {"amount": field("int", 1)}, _constant)
 	add("value", "weapon_damage", "Weapon damage", {"target": field("target", "owner", 0, UNIT_TARGETS)}, _weapon_value, UNIT_TARGETS)
+	add("value", "basic_weapon_damage", "Basic weapon damage", {"target": field("target", "owner", 0, UNIT_TARGETS)}, _basic_weapon_value, UNIT_TARGETS)
 	add("value", "resource_count", "Personal resource count", {"target": field("target", "owner", 0, UNIT_TARGETS)}, _resource_value, UNIT_TARGETS)
 	add("value", "missing_hp", "Missing hull", {"target": field("target", "chosen_ally", 0, UNIT_TARGETS)}, _missing_value, UNIT_TARGETS)
 	add("value", "adjacent_count", "Matching adjacent cards", {"card_type": field("enum", "", 0, [""] + TYPES), "trait": field("string", ""), "card_id": field("string", "")}, _adjacent_value)
@@ -323,26 +324,32 @@ static func _raw_text(category: String, spec: Variant) -> String:
 	return str(desc.title) + (" (" + "; ".join(values) + ")" if not values.is_empty() else "")
 
 
-static func rule_text(spec: Dictionary, owner_name: String = "") -> String:
+static func rule_heading(spec: Dictionary, owner_name: String = "") -> String:
 	var lines: Array = [_raw_text("trigger", spec.get("trigger", {}))]
 	if spec.get("conditions", {"kind": "always"}) != {"kind": "always"}:
 		lines.append("if " + _raw_text("condition", spec.conditions))
 	for cost in spec.get("costs", []):
 		lines.append(_raw_text("cost", cost))
-	var result := " · ".join(lines) + ": "
+	var prefix := "Optional boost · " if spec.get("optional", false) else ""
+	return _named_text(prefix + " · ".join(lines) + ":", owner_name)
+
+
+static func rule_suffix(spec: Dictionary) -> String:
+	var suffix := ""
+	if spec.get("trigger", {}).get("kind") != "passive":
+		suffix += " [" + str(spec.get("limit", "once_per_action")).replace("_", " ") + "]"
+	if spec.get("zone", "circle") == "discard_top":
+		suffix += " [top of discard]"
+	return suffix
+
+
+static func rule_text(spec: Dictionary, owner_name: String = "") -> String:
 	var effects: Array = []
 	for effect in spec.get("effects", []):
 		effects.append(_raw_text("effect", effect))
 	for modifier in spec.get("modifiers", []):
 		effects.append(_raw_text("modifier", modifier))
-	result += " → ".join(effects)
-	if spec.get("optional", false):
-		result = "Optional boost · " + result
-	if spec.get("trigger", {}).get("kind") != "passive":
-		result += " [" + str(spec.get("limit", "once_per_action")).replace("_", " ") + "]"
-	if spec.get("zone", "circle") == "discard_top":
-		result += " [top of discard]"
-	return _named_text(result, owner_name)
+	return rule_heading(spec, owner_name) + " " + _named_text(" → ".join(effects), owner_name) + rule_suffix(spec)
 
 
 static func _trigger(p: Dictionary, c: Dictionary, kind: String) -> bool:
@@ -424,7 +431,10 @@ static func _unit_condition(p: Dictionary, c: Dictionary, kind: String) -> bool:
 static func _position(p: Dictionary, c: Dictionary) -> bool:
 	for id in c.state.targets(p.get("target", "owner"), c):
 		var position: int = c.get("predicted_formation", c.state.formation).find(id) if id >= 0 else c.state.position_of(id)
-		if position == ["front", "upper", "lower", "rear"].find(p.get("position", "front")): return true
+		var required: String = p.get("position", "front")
+		if required == "flank":
+			if position in [1, 2]: return true
+		elif position == ["front", "upper", "lower", "rear"].find(required): return true
 	return false
 static func _identity(p: Dictionary, c: Dictionary) -> bool:
 	for id in c.state.targets(p.get("target", "owner"), c):
@@ -473,6 +483,12 @@ static func _constant(p: Dictionary, _c: Dictionary) -> int: return int(p.get("a
 static func _weapon_value(p: Dictionary, c: Dictionary) -> int:
 	var units: Array = c.state.targets(p.get("target", "owner"), c)
 	return c.state.stat(units[0], "weapon_damage", c) if not units.is_empty() else 0
+static func basic_weapon_damage(damage: int) -> int:
+	return ceili(damage / 2.0)
+
+static func _basic_weapon_value(p: Dictionary, c: Dictionary) -> int:
+	return basic_weapon_damage(_weapon_value(p, c))
+
 static func _resource_value(p: Dictionary, c: Dictionary) -> int:
 	var units: Array = c.state.targets(p.get("target", "owner"), c)
 	return int(c.state.unit(units[0]).get("resource", 0)) if not units.is_empty() else 0
@@ -502,6 +518,7 @@ static func _formatted(category: String, p: Dictionary) -> String:
 		match kind:
 			"constant": return str(p.get("amount", 1))
 			"weapon_damage": return "weapon damage"
+			"basic_weapon_damage": return "basic weapon damage"
 			"resource_count": return "current resource"
 			"missing_hp": return "missing hull"
 			"adjacent_count": return "matching adjacent cards"
@@ -599,10 +616,14 @@ static func reaction_condition_text(condition: Dictionary, owner_name: String = 
 	return text("condition",condition,owner_name)
 
 
+static func reaction_position(position: String) -> String:
+	return "flank" if position in ["upper", "lower"] else position
+
+
 static func common_reaction_text(spec: Dictionary) -> String:
 	match spec.get("family","card_type"):
 		"card_type": return "Played " + spec.get("card_type","Attack") + " card"
-		"position": return "Played card from " + {"front":"Front","upper":"Upper Flank","lower":"Lower Flank","rear":"Rear"}.get(spec.get("position","front"),str(spec.get("position","")).capitalize())
+		"position": return "Played card from " + {"front":"Front","flank":"either flank","rear":"Rear"}.get(reaction_position(spec.get("position","front")),str(spec.get("position","")).capitalize())
 		"damaged": return "On monster damaged"
 		"healed": return "On heal"
 	return "Unknown reaction trigger"
@@ -615,7 +636,9 @@ static func _common_reaction(p: Dictionary, c: Dictionary) -> bool:
 		"position":
 			if not event.get("played_card",false): return false
 			var point: int = event.get("played_from",-1)
-			return point == {"front":0,"upper":1,"lower":2,"rear":3}.get(p.get("position","front"),-999)
+			var required := reaction_position(p.get("position","front"))
+			if required == "flank": return point in [1, 2]
+			return point == {"front":0,"rear":3}.get(required,-999)
 		"damaged": return int(event.get("hull_damage",0)) > 0
 		"healed": return int(event.get("player_healed",0)) > 0
 	return false

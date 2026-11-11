@@ -1,4 +1,5 @@
 extends Button
+const Rules = preload("res://scripts/rules/rule_registry.gd")
 ## Compact unit presentation shared by battle diamonds and editor previews.
 var name_label: Label
 var hull_label: Label
@@ -90,7 +91,12 @@ func _init() -> void:
 
 func configure(data: Dictionary, enemy: bool = false) -> void:
 	name_label.text = data.get("name", "Unit")
-	art.configure_data(data, enemy)
+	var shared_part: String = data.get("shared_rig_part", "")
+	set_meta("shared_rig_part", shared_part)
+	if shared_part.is_empty():
+		art.configure_data(data, enemy)
+	else:
+		art.self_modulate.a = 0.0
 	for state_name in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
 		var style := StyleBoxFlat.new()
 		style.bg_color = Color(1,1,1,0)
@@ -117,6 +123,7 @@ func configure(data: Dictionary, enemy: bool = false) -> void:
 	tooltip_text += "\nArmour %d" % data.get("armour",0)
 	if int(data.get("guard",0))>0:tooltip_text+="\nShields %d" % data.guard
 	tooltip_text+="\nWeapon %d %s" % [weapon.damage,weapon.range]
+	if not enemy: tooltip_text += "\nBasic attack damage %d" % Rules.basic_weapon_damage(int(weapon.damage))
 	if enemy: tooltip_text += "\nDefault if not activated: " + data.get("default_text", "None")
 	else:
 		tooltip_text += "\nLevel %d / Captain %s\n%s %d/%d" % [data.get("level", 1), data.get("captain", {}).get("name", "Unassigned"), data.get("resource_name", "Charge"), data.get("resource", 0), data.get("resource_capacity", 6)]
@@ -157,11 +164,12 @@ func _defence_layout() -> void:
 	shield_fx.position=info_column.position+art.position
 	shield_fx.size=art.size
 
-func show_trigger_preview(rules: Array = []) -> void:
+func show_trigger_preview(rules: Array = [], hovered_owner: bool = false) -> void:
 	predicted_rules=rules.duplicate()
 	trigger_badge.visible=not rules.is_empty()
 	trigger_badge.tooltip_text="\n".join(rules)
-	art.modulate=Color("#b5ffe3") if not rules.is_empty() else Color.WHITE
+	if is_instance_valid(art.rig_node):
+		art.rig_node.set_outline(hovered_owner or not rules.is_empty())
 
 func _get_tooltip(_at_position: Vector2) -> String:
 	return tooltip_text+("\n\nWould trigger:\n"+"\n".join(predicted_rules) if not predicted_rules.is_empty() else "")

@@ -7,7 +7,9 @@ signal unit_selected(id: int)
 signal unit_hovered(id: int)
 signal unit_exited(id: int)
 const Geometry = preload("res://scripts/battle_geometry.gd")
+const Catalog = preload("res://scripts/content_catalog.gd")
 const Unit = preload("res://scripts/unit_view.gd")
+const Rig = preload("res://scripts/rig_view.gd")
 var widgets: Dictionary = {}
 var wreck_widgets: Dictionary = {}
 var large_cards := false
@@ -16,6 +18,7 @@ var drop_check: Callable
 var enemy := false
 var snapshot: Dictionary = {}
 var cover_clouds: Dictionary={}
+var shared_rig: Control
 
 
 func _ready() -> void:
@@ -31,6 +34,17 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 	widgets.clear()
 	wreck_widgets.clear()
 	cover_clouds.clear()
+	shared_rig = null
+	if enemy:
+		for data in board.get("enemies", []):
+			var part: String = data.get("shared_rig_part", "")
+			if part.is_empty(): continue
+			if shared_rig == null:
+				shared_rig = Rig.new()
+				add_child(shared_rig)
+				shared_rig.configure_data(data, true)
+			if shared_rig.rig_node != null and data.hull <= 0:
+				shared_rig.rig_node.part_tints[part] = Color(.43, .42, .38, .68)
 	for point in 4:
 		var id: int = -1
 		if is_enemy:
@@ -56,11 +70,11 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
 			widget.set_cover(cover_amount)
 			widget.tooltip_text += "\nSlot cover: " + str(cover_amount)
-			if not is_enemy:
-				_wire_target(widget, id)
+			_wire_target(widget, unit_id)
 		else:
 			widget = Button.new()
 			widget.set_meta("empty_slot",true)
+			widget.set_meta("enemy_positions", is_enemy)
 			var cover_amount: int = int(board.get("cover", [0, 0, 0, 0, 0, 0, 0, 0])[point + (4 if is_enemy else 0)])
 			widget.text = Geometry.POSITION_NAMES[point] + "\nEmpty" + (" / Cover " + str(cover_amount) if cover_amount > 0 else "")
 			widget.modulate = Color("#506977")
@@ -84,8 +98,8 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 			var wreck := Button.new()
 			wreck.add_theme_font_size_override("font_size", 12)
 			wreck.clip_text = true
-			wreck.text = "%s / WRECK\nRecovery %d / %d" % [ship.name, ship.get("recovery", 0), threshold]
-			wreck.tooltip_text = "%s is defeated. Recovery %d / %d. Drag one of its own cards here to recover; revival needs an empty position." % [ship.name, ship.get("recovery", 0), threshold]
+			wreck.text = "%s / DISABLED\nRecovery %d / %d" % [ship.name, ship.get("recovery", 0), threshold]
+			wreck.tooltip_text = "%s is disabled. Recovery %d / %d. Use a repair card or drag one of its own cards here. It returns with %d hull, up to its maximum." % [ship.name, ship.get("recovery", 0), threshold, Catalog.REVIVED_HULL]
 			wreck.set_meta("ship_index", ship_id)
 			add_child(wreck)
 			_wire_target(wreck, ship_id)
@@ -103,6 +117,9 @@ func configure(board: Dictionary, is_enemy: bool = false, monster: Dictionary = 
 
 
 func _arrange() -> void:
+	if shared_rig != null:
+		shared_rig.position = Vector2(5, 0)
+		shared_rig.size = size - Vector2(10, 0)
 	var w := minf(228 if large_cards else 140, size.x * 0.43)
 	var h := large_unit_height if large_cards else 128.0
 	var coordinates := [Vector2(0.86 if not enemy else 0.14, 0.50), Vector2(0.5, 0.12), Vector2(0.5, 0.88), Vector2(0.14 if not enemy else 0.86, 0.5)]
@@ -120,15 +137,32 @@ func _arrange() -> void:
 
 
 func _draw() -> void:
+	if shared_rig != null: return
 	for link in Geometry.UNIT_LINKS:
 		if widgets.has(link[0]) and widgets.has(link[1]):
 			draw_line(widgets[link[0]].position + widgets[link[0]].size / 2, widgets[link[1]].position + widgets[link[1]].size / 2, Color("#345866"), 2, true)
 
 
+func shared_part_point(part: String) -> Vector2:
+	return shared_rig.marker_global(part)
+
+
+func flash_shared_part(part: String, duration: float) -> void:
+	if shared_rig == null or shared_rig.rig_node == null: return
+	var rig: Node2D = shared_rig.rig_node
+	var resting: Color = rig.part_tints.get(part, Color.WHITE)
+	rig.part_tints[part] = Color("#ff5050")
+	var tween := rig.create_tween()
+	tween.tween_method(func(tint: Color): rig.part_tints[part] = tint, Color("#ff5050"), resting, duration)
+
+
 func _wire_target(widget: Button, ship_id: int) -> void:
 	if widget is Unit:
 		if drop_check.is_valid():
-			widget.tooltip_text += "\nDrag its own card here to repair, or an adjacent living ship's card to swap. Release to act immediately; this discards the dragged card."
+			if ship_id < 0:
+				widget.tooltip_text += "\nDrop a ship card here to attack with that ship’s weapon. Discards the card."
+			else:
+				widget.tooltip_text += "\nDrag its own card here to repair, or an adjacent living ship's card to swap. Release to act immediately; this discards the dragged card."
 		widget.set_meta("base_guard_text", widget.guard_label.text)
 		widget.set_meta("base_guard_visible",widget.guard_label.visible)
 	widget.set_meta("base_tooltip", widget.tooltip_text)
@@ -163,9 +197,11 @@ func _drop_on_ship(_point: Vector2, data: Variant, ship_id: int) -> void:
 
 
 func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship: int = -1, actor: int = -1) -> void:
-	var candidates: Array = range(snapshot.get("ships", []).size())
+	var candidates: Array = []
 	for point in widgets:
-		if snapshot.get("formation", []).size() == 4 and snapshot.formation[point] < 0: candidates.append(100 + int(point))
+		if widgets[point].has_meta("ship_index"): candidates.append(widgets[point].get_meta("ship_index"))
+		elif not enemy: candidates.append(100 + int(point))
+	candidates.append_array(wreck_widgets.keys())
 	for ship_id in candidates:
 		var widget := target_widget(ship_id) as Button
 		if widget == null:
@@ -185,7 +221,7 @@ func show_basic_targets(hints: Dictionary = {}, valid: Array = [], selected_ship
 		if valid.has(ship_id):
 			tint = Color("#9ce6b7") if ship_id == actor else Color("#67bdd4")
 			if widget is Unit:
-				widget.guard_label.text = "REPAIR (discard 1 card)" if ship_id == actor else "SWAP (discard 1 card)"
+				widget.guard_label.text = "ATTACK (discard 1 card)" if ship_id < 0 else ("REPAIR (discard 1 card)" if ship_id == actor else "SWAP (discard 1 card)")
 				widget.guard_label.show()
 			fill = Color("#153329") if ship_id == actor else Color("#102b36")
 			if selected_ship == ship_id:

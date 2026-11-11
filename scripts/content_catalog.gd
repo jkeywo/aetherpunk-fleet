@@ -4,6 +4,7 @@ const Rules = preload("res://scripts/rules/rule_registry.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
 const TYPES = Rules.TYPES
 const DEFAULT_BASIC_RULES := {"repair": 2, "revive_threshold": 4}
+const REVIVED_HULL := 6
 
 
 static func normalized(value: Variant) -> Variant: return V2.normalized(value)
@@ -60,9 +61,27 @@ static func legacy_reaction(source: Dictionary) -> Dictionary:
 	return {"id": source.id, "name": source.name, "category": "Disruption" if t.kind == "tag" else "Retaliation", "conditions": {"kind": "all", "items": conditions}, "effects": converted(source.effects, true)}
 
 
+static func _normalize_reaction_positions(condition: Variant) -> void:
+	if condition is Array:
+		for child in condition: _normalize_reaction_positions(child)
+	elif condition is Dictionary:
+		if condition.get("kind") in ["reaction_trigger", "position"] and condition.get("position") is String:
+			condition.position = Rules.reaction_position(condition.position)
+		for key in ["all", "any", "not", "items", "condition"]:
+			if condition.has(key): _normalize_reaction_positions(condition[key])
+
+
+static func _normalize_enemy_reactions(doc: Dictionary) -> void:
+	for monster in doc.get("leviathans", []):
+		for stance in monster.get("stances", []):
+			for reaction in stance.get("reactions", []):
+				_normalize_reaction_positions(reaction.get("conditions", {}))
+
+
 static func migrate(source: Dictionary) -> Dictionary:
 	var doc: Dictionary = normalized(source)
 	if doc.get("version") == 3:
+		_normalize_enemy_reactions(doc)
 		return doc
 	doc = V2.migrate(doc)
 	doc.version = 3
@@ -143,6 +162,7 @@ static func migrate(source: Dictionary) -> Dictionary:
 	old["basic_actions"] = basic_rules(doc)
 	for key in ["ships", "positions", "leviathan", "enemy_position"]:
 		old.erase(key)
+	_normalize_enemy_reactions(doc)
 	return doc
 
 
@@ -373,6 +393,8 @@ static func _validate_setup(doc: Dictionary, ships: Dictionary, captains: Dictio
 	var basic: Variant = setup.get("basic_actions")
 	if not basic is Dictionary or not _integer(basic.get("repair"), 1) or not _integer(basic.get("revive_threshold"), 1):
 		errors.append("Basic repair and revive threshold must be positive.")
+	if setup.has("encounter_stars") and (not _integer(setup.encounter_stars, 1) or setup.encounter_stars > 10):
+		errors.append("Encounter difficulty must be between one and ten stars.")
 	if not setup.get("fixed_hand") is bool or not setup.get("opening_hand") is Array:
 		errors.append("Configure shuffled or fixed opening hand.")
 	if not errors.is_empty(): return

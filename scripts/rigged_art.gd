@@ -1,14 +1,22 @@
 extends Node2D
 ## Shared anchored idle rig. Atlas regions remain separate drawable parts.
 const Schema = preload("res://scripts/visuals/rig_schema.gd")
+const OUTLINE_SHADER := """
+shader_type canvas_item;
+void fragment() {
+	COLOR.rgb = vec3(1.0, 0.76, 0.32);
+}
+"""
 var definition: Dictionary = {}
 var part_textures: Dictionary = {}
+var part_tints: Dictionary = {}
 var configuration_error := ""
 var atlas: Texture2D
 var elapsed := 0.0
 var playing := true
 var show_anchors := false
 var strength := 1.0
+var outline: Node2D
 
 
 func configure(value: Dictionary, base_path: String = "res://assets/generated/rigs/") -> void:
@@ -29,7 +37,42 @@ func configure(value: Dictionary, base_path: String = "res://assets/generated/ri
 func _process(delta: float) -> void:
 	if playing: elapsed += delta
 	queue_redraw()
+	if outline != null and outline.visible: outline.queue_redraw()
 
+func set_outline(enabled: bool) -> void:
+	if enabled and outline == null:
+		outline = Node2D.new()
+		outline.name = "SilhouetteOutline"
+		outline.show_behind_parent = true
+		var shader := Shader.new()
+		shader.code = OUTLINE_SHADER
+		var mask := ShaderMaterial.new()
+		mask.shader = shader
+		outline.material = mask
+		outline.draw.connect(_draw_outline)
+		add_child(outline)
+	if outline != null:
+		outline.visible = enabled
+		outline.queue_redraw()
+
+func _draw_outline() -> void:
+	if definition.is_empty() or atlas == null: return
+	var transforms := poses(elapsed)
+	var pixel_scale := get_global_transform_with_canvas().get_scale().abs()
+	var radius := Vector2(2.0, 2.0) / pixel_scale.max(Vector2(0.001, 0.001))
+	for part in definition.parts:
+		var transform: Transform2D = transforms[part.id]
+		for direction in 8:
+			var shifted := transform
+			shifted.origin += Vector2.from_angle(direction * TAU / 8) * radius
+			outline.draw_set_transform_matrix(shifted)
+			_draw_part(outline, part)
+	outline.draw_set_transform_matrix(Transform2D.IDENTITY)
+	var parts := part_definitions()
+	for cable in definition.get("cables", []):
+		var a: Vector2 = transforms[cable.from] * _uv(parts[cable.from], cable.from_uv)
+		var b: Vector2 = transforms[cable.to] * _uv(parts[cable.to], cable.to_uv)
+		outline.draw_line(a, b, Color.WHITE, 3.8 + radius.x * 2.0, true)
 
 func _uv(part: Dictionary, value: Array) -> Vector2:
 	return (Vector2(value[0], value[1]) - Vector2(part.pivot[0], part.pivot[1])) * Vector2(part.size[0], part.size[1])
@@ -72,6 +115,13 @@ func marker_position(id: String, time: float = -1.0) -> Vector2:
 			if transforms.has(marker.part): return transforms[marker.part] * _uv(parts[marker.part], marker.uv)
 	return Vector2.ZERO
 
+func _draw_part(canvas: CanvasItem, part: Dictionary) -> void:
+	var size_value := Vector2(part.size[0], part.size[1])
+	var pivot := Vector2(part.pivot[0], part.pivot[1]) * size_value
+	var region: Array = part.region
+	var tint: Color = part_tints.get(part.id, Color.WHITE)
+	tint.a *= float(part.get("opacity", 1))
+	canvas.draw_texture_rect_region(part_textures[part.id], Rect2(-pivot, size_value), Rect2(region[0], region[1], region[2], region[3]), tint)
 
 func _draw() -> void:
 	if definition.is_empty() or atlas == null: return
@@ -86,10 +136,7 @@ func _draw() -> void:
 	ordered.sort_custom(func(a, b): return a.get("z",0) < b.get("z",0))
 	for part in ordered:
 		draw_set_transform_matrix(transforms[part.id])
-		var size_value := Vector2(part.size[0], part.size[1])
-		var pivot := Vector2(part.pivot[0], part.pivot[1]) * size_value
-		var region: Array = part.region
-		draw_texture_rect_region(part_textures[part.id], Rect2(-pivot, size_value), Rect2(region[0], region[1], region[2], region[3]), Color(1,1,1,float(part.get("opacity",1))))
+		_draw_part(self, part)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	if show_anchors:
 		for part in definition.parts:

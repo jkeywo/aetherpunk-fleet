@@ -2,6 +2,9 @@ extends Node
 ## Session preparation and detached result handoff; authored content remains in ContentStore.
 var last_result: Dictionary = {}
 var editor_playtest: bool = false
+var campaign_battle := false
+var campaign_node := ""
+var campaign_camera: Dictionary = {}
 var preparation_draft: Dictionary = {}
 var prepared_content: Dictionary = {}
 var encounter_content: Dictionary = {}

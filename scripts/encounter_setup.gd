@@ -2,7 +2,10 @@ extends Control
 
 const Catalog = preload("res://scripts/content_catalog.gd")
 const Geometry = preload("res://scripts/battle_geometry.gd")
+const StanceList = preload("res://scripts/enemy_stance_list.gd")
 const Rules = preload("res://scripts/rules/rule_registry.gd")
+const Difficulty = preload("res://scripts/encounter_difficulty.gd")
+const DifficultyIcons = preload("res://scripts/difficulty_icons.gd")
 
 var draft: Dictionary
 var slots: Array = ["", "", "", ""]
@@ -13,6 +16,8 @@ var formation: Control
 var inspector: VBoxContainer
 var start_button: Button
 var status: Label
+var difficulty_picker: OptionButton
+var row_preview: Label
 
 func _ready() -> void:
 	draft = BattleSession.encounter_content.duplicate(true)
@@ -49,6 +54,18 @@ func _build() -> void:
 	_button(header, "Back to Fleet", _back)
 	var title := _label(header, "ENCOUNTER SETUP", 26)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_label(header, "Difficulty").autowrap_mode = TextServer.AUTOWRAP_OFF
+	difficulty_picker = OptionButton.new()
+	difficulty_picker.name = "EncounterStars"
+	for stars in range(1, 11): difficulty_picker.add_icon_item(DifficultyIcons.texture(stars), str(stars), stars)
+	difficulty_picker.tooltip_text = "A large skull counts as five."
+	var stars := int(draft.setup.get("encounter_stars", Difficulty.DEFAULT_STARS))
+	difficulty_picker.select(stars - 1)
+	difficulty_picker.item_selected.connect(func(index): _set_stars(difficulty_picker.get_item_id(index)))
+	header.add_child(difficulty_picker)
+	row_preview = _label(header, "")
+	row_preview.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_set_stars(stars)
 	_label(outer, "Drag monsters onto the formation. Rearrange placed monsters by dragging them between slots. Click a monster to inspect its stats and cards.")
 	var columns := HBoxContainer.new()
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -88,6 +105,11 @@ func _build() -> void:
 	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	start_button = _button(footer, "Start Battle", _start)
 
+func _set_stars(stars: int) -> void:
+	draft.setup.encounter_stars = stars
+	var count := Difficulty.visible_enemy_cards(stars)
+	row_preview.text = "Up to %d visible %s" % [count, "card" if count == 1 else "cards"]
+
 func _label(parent: Node, value: String, font_size: int = 15) -> Label:
 	var label := Label.new()
 	label.text = value
@@ -104,6 +126,8 @@ func _button(parent: Node, value: String, callback: Callable) -> Button:
 	return button
 
 func _render() -> void:
+	var move := Geometry.normalize_formation(slots, "")
+	if move.x >= 0 and selected_slot == move.x: selected_slot = move.y
 	var enemies: Array = []
 	var positions: Array = [-1, -1, -1, -1]
 	var card_count := 0
@@ -152,29 +176,13 @@ func _inspect() -> void:
 	_label(inspector, monster.name, 23).set_meta("plain_text", true)
 	_label(inspector, "Hull %d · Armour %d · Weapon %d %s" % [monster.hull, monster.armour, monster.weapon.damage, monster.weapon.range])
 	if selected_slot >= 0:
-		_label(inspector, Geometry.POSITION_NAMES[selected_slot]).set_meta("plain_text", true)
+		_label(inspector, Geometry.POSITION_NAMES[selected_slot]).set_meta("enemy_positions", true)
 		_button(inspector, "Remove from encounter", _remove_selected)
 	_label(inspector, "Default action", 16)
 	var fallback := Catalog.effects_text(monster.default_action, monster.name)
 	_label(inspector, fallback if not fallback.is_empty() else "None")
 	_label(inspector, "Stance cards", 18)
-	var counts: Dictionary = {}
-	for entry in monster.stance_loadout:
-		counts[entry.stance] = counts.get(entry.stance, 0) + int(entry.count)
-	for stance in monster.stances:
-		if not counts.has(stance.id):
-			continue
-		var panel := PanelContainer.new()
-		inspector.add_child(panel)
-		var card := VBoxContainer.new()
-		panel.add_child(card)
-		var copies: int = counts[stance.id]
-		var quantity := "1 copy" if copies == 1 else "%d copies" % copies
-		_label(card, "%s · %s" % [stance.name, quantity], 16).set_meta("plain_text", true)
-		var intent := Catalog.effects_text(stance.effects, monster.name)
-		_label(card, "Intent — " + (intent if not intent.is_empty() else "None"))
-		for reaction in stance.reactions:
-			_label(card, reaction.name + " — " + Rules.reaction_condition_text(reaction.conditions, monster.name) + " → " + Catalog.effects_text(reaction.effects, monster.name))
+	inspector.add_child(StanceList.new(monster, 320, selected_slot))
 
 func _begin_drag(_position: Vector2, id: String, origin: int, control: Control) -> Dictionary:
 	var preview := Label.new()

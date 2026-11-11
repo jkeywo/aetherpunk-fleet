@@ -1000,6 +1000,183 @@
           ]
         }
       ]
+    },
+    {
+      "id": "enemy-crown-grazer",
+      "name": "Crown Grazer",
+      "kind": "creature",
+      "atlas": "enemy-crown-grazer-atlas.png",
+      "canvas": [
+        1120,
+        490
+      ],
+      "parts": [
+        {
+          "id": "body",
+          "region": [
+            0,
+            0,
+            1097,
+            435
+          ],
+          "size": [
+            620,
+            255
+          ],
+          "pivot": [
+            0.5,
+            0.5
+          ],
+          "z": 0,
+          "motion": {
+            "degrees": 0.45,
+            "bob_y": 3,
+            "period": 10,
+            "phase": 0
+          },
+          "position": [
+            335,
+            225
+          ]
+        },
+        {
+          "id": "far_limb",
+          "region": [
+            102,
+            458,
+            590,
+            426
+          ],
+          "size": [
+            239,
+            171
+          ],
+          "pivot": [
+            0.78,
+            0.25
+          ],
+          "z": -1,
+          "motion": {
+            "degrees": 2.6,
+            "bob_y": 0,
+            "period": 7.2,
+            "phase": 0.65
+          },
+          "parent": "body",
+          "anchor": [
+            0.49,
+            0.73
+          ]
+        },
+        {
+          "id": "tail",
+          "region": [
+            692,
+            550,
+            1082,
+            268
+          ],
+          "size": [
+            500,
+            120
+          ],
+          "pivot": [
+            0.15,
+            0.5
+          ],
+          "z": -2,
+          "motion": {
+            "degrees": 3.0,
+            "bob_y": 0,
+            "period": 8.7,
+            "phase": 0.36
+          },
+          "parent": "body",
+          "anchor": [
+            0.87,
+            0.6
+          ]
+        },
+        {
+          "id": "near_limb",
+          "region": [
+            1096,
+            0,
+            678,
+            484
+          ],
+          "size": [
+            282,
+            200
+          ],
+          "pivot": [
+            0.75,
+            0.23
+          ],
+          "z": 1,
+          "motion": {
+            "degrees": 2.9,
+            "bob_y": 0,
+            "period": 6.8,
+            "phase": 0.15
+          },
+          "parent": "body",
+          "anchor": [
+            0.65,
+            0.67
+          ]
+        }
+      ],
+      "markers": [
+        {
+          "id": "attack",
+          "part": "body",
+          "uv": [
+            0.075,
+            0.59
+          ]
+        },
+        {
+          "id": "impact",
+          "part": "body",
+          "uv": [
+            0.53,
+            0.59
+          ]
+        },
+        {
+          "id": "body",
+          "part": "body",
+          "uv": [
+            0.15,
+            0.58
+          ]
+        },
+        {
+          "id": "far_limb",
+          "part": "far_limb",
+          "uv": [
+            0.3,
+            0.69
+          ]
+        },
+        {
+          "id": "near_limb",
+          "part": "near_limb",
+          "uv": [
+            0.32,
+            0.66
+          ]
+        },
+        {
+          "id": "tail",
+          "part": "tail",
+          "uv": [
+            0.64,
+            0.58
+          ]
+        }
+      ]
     }
   ]
 }

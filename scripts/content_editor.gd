@@ -504,12 +504,12 @@ func _enemy_form(form: Node, entry: Dictionary) -> void:
 				reaction.conditions={"kind":"reaction_trigger","family":value,"card_type":"Attack","position":"front"}
 			_dirty(); _rebuild_form(); _live_preview(), "reaction_trigger_" + reaction.id)
 		if family == "card_type": _menu(column,"Card type",R.TYPES,reaction.conditions.get("card_type","Attack"),func(value): reaction.conditions.card_type=value; _dirty(); _live_preview(),"reaction_type_"+reaction.id)
-		elif family == "position": _menu(column,"Played from",[{"label":"Front","value":"front"},{"label":"Upper Flank","value":"upper"},{"label":"Lower Flank","value":"lower"},{"label":"Rear","value":"rear"}],reaction.conditions.get("position","front"),func(value): reaction.conditions.position=value; _dirty(); _live_preview(),"reaction_position_"+reaction.id)
+		elif family == "position": _menu(column,"Played from",[{"label":"Front","value":"front"},{"label":"Either Flank","value":"flank"},{"label":"Rear","value":"rear"}],reaction.conditions.get("position","front"),func(value): reaction.conditions.position=value; _dirty(); _live_preview(),"reaction_position_"+reaction.id)
 		elif family == "custom":
 			var spec:=Spec.new()
 			spec.set_meta("custom_reaction",reaction.id)
 			column.add_child(spec)
-			spec.configure("condition",reaction.conditions)
+			spec.configure("condition",reaction.conditions,0,true)
 			spec.changed.connect(func(): _dirty(); _live_preview())
 		_effects(column, reaction.effects)
 	_effects(form, stance.effects, "ENEMY-PHASE ACTIVATION")

@@ -20,6 +20,8 @@ func select_option(menu: OptionButton, value: String) -> void:
 	for index in menu.item_count:
 		if menu.get_item_metadata(index)==value:menu.select(index);menu.item_selected.emit(index);return
 func _run() -> void:
+	expect(Icons.texture("front", true) == Icons.texture("rear") and Icons.texture("rear", true) == Icons.texture("front"), "Enemy front and rear glyphs should face the opposite way from the fleet.")
+	expect(Icons.texture("upper", true) != Icons.texture("lower", true), "Enemy flank glyphs should remain distinct.")
 	for type in R.TYPES:
 		var doc:=doc_with(condition("card_type",type))
 		var design: Dictionary=card_def(doc,"brace")
@@ -34,11 +36,18 @@ func _run() -> void:
 	var b=State.new(3,doc)
 	expect(b.play(uid_for(b,"brace"),[uid_for(b,"broadside")],-1,-1,0)=="" and not reacted(b),"Discarded Attack counted as played Attack.")
 	for point in 4:
-		var family_position: String="front" if point==0 else ("rear" if point==3 else ("upper" if point==1 else "lower"))
+		var family_position: String="front" if point==0 else ("rear" if point==3 else "flank")
 		doc=doc_with(condition("position",family_position))
 		b=State.new(3,doc)
 		b.formation.erase(0);b.formation.insert(point,0)
 		expect(b.play(uid_for(b,"brace"),[],-1,-1,0)=="" and reacted(b),"Origin position not recognized: "+str(point))
+	for legacy in ["upper", "lower"]:
+		for point in 4:
+			doc = doc_with({"kind": "all", "items": [condition("position", legacy)]})
+			b = State.new(3, doc)
+			b.formation.erase(0)
+			b.formation.insert(point, 0)
+			expect(b.play(uid_for(b, "brace"), [], -1, -1, 0) == "" and reacted(b) == (point in [1, 2]), "Legacy flank reaction did not match exactly the two flanks.")
 	doc=doc_with(condition("position","front"))
 	card_def(doc,"brace").rules[0].effects=[{"kind":"move","target":"owner","destination":"lower","guard":0}]
 	b=State.new(3,doc)
@@ -81,16 +90,20 @@ func _run() -> void:
 	for react in battle.stance_panel.reaction_buttons.values():
 		for child in react.get_children():
 			if child is Badge:badges.append(child)
-	expect(not badges.is_empty() and badges.all(func(badge):return badge.glyph!=null and badge.border!=null),"Live reaction row missing generated glyphs/shared frame.")
+	expect(badges.all(func(badge):return badge.glyph!=null and badge.border!=null),"Live reaction row missing generated glyphs/shared frame.")
 	var owner_images:=portraits(battle.stance_panel)
 	expect(owner_images.size()==battle.state.enemy_row.size() and owner_images.all(func(p):return not p.definition.is_empty() and p.definition==preload("res://scripts/art_assets.gd").visual_rig(battle.state.unit(p.get_meta("owner_portrait")),true)),"Reaction cards do not show their actual owner monster artwork.")
-	for position in ["front","upper","lower","rear"]:
-		var composite:=preload("res://scripts/monster_portrait.gd").new()
-		root.add_child(composite)
-		composite.configure(battle.state._enemy_visual(-1),condition("position",position),Vector2(140,68))
-		await flush()
-		expect(composite.position_glyph!=null and composite.rig.rig_node!=null and composite.rig.rig_node.scale.x>0,"Position marker lost its actual monster image before layout.")
-		composite.free()
+	for image in owner_images:
+		var marker := image.get_parent().get_node("OwnerPosition") as TextureRect
+		var point: int = battle.state.position_of(image.get_meta("owner_portrait"))
+		expect(marker.texture == Icons.texture(Geometry.POSITIONS[point], true) and marker.position.y >= image.size.y, "Enemy position marker must sit under its portrait and face the enemy direction.")
+	for position in ["front", "flank", "rear"]:
+		var badge := Badge.new()
+		root.add_child(badge)
+		badge.configure(condition("position", position))
+		expect(badge.glyph == Icons.texture("upper" if position == "flank" else position) and portraits(badge).is_empty(), "Position reaction badge must show the player position without a monster portrait.")
+		expect((badge.lower_glyph != null) == (position == "flank"), "Only the flank reaction should show both flank markers.")
+		badge.free()
 	change_scene_to_file("res://scenes/editor.tscn")
 	await scene_changed
 	var editor=current_scene
@@ -105,9 +118,9 @@ func _run() -> void:
 	select_option(family_menu,"position")
 	await flush()
 	expect(r.conditions.family=="position" and editor.fields.has("reaction_position_"+r.id) and not editor.fields.has("reaction_type_"+r.id),"Position trigger exposes incorrect editor parameters.")
-	select_option(editor.fields["reaction_position_"+r.id],"upper")
+	select_option(editor.fields["reaction_position_"+r.id],"flank")
 	await flush()
-	expect(r.conditions.position=="upper", "Position editor choice does not reach authored data.")
+	expect(r.conditions.position=="flank", "Position editor choice does not reach authored data.")
 	select_option(editor.fields["reaction_trigger_"+r.id],"damaged")
 	await flush()
 	expect(r.conditions.family=="damaged" and not editor.fields.has("reaction_position_"+r.id) and not editor.fields.has("reaction_type_"+r.id) and Catalog.validate(editor.draft).is_empty(),"Damage trigger still requires a threshold or saves invalid data.")

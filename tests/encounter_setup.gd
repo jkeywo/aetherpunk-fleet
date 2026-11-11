@@ -23,6 +23,10 @@ func _run() -> void:
 	var setup = current_scene
 	await flush()
 	expect(setup.name == "EncounterSetup", "Fleet preparation skipped encounter setup.")
+	expect(setup.difficulty_picker.item_count == 10 and setup.draft.setup.encounter_stars == 6, "Difficulty selector did not offer 1–10 stars with the legacy three-card default.")
+	setup.difficulty_picker.select(8)
+	setup.difficulty_picker.item_selected.emit(8)
+	expect(setup.draft.setup.encounter_stars == 9 and "4" in setup.row_preview.text, "Selecting nine stars did not preview four cards.")
 	var roster := setup.find_child("MonsterRoster", true, false) as Control
 	var id: String = setup.slots[0]
 	var option: Button = roster.get_child(Catalog.index_by_id(fixture.leviathans, id))
@@ -37,10 +41,11 @@ func _run() -> void:
 	current_scene.launch_button.pressed.emit()
 	await scene_changed
 	setup = current_scene
-	expect(setup.slots[0] == id and setup.slots[1] == id, "Returning to Fleet lost encounter edits.")
+	expect(setup.slots[0] == id and setup.slots[1] == id and setup.draft.setup.encounter_stars == 9, "Returning to Fleet lost encounter edits or difficulty.")
 	setup.start_button.pressed.emit()
 	await scene_changed
 	var battle = current_scene.state
+	expect(battle.enemy_row.size() == 4 and current_scene.stance_panel.buttons.size() == 4, "Nine-star Custom Battle did not display four cards.")
 	var first: int = battle.enemy_formation[0]
 	var second: int = battle.enemy_formation[1]
 	expect(first != second and battle.enemies[first].id == id and battle.enemies[second].id == id, "Battle did not create independent monsters.")
@@ -53,9 +58,15 @@ func _run() -> void:
 	change_scene_to_file("res://scenes/encounter_setup.tscn")
 	await scene_changed
 	setup = current_scene
-	for point in setup.slots.size():
-		if setup.slots[point] != "":
-			setup._select_slot(point)
-			setup._remove_selected()
+	var rear_drop := {"encounter": setup.get_instance_id(), "monster": id, "origin": -1}
+	setup._drop(Vector2.ZERO, rear_drop, 3)
+	setup._select_slot(0)
+	setup._remove_selected()
+	expect(setup.slots[0] == id and setup.slots[3].is_empty(), "Rear monster did not advance after removing Front.")
+	while setup.slots.any(func(slot): return slot != ""):
+		setup._select_slot(setup.slots.find_custom(func(slot): return slot != ""))
+		setup._remove_selected()
 	expect(setup.start_button.disabled and setup.draft.setup.enemies.is_empty(), "Empty encounter can start.")
+	setup._drop(Vector2.ZERO, rear_drop, 3)
+	expect(setup.slots[0] == id and setup.slots[3].is_empty() and setup.selected_slot == 0, "A lone enemy dropped into Rear did not move to Front.")
 	done("Encounter setup")

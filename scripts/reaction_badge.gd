@@ -5,6 +5,7 @@ const Icons = preload("res://scripts/keyword_icons.gd")
 const ROOT := "res://assets/generated/reactions/"
 var condition: Dictionary = {}
 var glyph: Texture2D
+var lower_glyph: Texture2D
 var border: Texture2D
 var key := ""
 var glyph_fraction := 0.56
@@ -19,7 +20,17 @@ func configure(spec: Dictionary, extent: int = 36) -> void:
 	glyph_fraction=0.56 if family=="card_type" else (0.64 if family=="position" else 0.60)
 	key=str(spec.get("card_type","Attack")).to_lower() if family=="card_type" else (str(spec.get("position","front")) if family=="position" else family)
 	border=load(ROOT+"border.png")
-	glyph=Icons.texture(key) if family=="card_type" else load(ROOT+key+".png")
+	lower_glyph = null
+	match family:
+		"card_type":
+			glyph = Icons.texture(key)
+		"position":
+			key = Rules.reaction_position(key)
+			# A position trigger always refers to the player's formation.
+			glyph = Icons.texture("upper" if key == "flank" else key)
+			if key == "flank": lower_glyph = Icons.texture("lower")
+		_:
+			glyph = load(ROOT + key + ".png")
 	tooltip_text=description()
 	queue_redraw()
 
@@ -32,5 +43,14 @@ func description() -> String:
 	return Rules.common_reaction_text(condition)
 
 func _draw() -> void:
-	if glyph!=null:draw_texture_rect(glyph,Rect2(size*((1.0-glyph_fraction)/2.0),size*glyph_fraction),false)
+	if glyph != null:
+		var bounds := Rect2(size * ((1.0 - glyph_fraction) / 2.0), size * glyph_fraction)
+		if lower_glyph == null:
+			draw_texture_rect(glyph, bounds, false)
+		else:
+			var upper_size := glyph.get_size() * Vector2(1, 0.5)
+			var lower_size := lower_glyph.get_size() * Vector2(1, 0.5)
+			var half := bounds.size * Vector2(1, 0.5)
+			draw_texture_rect_region(glyph, Rect2(bounds.position, half), Rect2(Vector2.ZERO, upper_size))
+			draw_texture_rect_region(lower_glyph, Rect2(bounds.position + Vector2(0, half.y), half), Rect2(Vector2(0, lower_size.y), lower_size))
 	if border!=null:draw_texture_rect(border,Rect2(Vector2.ZERO,size),false)

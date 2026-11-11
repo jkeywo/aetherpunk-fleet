@@ -45,6 +45,7 @@ var _stage := ""
 var _reaction_owners: Array = []
 var _eligible_row: Array = []
 var _activation_row: Array = []
+var _spent_intent_stances: Array = []
 var _activated: Array = []
 var _defaults: Array = []
 var _preview_only := false
@@ -69,7 +70,13 @@ var stance_index: int:
 		if not enemy_row.is_empty(): stance_cards[enemy_row[0]].index = value
 
 
-func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
+const Difficulty = preload("res://scripts/encounter_difficulty.gd")
+var campaign_options: Dictionary = {}
+var enemy_row_capacity := 3
+
+
+func _init(seed_value: int = -1, content: Dictionary = {}, options: Dictionary = {}) -> void:
+	campaign_options = options.duplicate(true)
 	if seed_value < 0: rng.randomize()
 	else: rng.seed = seed_value
 	if content.is_empty():
@@ -86,6 +93,7 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 		return
 	document = Catalog.migrate(content)
 	definitions = Catalog.compile(document)
+	enemy_row_capacity = Difficulty.visible_enemy_cards(int(definitions.setup.get("encounter_stars", Difficulty.DEFAULT_STARS)))
 	for i in definitions.ships.size():
 		var ship: Dictionary = definitions.ships[i].duplicate(true)
 		ship["mechanic_text"] = "\n".join(ship.resource.rules.map(func(rule): return Rules.rule_text(rule, ship.name)))
@@ -114,9 +122,12 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 				var uid := stance_cards.size()
 				stance_cards.append({"owner": -1 - i, "index": Catalog.index_by_id(enemy.stances, entry.stance)})
 				stance_deck.append(uid)
+	Geometry.normalize_formation(formation)
+	Geometry.normalize_formation(enemy_formation)
 	for i in ships.size():
 		ships[i].max_hull = stat(i, "max_hull")
-		ships[i].hull = int(ships[i].max_hull)
+		var initial_hulls: Dictionary = campaign_options.get("starting_hull", {})
+		ships[i].hull = clampi(int(initial_hulls.get(ships[i].id, ships[i].max_hull)), 1, int(ships[i].max_hull))
 		ships[i]["starting_max_hull"] = ships[i].max_hull
 	card_keys = definitions.deck_keys.duplicate()
 	for uid in card_keys.size(): deck.append(uid)
@@ -132,7 +143,7 @@ func _init(seed_value: int = -1, content: Dictionary = {}) -> void:
 	_shuffle(stance_deck)
 	_fill_row()
 	feedback_events.clear()
-	history.append("Round 1. Three visible enemy activations; inactive enemies use weaker defaults.")
+	history.append("Round 1. Up to %d visible enemy cards. Inactive enemies use weaker defaults." % enemy_row_capacity)
 	root_context = {"owner": -999, "uid": -1, "damage": {}, "metrics": {}, "healed": 0, "printed_cost": 0, "ancestry": []}
 	_stage = "initial_start"
 	_mode = "start"
@@ -190,36 +201,52 @@ func row_card(uid: int) -> Dictionary:
 	return definition
 
 
-func _fill_row() -> void:
+func _fill_row(previous: Array = []) -> void:
 	if _preview_only:
 		_uncertain = true
 		return
-	while enemy_row.size() < 3:
+	var initial_size := enemy_row.size()
+	while enemy_row.size() < enemy_row_capacity:
 		if stance_deck.is_empty():
 			stance_deck = stance_discard.filter(func(uid): return unit(stance_cards[uid].owner).hull > 0)
 			stance_discard.clear()
 			_shuffle(stance_deck)
 		if stance_deck.is_empty(): break
-		var uid: int = stance_deck.pop_front()
+		var index := 0
+		var replacement_slot := enemy_row.size() - initial_size
+		if campaign_options.get("vary_stance_replacements", false) and replacement_slot < previous.size():
+			var retired: Dictionary = stance_cards[previous[replacement_slot]]
+			var different := stance_deck.find_custom(func(uid):
+				var candidate: Dictionary = stance_cards[uid]
+				return candidate.index != retired.index or unit(candidate.owner).id != unit(retired.owner).id
+			)
+			if different >= 0: index = different
+		var uid: int = stance_deck.pop_at(index)
 		if unit(stance_cards[uid].owner).hull > 0: enemy_row.append(uid)
 
 
-func _replace_row(uid: int) -> void:
+func _replace_row(uid: int, after_reaction: bool = false) -> void:
 	if not enemy_row.has(uid): return
 	_eligible_row.erase(uid)
 	_activation_row.erase(uid)
 	var point := enemy_row.find(uid)
 	enemy_row.remove_at(point)
 	if unit(stance_cards[uid].owner).hull > 0: stance_discard.append(uid)
+	if _mode == "enemy":
+		_spent_intent_stances.append(uid)
+		return
 	# Replacements occupy the vacated column, not the end of the row.
-	var old: Array = enemy_row.duplicate()
-	_fill_row()
-	if enemy_row.size() > old.size():
-		var replacement: int = enemy_row.pop_back()
+	var remaining := enemy_row.size()
+	var replacement := -1
+	_fill_row([uid])
+	if enemy_row.size() > remaining:
+		replacement = enemy_row.pop_back()
 		enemy_row.insert(mini(point, enemy_row.size()), replacement)
 	for key in stunned.keys():
 		if str(key).begins_with(str(uid) + "/"): stunned.erase(key)
-	_record("stance_changed", {"title": "Enemy row replacement" if not _preview_only else "Replacement remains hidden"})
+	var feedback := {"title": "Enemy row replacement" if not _preview_only else "Replacement remains hidden"}
+	if after_reaction: feedback["incoming_uid"] = replacement
+	_record("stance_changed", feedback)
 
 
 func context_neighbours(c: Dictionary) -> Array:
@@ -291,9 +318,11 @@ func targets(selector: String, c: Dictionary) -> Array:
 	return []
 
 
-func selected(spec: Dictionary, c: Dictionary) -> Array:
+func selected(spec: Dictionary, c: Dictionary, include_disabled_allies: bool = false) -> Array:
 	var result: Array = []
-	for id in targets(spec.get("target", "owner"), c):
+	var selector: String = spec.get("target", "owner")
+	var candidates := range(ships.size()) if include_disabled_allies and selector == "all_allies" else targets(selector, c)
+	for id in candidates:
 		var filtered := c.duplicate(true)
 		filtered["state"] = self
 		filtered["event"] = c.get("event", {}).duplicate(true)
@@ -444,7 +473,7 @@ func choice_flags(uid: int, slot: int = -1, options: Dictionary = {}) -> Diction
 		if effect.kind == "move" and effect.get("destination", "") == "chosen_slot":
 			flags.movement = true
 			flags.adjacent = true
-		if effect.kind == "recovery": flags.recovery = true
+		if effect.kind in ["repair", "recovery"] and effect.get("target", "owner") == "chosen_ally": flags.recovery = true
 		if effect.kind == "swap": flags.swap = true
 		if effect.get("exclude_owner", "No") == "Yes": flags.exclude_owner = true
 		if effect.get("pair_choice", "No") == "Yes": flags.pair = true; flags.movement = true
@@ -554,6 +583,7 @@ func _effect_path(effects: Array, c: Dictionary, points: Array) -> String:
 			var other: int = points[to]
 			points[to] = points[from]
 			points[from] = other
+			Geometry.normalize_formation(points)
 	return ""
 
 
@@ -611,7 +641,7 @@ func hand_count() -> int:
 
 func boost_options(uid: int, c: Dictionary = {}) -> Array:
 	var owner: int = int(card(uid).owner) if uid >= 0 else int(c.get("owner", -1))
-	var event := {"kind": "on_play", "uid": uid, "actor": owner, "target": c.get("ally", owner), "card": {"type": c.basic_type, "traits": ["Repair"] if c.basic_type == "Support" else ["Movement"]} if c.has("basic_type") else (card(uid) if uid >= 0 else {"type": "Manoeuvre", "traits": ["Movement"]}), "amount": 1}
+	var event := {"kind": "on_play", "uid": uid, "actor": owner, "target": c.get("ally", owner), "card": {"type": c.basic_type, "traits": c.get("basic_traits", [])} if c.has("basic_type") else (card(uid) if uid >= 0 else {"type": "Manoeuvre", "traits": ["Movement"]}), "amount": 1}
 	var result: Array = []
 	var available := _sources(event)
 	if uid >= 0 and not c.has("basic_type"):
@@ -749,9 +779,15 @@ func _prepend(jobs: Array) -> void:
 	for index in range(jobs.size() - 1, -1, -1): tasks.push_front(jobs[index])
 
 
-func _effect_jobs(effects: Array, c: Dictionary) -> Array:
+func _effect_jobs(effects: Array, c: Dictionary, present_enemy_effects: bool = false, presented_rule_id: String = "") -> Array:
 	var result: Array = []
-	for effect in effects: result.append({"kind": "effect", "spec": effect, "ctx": c})
+	for index in effects.size():
+		var job := {"kind": "effect", "spec": effects[index], "ctx": c}
+		if present_enemy_effects: job["enemy_effect_index"] = index
+		if not presented_rule_id.is_empty() and effects.size() > 1:
+			job["card_effect_index"] = index
+			job["card_rule_id"] = presented_rule_id
+		result.append(job)
 	return result
 
 
@@ -779,22 +815,38 @@ func _drain() -> void:
 					if not _can_pay_costs(rule.get("costs", []), c): continue
 					for cost in rule.get("costs", []): Rules.descriptor("cost", cost.kind).handler.call(cost, c)
 				used_triggers[c.get("usage_key", c.key)] = "fired"
-				if c.uid >= 0 and not (rule.trigger.kind == "on_play" and c.event.get("uid") == c.uid):
+				var triggered_card: bool = c.uid >= 0 and not is_main_play
+				if triggered_card:
 					history.append("Card trigger: " + c.title + " / " + str(rule.get("name", rule.id)))
-					_record("card_triggered", {"uid": c.uid, "source_uid": c.event.get("uid", -1), "source_event": c.event.get("kind", ""), "source_amount": c.event.get("amount", 0), "rule_key":c.key, "rule_text":Rules.rule_text(rule,unit(c.owner).name), "title": c.title + " / " + str(rule.get("name", rule.id))})
+					_record("card_triggered", {"uid": c.uid, "source_uid": c.event.get("uid", -1), "source_event": c.event.get("kind", ""), "source_amount": c.event.get("amount", 0), "rule_key":c.key, "rule_id":rule.id, "rule_text":Rules.rule_text(rule,unit(c.owner).name), "title": c.title + " / " + str(rule.get("name", rule.id))})
+				elif is_main_play:
+					_record("card_rule_started", {"uid": c.uid, "rule_id": rule.id})
 				elif c.uid < 0:
 					_record("ship_rule", {"target": c.owner, "rule_key":c.key, "rule_text":Rules.rule_text(rule,unit(c.owner).name), "title": c.title})
-				_prepend(_effect_jobs(rule.get("effects", []), c))
+				var presented: bool = is_main_play or (triggered_card and circle.has(c.uid))
+				var effects := _effect_jobs(rule.get("effects", []), c, false, rule.id if presented else "")
+				if presented:
+					effects.append({"kind": "card_rule_finished", "uid": c.uid, "return_to_circle": triggered_card})
+				_prepend(effects)
+			"card_rule_finished":
+				_record("card_rule_finished", {"uid": job.uid, "return_to_circle": job.return_to_circle})
 			"area_visual": _record("area_attack", {"style":job.style, "presentation":job.presentation, "origin_marker":job.origin_marker, "attacker":int(c.owner), "target":job.target, "targets":job.targets})
-			"effect": Rules.execute(job.spec, c)
+			"effect":
+				if job.has("enemy_effect_index"):
+					_record("enemy_effect_started", {"index": job.enemy_effect_index})
+				elif job.has("card_effect_index"):
+					_record("card_effect_started", {"uid": c.uid, "rule_id": job.card_rule_id, "index": job.card_effect_index})
+				elif not c.has("area_target"):
+					_focus_effect()
+				Rules.execute(job.spec, c)
 			"hit": _hit(job, c)
 			"reaction_done":
 				_record("enemy_effect_finished")
-				_replace_row(job.stance_uid)
+				_replace_row(job.stance_uid, true)
 				_emit("reaction_resolved", c, {"category": job.category, "stance_uid": job.stance_uid, "reaction_key": job.reaction_key, "amount": 1})
 			"activation_done":
-				_record("enemy_effect_finished")
 				_replace_row(job.stance_uid)
+				_record("enemy_effect_finished", {"stance_uid": job.stance_uid})
 			"default_done": _record("enemy_effect_finished")
 		_cleanup()
 	if outcome != "":
@@ -806,7 +858,7 @@ func _drain() -> void:
 
 
 func _advance_stage() -> bool:
-	if alive_ids(true).is_empty() and held.is_empty() and _stage != "allied":
+	if _enemies_defeated() and held.is_empty() and _stage != "allied":
 		outcome = "victory"
 		phase = "finished"
 		return false
@@ -848,12 +900,13 @@ func _advance_stage() -> bool:
 						c["uid"] = -1
 						c["event"] = event
 						c["state"] = self
-						c["ally"] = _enemy_target(owner, weapon_range(owner))
+						c["reaction_actor"] = event.actor
+						c["ally"] = event.actor
 						c["ancestry"] = []
 						if not Rules.condition(reaction.conditions, c): continue
 						history.append(row_card(uid).owner_name + " reaction: " + reaction.name)
 						_record("reaction_triggered", {"title": row_card(uid).owner_name + " / " + reaction.name, "stance_uid": uid, "reaction_key": key, "presentation": {"owner_name": row_card(uid).owner_name, "owner_visual": _enemy_visual(owner), "owner": owner, "name": reaction.name, "custom_trigger": reaction.get("custom_trigger",false), "stance_name": row_card(uid).name, "conditions": reaction.conditions, "effects": reaction.effects}})
-						tasks.append_array(_effect_jobs(reaction.effects, c))
+						tasks.append_array(_effect_jobs(reaction.effects, c, true))
 						tasks.append({"kind": "reaction_done", "ctx": c, "stance_uid": uid, "category": reaction.get("category", ""), "reaction_key": key})
 						return true
 			_stage = ""
@@ -870,20 +923,25 @@ func _advance_stage() -> bool:
 				_activated.append(owner)
 				_record("intent_triggered", {"title": row.owner_name + " / " + row.name, "stance_uid": uid, "presentation": {"owner_name": row.owner_name, "owner_visual": _enemy_visual(owner), "owner": owner, "name": row.name, "effects": row.effects}})
 				var c := _enemy_context(owner)
-				tasks.append_array(_effect_jobs(row.effects, c))
+				tasks.append_array(_effect_jobs(row.effects, c, true))
 				tasks.append({"kind": "activation_done", "ctx": c, "stance_uid": uid})
 				return true
 			_stage = "defaults"
 			_defaults = alive_ids(true).filter(func(owner): return not _activated.has(owner))
 			return true
 		"defaults":
-			if not _defaults.is_empty():
+			while not _defaults.is_empty():
 				var owner: int = _defaults.pop_front()
+				var enemy := unit(owner)
+				if enemy.hull <= 0 or enemy.default_action.is_empty(): continue
 				_next_enemy_action()
-				_record("intent_triggered", {"title": unit(owner).name + " / weaker default action", "presentation": {"owner_name": unit(owner).name, "owner_visual": _enemy_visual(owner), "owner": owner, "name": "Default action", "effects": unit(owner).default_action}})
-				tasks.append_array(_effect_jobs(unit(owner).default_action, _enemy_context(owner)))
+				_record("intent_triggered", {"title": enemy.name + " / weaker default action", "presentation": {"owner_name": enemy.name, "owner_visual": _enemy_visual(owner), "owner": owner, "name": "Default action", "effects": enemy.default_action}})
+				tasks.append_array(_effect_jobs(enemy.default_action, _enemy_context(owner), true))
 				tasks.append({"kind":"default_done","ctx":_enemy_context(owner)})
 				return true
+			_fill_row(_spent_intent_stances)
+			_spent_intent_stances.clear()
+			_record("stance_changed", {"title": "Enemy row refilled", "batch_refill": true})
 			_round_cleanup()
 			return true
 		"turn_start":
@@ -931,6 +989,11 @@ func _enemy_target(owner: int, range_text: String) -> int:
 	return -999
 
 
+func _enemy_effect_target(c: Dictionary, range_text: String) -> int:
+	if c.has("reaction_actor"): return int(c.reaction_actor)
+	return _enemy_target(int(c.owner), range_text)
+
+
 func _attack_presentation(p: Dictionary, owner: int, shape: String = "ranged") -> String:
 	var style: String = p.get("presentation", "auto")
 	return ("melee" if owner < 0 else shape) if style == "auto" else style
@@ -943,6 +1006,11 @@ func _area_range(p: Dictionary, c: Dictionary) -> String:
 
 func _area_legal(owner: int, target: int, range_text: String) -> bool:
 	return unit(target).get("hull", 0) > 0 and (range_text != "Short" or (position_of(owner) != 3 and position_of(target) != 3))
+
+
+func _focus_effect(units: Array = [], slots: Array = [], circle_slots: Array = [], stances: Array = []) -> void:
+	if not _preview_only:
+		_record("effect_focus", {"units": units, "slots": slots, "circle_slots": circle_slots, "stances": stances})
 
 
 func effect_beam(p: Dictionary, c: Dictionary) -> bool:
@@ -969,7 +1037,7 @@ func effect_explosion(p: Dictionary, c: Dictionary) -> bool:
 	var range_text := _area_range(p, c)
 	var centres: Array = selected(p.merged({"target":p.get("target", "chosen_enemy")}), c)
 	if int(c.owner) < 0 and p.get("target", "chosen_enemy") in ["chosen_ally", "chosen_enemy"]:
-		var target := _enemy_target(c.owner, range_text)
+		var target := _enemy_effect_target(c, range_text)
 		centres = [target] if target != -999 else []
 	var jobs: Array = []
 	for centre in centres:
@@ -999,7 +1067,7 @@ func effect_attack(p: Dictionary, c: Dictionary, locked_targets: Variant = null)
 	var targets_list: Array = selected(p.merged({"target": p.get("target", "chosen_enemy")}), c) if locked_targets == null else locked_targets
 	if c.get("area_range") == "Short": range_text = "Short"
 	if locked_targets == null and owner < 0 and p.get("target", "chosen_ally") in ["chosen_ally", "chosen_enemy"]:
-		var target := _enemy_target(owner, range_text)
+		var target := _enemy_effect_target(c, range_text)
 		targets_list = [target] if target != -999 else []
 	elif locked_targets == null and targets_list.is_empty() and owner >= 0 and not p.has("filter") and p.get("target", "chosen_enemy") != "area_target":
 		var fallback: int = int(c.get("event", {}).get("target", -999))
@@ -1014,9 +1082,9 @@ func effect_attack(p: Dictionary, c: Dictionary, locked_targets: Variant = null)
 	var each: int = _bonus("per_hit_damage", owner, c) + (_bonus("per_hit_damage", c.uid, c, true) if int(c.get("uid", -1)) >= 0 else 0)
 	var count: int = maxi(1, Rules.number(p.get("hits", 1), c) + _bonus("hit_count", owner, c) + (_bonus("hit_count", c.uid, c, true) if int(c.get("uid", -1)) >= 0 else 0))
 	var all_jobs: Array = []
-	for target in targets_list:
-		if unit(target).get("hull", 0) <= 0: continue
-		if range_text == "Short" and (position_of(owner) == 3 or position_of(target) == 3): continue
+	var legal_targets := targets_list.filter(func(target): return _area_legal(owner, target, range_text))
+	if locked_targets == null and not c.has("area_target"): _focus_effect(legal_targets)
+	for target in legal_targets:
 		_emit("attack_started", c, {"target": target, "amount": 1})
 		var jobs: Array = []
 		var visual_context := c.duplicate(true)
@@ -1038,7 +1106,8 @@ func _hit(job: Dictionary, c: Dictionary) -> void:
 	hit_id += 1
 	var point := position_of(target)
 	var cover_point := point + (4 if target < 0 else 0)
-	var incoming: int = maxi(0, int(job.damage) + (maxi(0, round_number - 3) if int(c.owner) < 0 and _mode == "enemy" else 0))
+	var enemy_bonus := int(campaign_options.get("enemy_hit_bonus", 0)) if int(c.owner) < 0 else 0
+	var incoming: int = maxi(0, int(job.damage) + enemy_bonus + (maxi(0, round_number - 3) if int(c.owner) < 0 and _mode == "enemy" else 0))
 	var cover_absorbed: int = mini(int(cover[cover_point]), incoming) if point >= 0 else 0
 	if point >= 0: cover[cover_point] -= cover_absorbed
 	var remaining := incoming - cover_absorbed
@@ -1067,15 +1136,21 @@ func _hit(job: Dictionary, c: Dictionary) -> void:
 			_emit(pair[0], c, event)
 
 
-func effect_unit(kind: String, p: Dictionary, c: Dictionary) -> bool:
-	for id in selected(p, c):
+func effect_unit(kind: String, p: Dictionary, c: Dictionary, present_targets: bool = true) -> bool:
+	var repairs := kind in ["repair", "recovery"]
+	var recipients := selected(p, c, repairs)
+	if present_targets and not c.has("area_target"):
+		var affected := recipients.filter(func(id): return not unit(id).is_empty() and (unit(id).hull > 0 or (repairs and id >= 0)))
+		_focus_effect(affected)
+	for id in recipients:
 		var u := unit(id)
 		if u.is_empty(): continue
 		var amount := Rules.number(p.get("amount", 0), c)
-		if kind == "recovery" and id >= 0 and u.hull <= 0:
-			_recover(id, amount, c)
+		if repairs:
+			amount += _bonus("repair_amount", id, c) + (_bonus("repair_amount", c.uid, c, true) if int(c.get("uid", -1)) >= 0 else 0)
+		if u.hull <= 0:
+			if repairs and id >= 0 and amount > 0: _recover(id, amount, c)
 			continue
-		if u.hull <= 0: continue
 		match kind:
 			"add_shields":
 				amount += _bonus("shield_amount", id, c) + (_bonus("shield_amount", c.uid, c, true) if int(c.get("uid", -1)) >= 0 else 0)
@@ -1083,7 +1158,6 @@ func effect_unit(kind: String, p: Dictionary, c: Dictionary) -> bool:
 				_record("guard", {"target": id, "amount": amount, "reason": "Shields gained"})
 				if amount > 0: _emit("shields_added", c, {"target": id, "amount": amount})
 			"repair", "recovery":
-				amount += _bonus("repair_amount", id, c) + (_bonus("repair_amount", c.uid, c, true) if int(c.get("uid", -1)) >= 0 else 0)
 				var healed: int = mini(amount, int(u.max_hull) - int(u.hull))
 				u.hull += healed
 				_record("repair", {"target": id, "amount": healed})
@@ -1107,14 +1181,15 @@ func pay_resource(p: Dictionary, c: Dictionary) -> bool:
 	var amount := Rules.number(p.get("amount", 0), c)
 	for id in units:
 		if unit(id).hull <= 0 or int(unit(id).resource) < amount: return false
-	effect_unit("spend_resource", p, c)
+	effect_unit("spend_resource", p, c, false)
 	return true
 
 
 func effect_cover(p: Dictionary, c: Dictionary) -> bool:
 	var amount := Rules.number(p.get("amount", 0), c)
-	for point in selected(p.merged({"target": p.get("target", "source_slot")}), c):
-		if point < 0 or point >= 8: continue
+	var slots := selected(p.merged({"target": p.get("target", "source_slot")}), c).filter(func(point): return point >= 0 and point < 8)
+	if not c.has("area_target"): _focus_effect([], slots)
+	for point in slots:
 		cover[point] += amount
 		_record("cover", {"position": point, "amount": amount, "title": "Slot cover"})
 	return false
@@ -1124,6 +1199,7 @@ func _swap_points(a: int, b: int, c: Dictionary = {}) -> void:
 	if a not in range(4) or b not in range(4) or a == b: return
 	var first: int = formation[a]
 	var second: int = formation[b]
+	if not c.has("area_target"): _focus_effect([], [a, b])
 	formation[a] = second
 	formation[b] = first
 	_record("movement", {"first": first})
@@ -1141,7 +1217,7 @@ func effect_move(p: Dictionary, c: Dictionary) -> bool:
 		_swap_points(origin, destination, c)
 		if Rules.number(p.get("guard", 0), c) > 0:
 			for id in [actor, other]:
-				if id >= 0: effect_unit("add_shields", {"target": "event_target", "amount": p.guard}, c.merged({"event": {"target": id}}, true))
+				if id >= 0: effect_unit("add_shields", {"target": "event_target", "amount": p.guard}, c.merged({"event": {"target": id}}, true), false)
 	return false
 
 
@@ -1154,7 +1230,7 @@ func effect_swap(p: Dictionary, c: Dictionary) -> bool:
 	if a < 0 or b < 0 or unit(a).hull <= 0 or unit(b).hull <= 0 or not Geometry.unit_neighbours(position_of(a)).has(position_of(b)): return false
 	_swap_points(position_of(a), position_of(b), c)
 	for id in [a, b]:
-		if Rules.number(p.get("guard", 0), c) > 0: effect_unit("add_shields", {"target": "event_target", "amount": p.guard}, c.merged({"event": {"target": id}}, true))
+		if Rules.number(p.get("guard", 0), c) > 0: effect_unit("add_shields", {"target": "event_target", "amount": p.guard}, c.merged({"event": {"target": id}}, true), false)
 	return false
 
 
@@ -1162,6 +1238,7 @@ func effect_swap_ends(p: Dictionary, c: Dictionary) -> bool:
 	var alive := alive_ids()
 	if alive.size() > 1: _swap_points(position_of(alive.front()), position_of(alive.back()), c)
 	elif alive.size() == 1 and Rules.number(p.get("fallback_damage", 0), c) > 0:
+		if not c.has("area_target"): _focus_effect(alive)
 		_prepend([{"kind": "hit", "ctx": c, "target": alive[0], "damage": Rules.number(p.fallback_damage, c), "index": 1, "total": 1}])
 	return false
 
@@ -1272,7 +1349,10 @@ func choose_scry(take: Array, top: Array, rejected: Array) -> String:
 
 
 func effect_stun(p: Dictionary, c: Dictionary) -> bool:
-	for key in targets(p.get("target", "chosen_reaction"), c):
+	var keys := targets(p.get("target", "chosen_reaction"), c)
+	if not c.has("area_target"):
+		_focus_effect([], [], [], keys.map(func(key): return int(str(key).get_slice("/", 0))).filter(func(uid): return enemy_row.has(uid)))
+	for key in keys:
 		var parts: PackedStringArray = str(key).split("/")
 		if parts.size() != 2 or not enemy_row.has(int(parts[0])): continue
 		for reaction in row_card(int(parts[0])).reactions:
@@ -1289,7 +1369,9 @@ func unit_stunned(id: int) -> bool:
 
 
 func effect_confuse(p: Dictionary, c: Dictionary) -> bool:
-	for uid in targets(p.get("target", "chosen_stance"), c):
+	var cards := targets(p.get("target", "chosen_stance"), c).filter(func(uid): return enemy_row.has(uid))
+	if not c.has("area_target"): _focus_effect([], [], [], cards)
+	for uid in cards:
 		if enemy_row.has(uid):
 			_record("confused", {"title": row_card(uid).owner_name + " / " + row_card(uid).name})
 			_replace_row(uid)
@@ -1297,7 +1379,10 @@ func effect_confuse(p: Dictionary, c: Dictionary) -> bool:
 
 
 func effect_persistence(p: Dictionary, c: Dictionary) -> bool:
-	for uid in selected(p.merged({"target": p.get("target", "self_card")}), c):
+	var cards := selected(p.merged({"target": p.get("target", "self_card")}), c)
+	if not c.has("area_target"):
+		_focus_effect([], [], cards.map(func(uid): return circle.find(uid)).filter(func(slot): return slot >= 0))
+	for uid in cards:
 		if circle.has(uid):
 			persistence[uid] = int(persistence.get(uid, 0)) + Rules.number(p.get("amount", 1), c)
 			_record("persistence", {"uid": uid, "amount": Rules.number(p.get("amount", 1), c), "title": "Persistence " + str(persistence[uid])})
@@ -1312,7 +1397,7 @@ func effect_mana(p: Dictionary, c: Dictionary) -> bool:
 
 
 func basic_targets() -> Array:
-	var result: Array = range(ships.size())
+	var result: Array = range(ships.size()) + alive_ids(true)
 	for point in 4:
 		if formation[point] < 0: result.append(100 + point)
 	return result
@@ -1321,13 +1406,19 @@ func basic_targets() -> Array:
 func validate_basic(uid: int, recipient: int) -> String:
 	if phase != "fleet" or outcome != "": return "Basic actions are available during the fleet phase."
 	if not hand.has(uid) or uid < 0: return "Discard a card from your hand."
+	if recipient < 0:
+		var attacker: int = card(uid).owner
+		if ships[attacker].hull <= 0: return "A defeated ship can only recover itself."
+		if recipient not in alive_ids(true): return "Choose a living enemy."
+		if not _area_legal(attacker, recipient, weapon_range(attacker)): return "Short weapons cannot fire from or target Rear."
+		return ""
 	if recipient >= 100:
 		var destination := recipient - 100
 		if destination not in range(4) or formation[destination] >= 0: return "Choose an empty player position."
 		var mover: int = card(uid).owner
 		if ships[mover].hull <= 0: return "A defeated ship can only recover itself."
 		return "" if Geometry.unit_neighbours(position_of(mover)).has(destination) else "Move requires an adjacent empty position."
-	if recipient < 0 or recipient >= ships.size(): return "Choose a player ship."
+	if recipient >= ships.size(): return "Choose a player ship."
 	var actor: int = card(uid).owner
 	if actor == recipient:
 		if ships[actor].hull > 0 and ships[actor].hull >= ships[actor].max_hull: return "This ship is already at full hull."
@@ -1338,6 +1429,12 @@ func validate_basic(uid: int, recipient: int) -> String:
 	return ""
 
 
+func _recovery_position(id: int) -> int:
+	var point: int = ships[id].get("last_position", -1)
+	if point < 0 or formation[point] >= 0: point = formation.find(-1)
+	return point
+
+
 func _recover(id: int, amount: int, c: Dictionary) -> void:
 	var ship: Dictionary = ships[id]
 	var threshold: int = definitions.basic_actions.revive_threshold
@@ -1345,11 +1442,10 @@ func _recover(id: int, amount: int, c: Dictionary) -> void:
 	ship.recovery = mini(threshold, before + amount)
 	_record("revive_progress", {"target": id, "amount": ship.recovery - before, "threshold": threshold, "title": ship.name})
 	if ship.recovery < threshold: return
-	var point: int = ship.get("last_position", -1)
-	if point < 0 or formation[point] >= 0: point = formation.find(-1)
+	var point := _recovery_position(id)
 	if point < 0: return
 	formation[point] = id
-	ship.hull = mini(threshold, ship.max_hull)
+	ship.hull = mini(Catalog.REVIVED_HULL, ship.max_hull)
 	ship.guard = 0
 	ship.recovery = 0
 	ship.resource = 0
@@ -1366,21 +1462,26 @@ func play_basic(uid: int, recipient: int, options: Dictionary = {}) -> String:
 	if error != "": return error
 	var actor: int = card(uid).owner
 	var repair: bool = actor == recipient
+	var attack := recipient < 0
 	var empty_move: bool = recipient >= 100
-	var c := {"owner": actor, "uid": -1, "slot": -1, "ally": actor if empty_move else recipient, "enemy": -999, "slot_target": recipient - 100 if empty_move else position_of(recipient), "event": {}, "ancestry": [], "boosts": options.get("boosts", []), "basic_type": "Support" if repair else "Manoeuvre", "basic": true}
+	var basic_type := "Attack" if attack else ("Support" if repair else "Manoeuvre")
+	var traits := ["Repair"] if repair else ([] if attack else ["Movement"])
+	var action := "attack" if attack else ("repair" if repair else ("move" if empty_move else "swap"))
+	var c := {"owner": actor, "uid": -1, "slot": -1, "ally": actor if empty_move or attack else recipient, "enemy": recipient if attack else -999, "slot_target": recipient - 100 if empty_move else position_of(recipient), "event": {}, "ancestry": [], "boosts": options.get("boosts", []), "basic_type": basic_type, "basic_traits": traits, "basic": true}
 	error = _validate_boosts(uid, c, options.get("boosts", []))
 	if error != "": return error
 	feedback_events.clear()
 	_start_action(c)
 	root_context["basic"] = true
-	root_context["event_card"] = {"type": c.basic_type, "traits": ["Repair"] if repair else ["Movement"]}
+	root_context["event_card"] = {"type": basic_type, "traits": traits}
 	hand.erase(uid)
 	held = [uid]
-	_record("basic_action", {"uid": uid, "target": actor if empty_move else recipient, "position": c.slot_target, "source": actor, "action": "repair" if repair else ("move" if empty_move else "swap"), "title": ("Basic Repair / " if repair else ("Basic Move / " if empty_move else "Basic Swap / ")) + ships[actor].name})
+	_record("basic_action", {"uid": uid, "target": actor if empty_move else recipient, "position": c.slot_target, "source": actor, "action": action, "title": "Basic %s / %s" % [action.capitalize(), ships[actor].name]})
 	_reserve_boosts(uid, c, options.get("boosts", []))
-	if repair:
-		var kind: String = "repair" if ships[actor].hull > 0 else "recovery"
-		tasks.append({"kind": "effect", "spec": {"kind": kind, "target": "owner", "amount": definitions.basic_actions.repair}, "ctx": c})
+	if attack:
+		tasks.append({"kind": "effect", "spec": {"kind": "attack", "target": "chosen_enemy", "range": "weapon", "damage": {"kind":"basic_weapon_damage"}}, "ctx": c})
+	elif repair:
+		tasks.append({"kind": "effect", "spec": {"kind": "repair", "target": "owner", "amount": definitions.basic_actions.repair}, "ctx": c})
 	elif empty_move:
 		tasks.append({"kind": "effect", "spec": {"kind": "move", "target": "owner", "destination": "chosen_slot", "guard": 0}, "ctx": c})
 	else:
@@ -1402,7 +1503,7 @@ func _cleanup() -> void:
 			ships[id].guard = 0
 			ships[id].resource = 0
 			ships[id].recovery = 0
-			_record("destroyed", {"target": id, "title": ships[id].name, "enemy": false})
+			_record("disabled", {"target": id, "title": ships[id].name})
 		var enemy_id: int = enemy_formation[point]
 		if enemy_id >= 0 and enemies[enemy_id].hull <= 0:
 			enemy_formation[point] = -1
@@ -1414,13 +1515,31 @@ func _cleanup() -> void:
 			for key in stunned.keys():
 				if stance_cards[int(str(key).split("/")[0])].owner == owner: stunned.erase(key)
 			_record("destroyed", {"target": owner, "title": enemies[enemy_id].name, "enemy": true})
-			_fill_row()
+			if _mode != "enemy": _fill_row()
+	_correct_formation(formation, false)
+	_correct_formation(enemy_formation, true)
 	mana = mini(mana, fleet_stat("mana_capacity"))
-	if alive_ids().is_empty(): outcome = "defeat"
-	elif alive_ids(true).is_empty() and _mode == "": outcome = "victory"
+	if ships.all(func(ship): return ship.hull <= 0): outcome = "defeat"
+	elif _enemies_defeated() and _mode == "": outcome = "victory"
 	if outcome != "":
 		phase = "finished"
 		tasks.clear()
+
+
+func _correct_formation(points: Array, enemy: bool) -> void:
+	var move := Geometry.normalize_formation(points)
+	if move.x < 0: return
+	var index: int = points[move.y]
+	var id := -1 - index if enemy else index
+	var offset := 4 if enemy else 0
+	history.append("%s moves to %s." % [unit(id).name, Geometry.POSITION_NAMES[move.y]])
+	_focus_effect([], [move.x + offset, move.y + offset])
+	_record("movement", {"first": id, "automatic": true})
+	_emit("moved", {"owner": id, "uid": -1}, {"actor": id, "target": id, "position": move.y})
+
+
+func _enemies_defeated() -> bool:
+	return alive_ids(true).is_empty()
 
 
 func _finish_terminal_payment() -> void:
@@ -1442,6 +1561,7 @@ func end_phase() -> String:
 	_mode = "enemy"
 	_stage = "turn_end"
 	_activation_row = enemy_row.duplicate()
+	_spent_intent_stances.clear()
 	_activated.clear()
 	root_context = {"owner": alive_ids()[0], "uid": -1, "damage": {}, "healed": 0, "printed_cost": 0, "event": {}, "ancestry": []}
 	_emit("turn_end", root_context, {"actor": -999, "amount": 1})
@@ -1497,7 +1617,7 @@ func refresh(optional_discards: Array = []) -> String:
 
 
 func _simulation() -> Variant:
-	var sim = get_script().new(0, document)
+	var sim = get_script().new(0, document, campaign_options)
 	for key in ["ships", "enemies", "formation", "enemy_formation", "cover", "card_keys", "hand", "deck", "discard", "held", "circle", "play_order", "persistence", "enemy_row", "stance_cards", "stance_deck", "stance_discard", "stunned", "used_turn", "used_triggers"]:
 		sim.set(key, get(key).duplicate(true))
 	sim.phase = phase
@@ -1546,29 +1666,27 @@ func basic_preview(uid: int, recipient: int, options: Dictionary = {}) -> Dictio
 	if error != "": return {"ok": false, "text": error, "action": ""}
 	var actor: int = card(uid).owner
 	var title: String
-	if recipient >= 100: title = "Move %s → %s" % [ships[actor].name, Geometry.POSITION_NAMES[recipient - 100]]
+	if recipient < 0: title = "%s attacks %s with its %s weapon (%d basic damage)" % [ships[actor].name, unit(recipient).name, weapon_range(actor).to_lower(), Rules.basic_weapon_damage(stat(actor, "weapon_damage"))]
+	elif recipient >= 100: title = "Move %s → %s" % [ships[actor].name, Geometry.POSITION_NAMES[recipient - 100]]
 	elif actor != recipient: title = "Swap %s ↔ %s" % [ships[actor].name, ships[recipient].name]
 	elif ships[actor].hull > 0:
 		var amount: int = mini(int(definitions.basic_actions.repair) + _bonus("repair_amount", actor), int(ships[actor].max_hull) - int(ships[actor].hull))
 		title = "Repair %s: +%d hull" % [ships[actor].name, amount]
 	else:
-		var progress: int = int(ships[actor].recovery)
-		var threshold: int = int(definitions.basic_actions.revive_threshold)
-		var next: int = mini(threshold, progress + int(definitions.basic_actions.repair))
-		title = "Recover %s: %d → %d / %d" % [ships[actor].name, progress, next, threshold]
-		if next >= threshold:
-			var point: int = ships[actor].last_position
-			if formation[point] >= 0: point = formation.find(-1)
-			title += ". REVIVE with %d hull at %s" % [mini(threshold, ships[actor].max_hull), Geometry.POSITION_NAMES[point]]
+		title = "Recover " + ships[actor].name
 	var sim = _simulation()
 	error = sim.play_basic(uid, recipient, options)
 	if error != "": return {"ok": false, "text": error, "action": ""}
+	for event in sim.feedback_events:
+		if event.kind == "revived" and event.target == actor:
+			title += ". REVIVE with %d hull" % event.amount
+			break
 	var text: String = title + ". Discard " + card(uid).name + "; no extra mana payment. Printed cost/effects/position restrictions are ignored. "
 	text += " ".join(_preview_changes(sim))
 	for event in sim.feedback_events:
 		if event.kind == "reaction_triggered": text += " REACTION: " + event.title + "; replacement hidden."
-	if recipient < 100 and sim.ships[recipient].hull <= 0: text += " Wreck recovery %d / %d." % [sim.ships[recipient].recovery, definitions.basic_actions.revive_threshold]
-	return {"ok": true, "text": text, "action": "Repair / Recover" if actor == recipient else ("Move Ship" if recipient >= 100 else "Swap Ships")}
+	if recipient >= 0 and recipient < 100 and sim.ships[recipient].hull <= 0: text += " Disabled ship recovery %d / %d." % [sim.ships[recipient].recovery, definitions.basic_actions.revive_threshold]
+	return {"ok": true, "text": text, "action": "Attack" if recipient < 0 else ("Repair / Recover" if actor == recipient else ("Move Ship" if recipient >= 100 else "Swap Ships"))}
 
 
 func contribution_details(uid: int, slot: int, simulated: Dictionary = {}) -> Dictionary:
@@ -1657,10 +1775,19 @@ func reaction_preview(uid: int, action: Dictionary = {}) -> Dictionary:
 	var lines: Array = [row.owner_name + " / " + row.name,"If triggered now (current defences):"]
 	var behaviours: Array = row.reactions.duplicate(true)
 	behaviours.append({"name":"Enemy phase","effects":row.effects,"conditions":{"kind":"always"}})
-	for behaviour in behaviours:
+	var played_uid: int = action.get("uid", -1)
+	var actor: int = card(played_uid).get("owner", action.get("actor", -999))
+	if actor < 0 and not row.reactions.is_empty():
+		lines.append("Reactions target the triggering ship by default.")
+	for index in behaviours.size():
+		var behaviour: Dictionary = behaviours[index]
+		var is_reaction: bool = index < row.reactions.size()
 		var sim = _simulation()
 		var c: Dictionary = sim._enemy_context(row.owner)
-		c.event = {"actor":action.get("actor",-999),"target":action.get("target",-999),"uid":action.get("uid",-1),"card":card(action.get("uid",-1))}
+		c.event = {"actor":actor,"target":action.get("target",-999),"uid":played_uid,"card":card(played_uid)}
+		if is_reaction:
+			c.reaction_actor = actor
+			c.ally = actor
 		sim._start_action(c,"hover")
 		sim._stage=""
 		sim.tasks=sim._effect_jobs(behaviour.effects,c)
@@ -1670,7 +1797,7 @@ func reaction_preview(uid: int, action: Dictionary = {}) -> Dictionary:
 			if event.kind in ["damage","guard","repair","resource"]:
 				var id: int=event.target
 				var summary := ""
-				if event.kind=="damage": summary=("Reaction " if behaviour.name!="Enemy phase" else "Intent ")+"−%d hull" % event.hull_damage + (" / −%d shields" % event.shields_absorbed if event.shields_absorbed>0 else "")
+				if event.kind=="damage": summary=("Reaction " if is_reaction else "Intent ")+"−%d hull" % event.hull_damage + (" / −%d shields" % event.shields_absorbed if event.shields_absorbed>0 else "")
 				else: summary="+%d %s" % [event.amount,{"guard":"shields","repair":"hull","resource":"resource"}.get(event.kind,event.kind)]
 				notes[id]=str(notes.get(id,""))+("\n" if notes.has(id) else "")+summary
 			elif event.kind=="movement":
@@ -1703,12 +1830,12 @@ func result_summary(reported: String = "") -> Dictionary:
 	return {"outcome": result, "ships": fleet, "survivors": survivors, "remaining_hull": hull, "starting_hull": maximum, "hull_percent": roundi(100.0 * hull / maxi(1, maximum)), "rounds": round_number, "is_test": result != outcome, "enemies_remaining": alive_ids(true).size()}
 
 
-func trigger_preview(uid: int, payment: Array = [], target: int = -1, movement: int = -1, slot: int = -1, options: Dictionary = {}, basic_recipient: int = -1) -> Dictionary:
+func trigger_preview(uid: int, payment: Array = [], target: int = -1, movement: int = -1, slot: int = -1, options: Dictionary = {}, basic_recipient: int = -999) -> Dictionary:
 	var result: Dictionary={"reactions":[],"cards":{},"ships":{},"provisional":false,"uncertain":false}
 	if phase!="fleet" or outcome!="" or uid<0 or not hand.has(uid):return result
 	var sim=_simulation()
 	var error: String
-	if basic_recipient>=0:
+	if basic_recipient != -999:
 		error=sim.play_basic(uid,basic_recipient,options)
 	else:
 		if slot<0:slot=first_slot()
@@ -1762,6 +1889,6 @@ func _trigger_cues(sim, result: Dictionary) -> Dictionary:
 
 func _enemy_visual(owner: int) -> Dictionary:
 	var data: Dictionary = unit(owner)
-	var visual: Dictionary = {"id":data.get("id","")}
+	var visual: Dictionary = {"id":data.get("id",""), "position":position_of(owner)}
 	if data.has("visual_rig"): visual["visual_rig"] = data.visual_rig.duplicate(true)
 	return visual

@@ -7,7 +7,13 @@ var summary: Dictionary = {}
 
 
 func _ready() -> void:
+	if BattleSession.campaign_battle:
+		primary_scene = "res://scenes/campaign.tscn"
+		secondary_scene = "res://scenes/main_menu.tscn"
 	super._ready()
+	if BattleSession.campaign_battle:
+		primary_button.text = "Run Summary" if CampaignStore.run.get("ended", false) else "Return to Map"
+		secondary_button.text = "Main Menu"
 	_style_results()
 	if BattleSession.editor_playtest:
 		var return_button := Button.new()
@@ -16,7 +22,7 @@ func _ready() -> void:
 		return_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		primary_button.get_parent().add_child(return_button)
 		return_button.pressed.connect(_navigate.bind("res://scenes/editor.tscn"))
-	if not BattleSession.editor_playtest:
+	if not BattleSession.editor_playtest and not BattleSession.campaign_battle:
 		var prepare := Button.new()
 		prepare.name = "PrepareFleet"
 		prepare.text = "Prepare Fleet"

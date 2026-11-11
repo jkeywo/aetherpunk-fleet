@@ -11,6 +11,12 @@ func _run() -> void:
 	doc.leviathans[0].stances[0].reactions=[{"id":"counter","name":"Counter","category":"Retaliation","conditions":{"kind":"card_matches","target":"event_card","card_type":"Attack"},"effects":[attack(3,1,"Long","chosen_ally")]}]
 	await open_battle(doc)
 	var b=current_scene
+	var owner_art = b.allies.target_widget(0).art
+	var brace := field_key(b, "brace")
+	brace.mouse_entered.emit()
+	expect(owner_art.rig_node.outline != null and owner_art.rig_node.outline.visible and owner_art.modulate == Color.WHITE, "Hand card hover did not outline the owner without tinting the sprite.")
+	brace.mouse_exited.emit()
+	expect(not owner_art.rig_node.outline.visible, "Leaving the hand card did not clear the owner's outline.")
 	var source: int=uid_for(b.state,"brace")
 	b.state.play(source,[],-1,-1,0);b._render();await flush()
 	var action: int=uid_for(b.state,"broadside")
@@ -56,7 +62,7 @@ func _run() -> void:
 		await b._choose_card(payer)
 		await flush()
 	choose_first_targets(b);await settle(b)
-	expect(attacks.size()==3 and attacks[0]==[1,-1] and attacks[2][0]<0,"Generic projectiles do not match multi-hit attacks and enemy reactions.")
+	expect(attacks.size()==3 and attacks[0]==[1,-1] and attacks[2]==[-1,1],"Generic projectiles do not match multi-hit attacks and enemy reactions.")
 	expect(b.state.monster_hull==65,"Visual attack feedback changed cover/armour/hull resolution.")
 	# Opposite travel directions must bow onto opposite sides, with exact endpoints.
 	var a:=Vector2(100,100);var z:=Vector2(260,210)
@@ -67,7 +73,7 @@ func _run() -> void:
 	b.state.play_basic(card,0)
 	await b._present_resolution();await flush()
 	expect(moves.size()==1 and moves[0].size()==2 and moves[0].has(0) and moves[0].has(1),"Swap did not animate both ships.")
-	expect(b.allies.cover_clouds[0].position==cloud_position and b.state.cover[0]==1,"Cover moved with the ship or changed during swap animation.")
+	expect(b.allies.cover_clouds[0].position==cloud_position and b.state.cover[0]==4,"Cover moved with the ship or changed during swap animation.")
 	expect(b.feedback.overlay.get_child_count()==1 and not b.busy,"Transient attack/movement visuals leaked or left input locked.")
 	var target_widget=b.allies.target_widget(0)
 	var impact: Vector2=b.feedback._impact_point(target_widget,{"target":0,"shields_absorbed":1,"cover_absorbed":0,"board":b.state.board_snapshot()})

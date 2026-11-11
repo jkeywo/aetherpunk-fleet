@@ -7,6 +7,8 @@ const CardFace = preload("res://scripts/card_face.gd")
 const Formation = preload("res://scripts/formation_view.gd")
 const Slot = preload("res://scripts/preparation_slot.gd")
 const Ui = preload("res://scripts/ui_theme.gd")
+@export var campaign_sortie := false
+
 var source: Dictionary = {}
 var draft: Dictionary = {}
 var fingerprint := ""
@@ -45,12 +47,15 @@ var content_scroll: ScrollContainer
 func _ready() -> void:
 	get_tree().auto_accept_quit = true
 	BattleSession.editor_playtest = false
-	source = ContentStore.snapshot()
+	if campaign_sortie and (not CampaignStore.can_manage() or BattleSession.campaign_node.is_empty()):
+		get_tree().change_scene_to_file.call_deferred("res://scenes/campaign.tscn")
+		return
+	source = CampaignStore.sortie_preparation() if campaign_sortie else ContentStore.snapshot()
 	fingerprint = JSON.stringify(Catalog.normalized(source)).sha256_text()
 	draft = source.duplicate(true)
 	prefer_fixed = source.get("setup",{}).get("fixed_hand",false)
 	var remembered: Dictionary = BattleSession.preparation_draft
-	if remembered.get("fingerprint","") == fingerprint and draft.has("setup"):
+	if not campaign_sortie and remembered.get("fingerprint","") == fingerprint and draft.has("setup"):
 		draft.setup.fleet = remembered.fleet.duplicate(true)
 		prefer_fixed = remembered.prefer_fixed
 		selected_ship = clampi(remembered.get("selected_ship",0),0,draft.setup.fleet.size()-1)
@@ -92,11 +97,11 @@ func _build() -> void:
 	outer.add_child(header)
 	var back := _button(header,"Back",_back)
 	back.name = "BackButton"
-	_label(header,"FLEET PREPARATION",26).modulate = Color("#e8bd77")
-	_button(header,"Reset to Saved Fleet",_reset)
-	var arrow_image := Image.new()
-	arrow_image.load_svg_from_string('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M16 6L8 14l8 8M8 14h14" fill="none" stroke="#fff2d5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>')
-	back.icon = ImageTexture.create_from_image(arrow_image)
+	var title := "FLEET PREPARATION"
+	if campaign_sortie: title = preload("res://scripts/campaign_map.gd").nodes()[BattleSession.campaign_node].name + " / Sortie"
+	_label(header, title, 26).modulate = Color("#e8bd77")
+	_button(header, "Reset Sortie" if campaign_sortie else "Reset to Saved Fleet", _reset)
+	back.icon = Ui.back_icon()
 	_label(outer,"Drag ships between positions and captains onto ships. Click a ship’s i button for its details, levels and cards.",14).modulate = Color("#91b9c6")
 	preparation_tabs = TabContainer.new()
 	preparation_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -204,7 +209,7 @@ func _build() -> void:
 	outer.add_child(footer)
 	status = _label(footer,"",14)
 	status.custom_minimum_size.y = 46
-	launch_button = _button(footer,"Set Up Encounter",_launch)
+	launch_button = _button(footer, "Launch Battle" if campaign_sortie else "Set Up Encounter", _launch)
 	launch_button.custom_minimum_size = Vector2(200,46)
 
 func _menu(parent: Node, caption: String, options: Array, current: Variant, callback: Callable, key: String, enabled: bool = true) -> OptionButton:
@@ -233,6 +238,7 @@ func _render() -> void:
 		status.text = "Saved fleet unavailable. " + ContentStore.last_error
 		launch_button.disabled=true
 		return
+	Geometry.normalize_fleet_slots(draft.setup.fleet)
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	_render_banks()
 	if slot.ship.is_empty():
@@ -249,6 +255,12 @@ func _render() -> void:
 		captain_header.add_child(preload("res://scripts/art_assets.gd").portrait_view(slot.captain,Vector2(64,85)))
 		_label(captain_header,draft.captains[Catalog.index_by_id(draft.captains,slot.captain)].name,17)
 	else: _label(captain_header,"Captain unassigned",17)
+	if campaign_sortie:
+		_label(inspector, "Level %d · Upgrades are purchased at the docks" % slot.level)
+		details.append(_label(inspector, "", 14))
+		details.append(_label(inspector, "", 12))
+		_update()
+		return
 	var options: Array = []
 	_menu(inspector,"Level",[{"label":"1 · Starter + captain pairs","value":1},{"label":"2 · Add one upgrade pair","value":2},{"label":"3 · Add both upgrade pairs","value":3}],slot.level,_change.bind(selected_ship,"level"),"level_"+str(selected_ship))
 	options=[]
@@ -282,6 +294,10 @@ func _select_roster(id: String) -> void:
 	_change(id,selected_ship,"ship")
 
 func _change(value: Variant, index: int, key: String) -> void:
+	if campaign_sortie:
+		if key not in ["ship", "captain", "position"]: return
+		if key == "ship" and value not in CampaignStore.operational_ships(): return
+		if key == "captain" and value not in CampaignStore.run.captains: return
 	selected_ship=index
 	var slot: Dictionary = draft.setup.fleet[index]
 	if key in ["ship","captain","position"]:
@@ -300,7 +316,11 @@ func _package_text(package: Dictionary) -> String:
 
 func _repair_branch(slot: Dictionary) -> void:
 	if slot.ship.is_empty(): return
-	Catalog.repair_fleet_branch(slot,draft.ships[Catalog.index_by_id(draft.ships,slot.ship)])
+	if campaign_sortie:
+		var owned: Dictionary = CampaignStore.run.ships[slot.ship]
+		for key in ["level", "level_2", "level_3"]: slot[key] = owned[key]
+	else:
+		Catalog.repair_fleet_branch(slot,draft.ships[Catalog.index_by_id(draft.ships,slot.ship)])
 
 func _wire_formation(board: Dictionary) -> void:
 	for point in 4:
@@ -352,6 +372,9 @@ func _valid_drop(data: Variant, point: int) -> bool:
 	var occupied := false
 	for slot in draft.setup.fleet:
 		if slot.position==Geometry.POSITIONS[point] and not slot.ship.is_empty(): occupied=true
+	if campaign_sortie:
+		if data.get("kind") == "captain" and data.get("captain") not in CampaignStore.run.captains: return false
+		if data.get("kind") == "ship" and data.get("ship") not in CampaignStore.operational_ships(): return false
 	if data.get("kind")=="captain": return occupied and Catalog.index_by_id(draft.captains,data.get("captain",""))>=0
 	if data.get("kind")!="ship" or Catalog.index_by_id(draft.ships,data.get("ship",""))<0: return false
 	return true
@@ -428,7 +451,8 @@ func _update() -> void:
 		return
 	var compiled := Catalog.compile(candidate)
 	_render_fleet_deck(compiled, candidate)
-	var sim = State.new(0,candidate)
+	var preview_options := {"starting_hull":CampaignStore.starting_hulls()} if campaign_sortie else {}
+	var sim = State.new(0, candidate, preview_options)
 	var board: Dictionary = sim.board_snapshot()
 	var display_board := board.duplicate(true)
 	display_board.ships.resize(draft.setup.fleet.size())
@@ -442,6 +466,7 @@ func _update() -> void:
 		display_board.ships[index] = board.ships[compiled_index]
 	_show_preparation_formation(display_board)
 	status.text = "%d ships / %d cards" % [compiled.ships.size(),compiled.deck_keys.size()]
+	if campaign_sortie: status.text += " · %d sortie slots" % CampaignStore.run.docks
 	status.modulate = Color("#91c8ad")
 	if details.is_empty():
 		return
@@ -478,6 +503,9 @@ func _reset() -> void:
 
 
 func _back() -> void:
+	if campaign_sortie:
+		get_tree().change_scene_to_file("res://scenes/campaign.tscn")
+		return
 	if draft.has("setup"): _remember()
 	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 
@@ -488,9 +516,18 @@ func _launch() -> void:
 	if not errors.is_empty():
 		status.text = "Cannot launch: " + str(errors[0])
 		return
+	if campaign_sortie:
+		if not CampaignStore.launch(BattleSession.campaign_node, candidate.setup.fleet):
+			status.text = CampaignStore.last_error
+			return
+		BattleSession.campaign_battle = true
+		get_tree().change_scene_to_file("res://scenes/game.tscn")
+		return
 	_remember()
 	if BattleSession.encounter_fingerprint == fingerprint:
-		candidate.setup.enemies = BattleSession.encounter_content.get("setup", {}).get("enemies", candidate.setup.enemies).duplicate(true)
+		var previous: Dictionary = BattleSession.encounter_content.get("setup", {})
+		candidate.setup.enemies = previous.get("enemies", candidate.setup.enemies).duplicate(true)
+		if previous.has("encounter_stars"): candidate.setup.encounter_stars = previous.encounter_stars
 	BattleSession.encounter_content = candidate.duplicate(true)
 	BattleSession.encounter_fingerprint = fingerprint
 	BattleSession.editor_playtest = false
@@ -607,6 +644,7 @@ func _show_upgrades(tier: String) -> void:
 
 
 func _choose_upgrade(tier: String, id: String) -> void:
+	if campaign_sortie: return
 	var slot: Dictionary = draft.setup.fleet[selected_ship]
 	var ship: Dictionary = draft.ships[Catalog.index_by_id(draft.ships, slot.ship)]
 	if Catalog.index_by_id(ship.levels[tier], id) < 0: return
@@ -653,7 +691,7 @@ func _show_captains() -> void:
 	scroll.add_child(captain_comparison)
 	var visible_count := clampi(draft.captains.size(), 1, 3)
 	var width: float = minf(370, floor((viewer_size.x - 60 - 14 * (visible_count - 1)) / visible_count))
-	for captain in draft.captains:
+	for captain in _selectable_captains():
 		var column := VBoxContainer.new()
 		column.custom_minimum_size.x = width
 		column.set_meta("captain_id", captain.id)
@@ -710,7 +748,7 @@ func _show_ships() -> void:
 	body.custom_minimum_size.x = viewer_size.x - 40
 	ship_dialog.add_child(body)
 	var caption := Label.new()
-	caption.text = "Base stats exclude captains and upgrades. Each starter design contributes two copies.\nShips already in your fleet swap slots. Captains and level choices stay with their slots."
+	caption.text = "Ships already in your sortie swap slots. Purchased levels and upgrades travel with their ship." if campaign_sortie else "Base stats exclude captains and upgrades. Each starter design contributes two copies.\nShips already in your fleet swap slots. Captains and level choices stay with their slots."
 	caption.add_theme_font_size_override("font_size", 13)
 	body.add_child(caption)
 	var scroll := ScrollContainer.new()
@@ -723,7 +761,7 @@ func _show_ships() -> void:
 	scroll.add_child(ship_comparison)
 	var visible_count := clampi(draft.ships.size(), 1, 3)
 	var width: float = minf(370, floor((viewer_size.x - 60 - 14 * (visible_count - 1)) / visible_count))
-	for ship in draft.ships:
+	for ship in _selectable_ships():
 		var column := VBoxContainer.new()
 		column.custom_minimum_size.x = width
 		column.set_meta("ship_id", ship.id)
@@ -846,13 +884,22 @@ func _render_fleet_deck(compiled: Dictionary, candidate: Dictionary) -> void:
 	fleet_deck_summary.text = "Fleet deck / %d cards / %d designs / %d ships" % [fleet_total, design_total, compiled.ships.size()]
 
 
+func _selectable_ships() -> Array:
+	if not campaign_sortie: return draft.ships
+	var operational := CampaignStore.operational_ships()
+	return draft.ships.filter(func(ship): return ship.id in operational)
+
+func _selectable_captains() -> Array:
+	if not campaign_sortie: return draft.captains
+	return draft.captains.filter(func(captain): return captain.id in CampaignStore.run.captains)
+
 func _render_banks() -> void:
 	unassign_ship_slot = Slot.new()
 	unassign_ship_slot.configure("Unassign airship","Drop a fleet ship here","",Color("#94785a"),false)
 	unassign_ship_slot.hide()
 	ship_bank.add_child(unassign_ship_slot)
 	unassign_ship_slot.set_drag_forwarding(Callable(),func(_pos,data): return _can_unassign(data,"ship"),func(_pos,data): _unassign(data,"ship"))
-	for ship in draft.ships:
+	for ship in _selectable_ships():
 		if draft.setup.fleet.any(func(slot): return slot.ship == ship.id): continue
 		var frame = Slot.new()
 		frame.configure(ship.name,ship.role,"",Color(ship.color))
@@ -865,7 +912,7 @@ func _render_banks() -> void:
 	unassign_captain_slot.hide()
 	captain_bank.add_child(unassign_captain_slot)
 	unassign_captain_slot.set_drag_forwarding(Callable(),func(_pos,data): return _can_unassign(data,"captain"),func(_pos,data): _unassign(data,"captain"))
-	for captain in draft.captains:
+	for captain in _selectable_captains():
 		if draft.setup.fleet.any(func(slot): return slot.captain == captain.id): continue
 		var frame = Slot.new()
 		frame.configure(captain.name,"Tier " + str(captain.tier),captain.id,Color("#a88b62"))
@@ -906,6 +953,9 @@ func _render_incomplete_formation() -> void:
 			continue
 		var ship := Catalog.compile_ship(draft, slot)
 		var display_ship := ship.duplicate(true)
+		if campaign_sortie:
+			display_ship.max_hull = CampaignStore.dock_max(slot.ship)
+			display_ship.hull = CampaignStore.run.ships[slot.ship].hull
 		display_ship["resource_name"] = ship.resource.name
 		display_ship["resource_capacity"] = ship.resource.capacity
 		display_ship["resource"] = 0

@@ -122,7 +122,7 @@ func _run() -> void:
 	expect(is_equal_approx(popup.part().anchor[0],.7) and is_equal_approx(popup.part().anchor[1],.4),"Dragging attachment used the wrong coordinate space.")
 	popup.part().motion.degrees=3.25;popup.confirmed.emit()
 	await flush()
-	expect(workshop.is_dirty() and not store.saved.leviathans[0].has("visual_rig"),"Apply bypassed draft/save boundary.")
+	expect(workshop.is_dirty() and store.saved.leviathans[0]==saved_unit,"Apply bypassed draft/save boundary.")
 	expect(workshop._save(),"Save All rejected authored rig.")
 	expect(store.saved.leviathans[0].visual_rig.parts[1].motion.degrees==3.25,"Save All lost motion configuration.")
 	workshop._open_rig_editor(workshop.selected_entry());await flush()

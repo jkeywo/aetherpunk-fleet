@@ -152,7 +152,8 @@ func hover_slot(battle, slot: int) -> Vector2:
 	await motion(point, true)
 	return point
 func hover_ship(battle, id: int) -> Vector2:
-	var button: Control = battle.allies.target_widget(id)
+	var formation = battle.enemies if id < 0 else battle.allies
+	var button: Control = formation.target_widget(id)
 	var point: Vector2 = button.get_global_transform_with_canvas() * (button.size / 2)
 	await motion(point, true)
 	return point

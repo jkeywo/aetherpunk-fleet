@@ -5,15 +5,17 @@ const R = preload("res://scripts/rules/rule_registry.gd")
 var category := ""
 var spec: Dictionary = {}
 var depth := 0
+var reaction_context := false
 var backing: Dictionary = {}
 
 
-func configure(kind: String, value: Dictionary, nesting: int = 0) -> void:
+func configure(kind: String, value: Dictionary, nesting: int = 0, enemy_reaction: bool = false) -> void:
 	category = kind
 	backing = value
 	spec = value.duplicate(true)
 	if not changed.is_connected(_commit): changed.connect(_commit)
 	depth = nesting
+	reaction_context = enemy_reaction
 	if category == "condition":
 		for group in ["all", "any", "not"]:
 			if spec.has(group):
@@ -81,6 +83,7 @@ func _build() -> void:
 				menu.fit_to_longest_item = false
 				row.add_child(menu)
 				for item in meta.choices:
+					if key == "position" and (reaction_context or spec.get("kind") == "reaction_trigger") and item in ["upper", "lower"]: continue
 					menu.add_item(str(item).replace("_", " ").capitalize() if item != "" else "Any")
 					menu.set_item_metadata(menu.item_count - 1, item)
 					if initial == item: menu.select(menu.item_count - 1)
@@ -91,7 +94,7 @@ func _build() -> void:
 				if not spec.has(key): spec[key] = initial.duplicate(true)
 				var nested = get_script().new()
 				row.add_child(nested)
-				nested.configure("condition", spec[key], depth + 1)
+				nested.configure("condition", spec[key], depth + 1, reaction_context)
 				nested.changed.connect(func(): changed.emit())
 			"conditions", "values", "effects":
 				if not spec.has(key): spec[key] = initial.duplicate(true)
@@ -159,7 +162,7 @@ func _list(parent: Node, key: String, type: String) -> void:
 		if type in ["conditions", "effects"]:
 			var nested = get_script().new()
 			column.add_child(nested)
-			nested.configure("condition" if type == "conditions" else "effect", list[index], depth + 1)
+			nested.configure("condition" if type == "conditions" else "effect", list[index], depth + 1, reaction_context)
 			nested.changed.connect(func(): changed.emit())
 		else:
 			_value(column, list[index], func(value): list[index] = value; changed.emit())

@@ -1,7 +1,13 @@
 extends RefCounted
-## One vocabulary and vector icon set for cards, combat, preparation, and authoring.
+## One vocabulary and icon set for cards, combat, preparation, and authoring.
 static var textures: Dictionary = {}
 static var matcher: RegEx
+const POSITION_GLYPHS := {
+	"front": preload("res://assets/generated/reactions/front.png"),
+	"upper": preload("res://assets/generated/reactions/upper.png"),
+	"lower": preload("res://assets/generated/reactions/lower.png"),
+	"rear": preload("res://assets/generated/reactions/rear.png"),
+}
 const DEFINITIONS := {
 	"melee": ["Melee", "#ffaf88", "Attack presentation: the attacker swoops to the target, strikes, and returns. Range and target pattern remain defined separately.", "M3 4l12 12M6 2l16 16-4 4L2 6zM3 21l6-6M2 17l5 5"],
 	"ranged": ["Ranged", "#8ceaff", "Attack presentation: a projectile launches from the unit's named attack marker. Short/Long range is a separate gameplay rule.", "M2 12h18M15 7l6 5-6 5M3 6h6M3 18h6"],
@@ -13,13 +19,13 @@ const DEFINITIONS := {
 	"manoeuvre": ["Manoeuvre", "#5ed4dd", "Manoeuvre card / move or swap along formation links. Basic moves discard a ship's card.", "M4 8h14l-4-4M20 16H6l4 4M18 8l-4 4M6 16l4-4"],
 	"support": ["Support", "#86d6a1", "Support card: repair, coordination, and utility.", "M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"],
 	"mana": ["Mana", "#c789f3", "Temporary mana crystal. One crystal pays one mana; unspent crystals expire at fleet-phase end. Purple crystals on a card show its discard production.", "M12 2l7 10-7 10-7-10zM5 12h14M12 2v20"],
-	"hull": ["Hull", "#f59489", "Hull / HP. A ship at zero is defeated. Basic recovery can revive it.", "M3 9h18l-4 10H7zM7 9V4h10v5"],
+	"hull": ["Hull", "#f59489", "Hull / HP. A ship at zero is disabled and can be repaired.", "M3 9h18l-4 10H7zM7 9V4h10v5"],
 	"damage": ["Damage", "#f38071", "Damage per hit: cover first, then armour, then shields, then hull. Armour applies separately to every hit.", "M14 2L4 14h7l-1 8 10-13h-7z"],
 	"armour": ["Armour", "#c6cbd6", "Armour reduces each hit after cover. It is not consumed and protects shields and hull.", "M7 3l5 3 5-3 4 6-4 3v9H7v-9L3 9z"],
 	"shields": ["Shields", "#7cbfff", "Shields are temporary HP carried by a ship. They absorb damage after armour and expire at next player-turn start.", "M12 3L20 6v6c0 5-8 9-8 9S4 17 4 12V6zM8 12h8M12 8v8"],
 	"cover": ["Cover", "#ddb77e", "Cover is temporary HP belonging to a formation slot. It absorbs damage before armour and stays when ships move.", "M3 19V8l9-5 9 5v11M7 19v-7h10v7M2 21h20"],
-	"repair": ["Repair", "#8ce2a3", "Repair restores actual missing hull. Recovery can revive a defeated ship after reaching its threshold.", "M5 19L17 7M14 3a6 6 0 007 7l-5 6-4-4-7 9-3-3 9-7-4-4z"],
-	"revive": ["Revive", "#a2efc5", "Recover a defeated ship to its revive threshold. It returns to a free position with hull.", "M5 12a7 7 0 111 5M5 12V5M5 12h7M12 7v10M8 12h8"],
+	"repair": ["Repair", "#8ce2a3", "Repair restores missing hull or adds recovery to a disabled ship.", "M5 19L17 7M14 3a6 6 0 007 7l-5 6-4-4-7 9-3-3 9-7-4-4z"],
+	"revive": ["Revive", "#a2efc5", "Once a disabled ship reaches its recovery threshold, it returns with 6 hull, up to its maximum.", "M5 12a7 7 0 111 5M5 12V5M5 12h7M12 7v10M8 12h8"],
 	"weapon": ["Weapon", "#f0bc78", "Weapon damage and range come from the acting ship, including its active upgrades.", "M3 9h13v6H3zM16 10h6v4h-6M6 15v5h6v-5"],
 	"short": ["Short", "#f0a079", "Short range: cannot attack from Rear or target Rear.", "M5 12h14M14 7l5 5-5 5M5 7v10"],
 	"long": ["Long", "#b0cfff", "Long range: may attack from or target any occupied position.", "M2 12h20M17 7l5 5-5 5M2 7v10M7 7v10"],
@@ -35,10 +41,10 @@ const DEFINITIONS := {
 	"reaction": ["Reaction", "#f49180", "A visible conditional enemy response after the complete player action and discard chains. Each enemy reacts at most once per action.", "M13 3L4 14h7l-1 7 10-12h-7zM4 4l3 3M17 18l3 3"],
 	"intent": ["Intent", "#edba86", "Visible enemy-phase activity. The row activates left to right; new replacements do not add activations to that phase.", "M4 5h16v14H4zM8 9h8M8 13h5M18 2v6M6 2v6"],
 	"on_play": ["On Play", "#b3e5d4", "Resolves when this physical card is played into the circle. Retained cards do not replay it.", "M4 3h12v18H4zM10 8l7 4-7 4z"],
-	"front": ["Front", "#e4c276", "Front position: faces the enemy. Enemy Front and Rear normally attack player Front.", "M4 12h16M13 5l7 7-7 7"],
-	"upper": ["Upper", "#8bcbe2", "Upper Middle position of the fleet diamond.", "M12 20V4M5 11l7-7 7 7"],
-	"lower": ["Lower", "#8bcbe2", "Lower Middle position of the fleet diamond.", "M12 4v16M5 13l7 7 7-7"],
-	"rear": ["Rear", "#a4b7ce", "Rear position: Short attacks cannot originate here or target it.", "M20 12H4M11 5l-7 7 7 7"]
+	"front": ["Front", "#e4c276", "Front position: faces the enemy. Enemy Front and Rear normally attack player Front."],
+	"upper": ["Upper", "#8bcbe2", "Upper Middle position of the formation diamond."],
+	"lower": ["Lower", "#8bcbe2", "Lower Middle position of the formation diamond."],
+	"rear": ["Rear", "#a4b7ce", "Rear position: Short attacks cannot originate here or target it."]
 }
 const ALIASES := {"costs":"cost","stunned":"stun","confused":"confuse","attacks":"attack","guard":"guard","manoeuvre":"manoeuvre","maneuvre":"manoeuvre","movement":"manoeuvre","move":"manoeuvre","swap":"manoeuvre","support":"support","mana crystal":"mana","mana crystals":"mana","crystals":"mana","crystal":"mana","hp":"hull","healing":"repair","heal":"repair","repaired":"repair","recovery":"revive","revival":"revive","shield":"shields","armour mitigation":"armour","armor":"armour","resources":"resource","neighbours":"adjacent","neighbor":"adjacent","neighbour":"adjacent","reactions":"reaction","stance":"intent","stances":"intent","enemy phase":"intent","upper middle":"upper","lower middle":"lower","on play":"on_play"}
 
@@ -49,7 +55,11 @@ static func key(word: String) -> String:
 static func description(id: String) -> String:
 	return DEFINITIONS[id][0] + " — " + DEFINITIONS[id][2] if DEFINITIONS.has(id) else id
 
-static func texture(id: String) -> Texture2D:
+static func texture(id: String, enemy_position: bool = false) -> Texture2D:
+	if POSITION_GLYPHS.has(id):
+		# The player glyphs highlight Front on the right. Enemy Front is on the left.
+		var position: String = {"front": "rear", "rear": "front"}.get(id, id) if enemy_position else id
+		return POSITION_GLYPHS[position]
 	if textures.has(id): return textures[id]
 	var entry: Array = DEFINITIONS.get(id, DEFINITIONS.resource)
 	var svg := '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><rect x="0.5" y="0.5" width="23" height="23" rx="5" fill="#10212c"/><path d="%s" fill="none" stroke="%s" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>' % [entry[3],entry[1]]

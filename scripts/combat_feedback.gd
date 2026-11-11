@@ -15,12 +15,13 @@ var view: Control
 var overlay: Control
 var banner: PanelContainer
 var enemy_card: PanelContainer
-var enemy_source_rect := Rect2()
 var banner_label: Label
 var _sources: Dictionary = {}
 var _paid: Array = []
-var _played_uid := -2
-var _played_position := Vector2.ZERO
+var card_stage: Control
+var player_card: Control
+var focus_overlay: Control
+var effect_targets: Dictionary = {}
 
 
 func play(events: Array, battle_view: Control) -> void:
@@ -39,18 +40,21 @@ func play(events: Array, battle_view: Control) -> void:
 		if uid >= 0:
 			var button: Control = view.circle_view.buttons[slot]
 			_sources[uid] = {"node": button, "rect": button.get_global_rect()}
-	for event in events:
+	for index in events.size():
+		var event: Dictionary = events[index]
+		if event.kind in ["enemy_effect_started", "card_effect_started", "card_rule_started", "card_rule_finished", "enemy_effect_finished", "card_triggered", "reaction_triggered", "intent_triggered"]:
+			_set_effect_targets()
+		var target_beat_follows: bool = index + 1 < events.size() and events[index + 1].kind in ["effect_focus", "area_attack"]
 		beat_started.emit(event.kind)
 		match event.kind:
 			"card_played":
-				_played_uid = event.uid
 				_message("PLAY / " + event.title, Color("#e8bd77"))
 				if not event.get("payment_previewed", false):
 					await _discard_cards(event.payment)
 				_paid = event.payment.duplicate()
 				await _apply_board(event.board)
-				if event.uid >= 0 and not event.get("already_staged", false):
-					await _place_card(event.uid, event.slot)
+				if event.uid >= 0:
+					await _show_player_card(event.uid, event.slot, event.get("already_staged", false))
 			"basic_action":
 				_message(event.title, Color("#9ce6b7") if event.action == "repair" else Color("#67bdd4"))
 				await _discard_cards([event.uid])
@@ -73,13 +77,19 @@ func play(events: Array, battle_view: Control) -> void:
 				await _apply_board(event.board)
 			"cards_drawn":
 				await _draw_cards(event.uids)
+			"effect_focus":
+				_set_effect_targets(event)
+				if not effect_targets.is_empty(): await _pause(0.18)
 			"area_attack":
+				_set_effect_targets({"units": event.targets})
+				await _pause(0.18)
 				await _area_attack_effect(event)
 			"damage", "repair", "guard":
 				await _stat_change(event)
 			"movement":
 				await _move_ships(event.board)
 			"reaction_triggered":
+				await _finish_player_card()
 				view.stance_panel.show_trigger_preview([event.get("reaction_key","")])
 				_message("MONSTER REACTION\n" + event.title, Color("#ff927f"))
 				view.stance_panel.modulate = Color("#ff927f")
@@ -87,16 +97,39 @@ func play(events: Array, battle_view: Control) -> void:
 				view.stance_panel.modulate = Color.WHITE
 				view.stance_panel.show_trigger_preview()
 			"stance_changed":
-				await _apply_board(event.board)
 				_message("NEW STANCE / " + event.title, Color("#e8bd77"))
-				await _pause(0.30)
+				if event.get("batch_refill", false):
+					view.stance_panel.end_activations()
+					# Stage the incoming cards before yielding, so the new row never flashes in place.
+					view._show_board(event.board)
+					await view.stance_panel.animate_refill(_time(0.32))
+				elif event.has("incoming_uid"):
+					view.stance_panel.clear_lift()
+					view._show_board(event.board)
+					if event.incoming_uid >= 0:
+						await view.stance_panel.animate_refill(_time(0.32), event.incoming_uid)
+				else:
+					await _apply_board(event.board)
+					await _pause(0.30)
 			"intent_triggered":
+				view.stance_panel.begin_activations()
 				_message("ENEMY ACTIVITY / " + event.title, Color("#ff927f"))
 				await _show_enemy_card(event)
+			"enemy_effect_started":
+				if is_instance_valid(enemy_card):
+					enemy_card.highlight_effect(event.index)
+					if not target_beat_follows: await _pause(0.20)
 			"enemy_effect_finished":
 				await _hide_enemy_card()
+				if event.has("stance_uid"):
+					view.stance_panel.clear_lift()
+					await _apply_board(event.board)
 			"card_triggered":
 				await _apply_board(event.board)
+				var slot: int = view.circle_view.contents.find(event.uid)
+				var already_centered: bool = is_instance_valid(player_card) and player_card.get_meta("uid") == event.uid
+				if slot >= 0 and not already_centered:
+					await _finish_player_card()
 				var source_uid: int = event.get("source_uid", -1)
 				var cause: String = event.get("source_event", "effect")
 				if source_uid >= 0:
@@ -108,6 +141,24 @@ func play(events: Array, battle_view: Control) -> void:
 				else:
 					_message("CARD TRIGGER / " + event.title, Color("#9ce6b7"))
 					await _pause(0.28)
+				if slot >= 0 and not already_centered:
+					await _show_player_card(event.uid, slot, true, event.rule_id)
+				elif already_centered:
+					player_card.highlight_rule(event.rule_id)
+			"card_rule_started":
+				if is_instance_valid(player_card) and player_card.get_meta("uid") == event.uid:
+					player_card.highlight_rule(event.rule_id)
+					await _pause(0.18)
+			"card_effect_started":
+				if is_instance_valid(player_card) and player_card.get_meta("uid") == event.uid and player_card.resolving_rule_id == event.rule_id:
+					player_card.highlight_effect(event.index)
+					if not target_beat_follows: await _pause(0.20)
+			"card_rule_finished":
+				if is_instance_valid(player_card) and player_card.get_meta("uid") == event.uid:
+					if event.return_to_circle:
+						await _finish_player_card()
+					else:
+						player_card.highlight_rule("")
 			"circle_expanded", "circle_reset":
 				await _apply_board(event.board)
 				_message(event.title, Color("#d6adee"))
@@ -126,13 +177,18 @@ func play(events: Array, battle_view: Control) -> void:
 				await _apply_board(event.board)
 				_message(event.get("title", event.kind.replace("_", " ").capitalize()), Color("#d6adee"))
 				await _pause(0.22)
-			"destroyed":
-				_message(("ENEMY DOWN / " if event.get("enemy", false) else "SHIP LOST / ") + event.title, Color("#ff927f"))
+			"destroyed", "disabled":
+				_message(("SHIP DISABLED / " if event.kind == "disabled" else "ENEMY DOWN / ") + event.title, Color("#ff927f"))
 				await _pause(0.25)
 				await _apply_board(event.board)
 		view._show_piles(event.board)
-	if view.state.phase not in ["scry","discard"] or view.state.outcome != "": await _hide_enemy_card()
+	_set_effect_targets()
+	if view.state.phase not in ["scry","discard"] or view.state.outcome != "":
+		await _finish_player_card()
+		await _hide_enemy_card()
+		view.stance_panel.clear_lift()
 	if view.state.outcome != "":
+		view.stance_panel.end_activations()
 		_message(view.state.outcome.to_upper(), Color("#e8bd77"))
 		await _pause(0.40)
 	banner.hide()
@@ -140,19 +196,47 @@ func play(events: Array, battle_view: Control) -> void:
 	finished.emit()
 
 
-func _place_card(uid: int, slot: int) -> void:
-	var ghost := _ghost(uid, true)
-	_hide_source(uid)
+func _show_player_card(uid: int, slot: int, already_staged: bool, rule_id: String = "") -> void:
 	var token: Control = view.circle_view.buttons[slot]
-	var destination := token.global_position
-	token.modulate.a = 0
-	var tween := create_tween().set_parallel(true)
-	tween.tween_property(ghost, "position", destination, _time(0.30)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(ghost, "scale", token.size / ghost.size, _time(0.30))
-	tween.tween_property(ghost, "modulate:a", 0.0, _time(0.12)).set_delay(_time(0.22))
+	var source: Rect2 = token.get_global_rect()
+	if not already_staged:
+		source = _sources.get(uid, {}).get("rect", source)
+		_hide_source(uid)
+	var viewport_size := get_viewport().get_visible_rect().size
+	var extent := Vector2(260, 352) * minf(1.0, viewport_size.y / 520.0)
+	player_card = preload("res://scripts/card_face.gd").new()
+	card_stage.add_child(player_card)
+	var data: Dictionary = view.state.card(uid)
+	player_card.configure(data, view.state.ships[data.owner])
+	player_card.set_meta("uid", uid)
+	player_card.size = extent
+	player_card.enable_rule_highlights()
+	player_card.highlight_rule(rule_id)
+	player_card.position = source.position
+	player_card.scale = source.size / extent
+	_ignore_input(player_card)
+	view.circle_view.show_card_in_presentation(uid)
+	var tween := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(player_card, "position", (viewport_size - extent) / 2, _time(0.30))
+	tween.tween_property(player_card, "scale", Vector2.ONE, _time(0.30))
 	await tween.finished
-	ghost.queue_free()
-	token.modulate.a = 1
+	await _pause(0.20)
+
+
+func _finish_player_card() -> void:
+	if not is_instance_valid(player_card): return
+	var slot: int = view.circle_view.contents.find(player_card.get_meta("uid"))
+	var tween := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	if slot >= 0:
+		var token: Control = view.circle_view.buttons[slot]
+		tween.tween_property(player_card, "position", token.global_position, _time(0.24))
+		tween.tween_property(player_card, "scale", token.size / player_card.size, _time(0.24))
+	else:
+		tween.tween_property(player_card, "position:x", get_viewport().get_visible_rect().end.x + 12.0, _time(0.24))
+	await tween.finished
+	player_card.free()
+	player_card = null
+	view.circle_view.show_card_in_presentation(-1)
 
 
 func _apply_board(snapshot: Dictionary) -> void:
@@ -200,9 +284,13 @@ func _stat_change(event: Dictionary) -> void:
 	tween.tween_property(unit, "self_modulate", Color.WHITE, _time(0.32))
 	if event.kind == "damage" and amount > 0:
 		# Modulate the artwork subtree: self_modulate on the unit frame does not tint its rig.
-		var resting_tint: Color = unit.art.modulate
-		unit.art.modulate = Color("#ff5050")
-		tween.tween_property(unit.art, "modulate", resting_tint, _time(0.32))
+		var part: String = unit.get_meta("shared_rig_part", "")
+		if part.is_empty():
+			var resting_tint: Color = unit.art.modulate
+			unit.art.modulate = Color("#ff5050")
+			tween.tween_property(unit.art, "modulate", resting_tint, _time(0.32))
+		else:
+			view.enemies.flash_shared_part(part, _time(0.32))
 	if event.kind != "guard":
 		var final_value: int = event.board.enemies[-1 - event.target].hull if event.target < 0 else event.board.ships[event.target].hull
 		tween.tween_property(unit.bar, "value", final_value, _time(0.28))
@@ -356,6 +444,8 @@ func _melee_effect(event: Dictionary) -> void:
 
 
 func _attack_origin(unit: Control, marker: String = "attack") -> Vector2:
+	if unit != null and not str(unit.get_meta("shared_rig_part", "")).is_empty():
+		return view.enemies.shared_part_point(unit.get_meta("shared_rig_part"))
 	if unit != null and "art" in unit and unit.art.has_method("marker_global"): return unit.art.marker_global(marker)
 	return _art_centre(unit) if unit != null else Vector2.ZERO
 
@@ -400,11 +490,54 @@ func _area_attack_effect(event: Dictionary) -> void:
 
 
 func _art_centre(unit: Control) -> Vector2:
+	if not str(unit.get_meta("shared_rig_part", "")).is_empty():
+		return view.enemies.shared_part_point(unit.get_meta("shared_rig_part"))
 	return unit.art.marker_global("impact") if "art" in unit and unit.art.has_method("marker_global") else unit.get_global_rect().get_center()
+
+
+func _set_effect_targets(targets: Dictionary = {}) -> void:
+	effect_targets.clear()
+	for key in ["units", "slots", "circle_slots", "stances"]:
+		if not targets.get(key, []).is_empty(): effect_targets[key] = targets[key]
+	focus_overlay.queue_redraw()
+
+
+func _process(_delta: float) -> void:
+	if not effect_targets.is_empty(): focus_overlay.queue_redraw()
+
+
+func _draw_effect_targets() -> void:
+	for id in effect_targets.get("units", []):
+		_draw_focus_frame(_unit(id), Color("#ffd18a"))
+	for point in effect_targets.get("slots", []):
+		var formation_view: Control = view.enemies if point >= 4 else view.allies
+		_draw_focus_frame(formation_view.widgets.get(point % 4), Color("#a4e6ff"))
+	for slot in effect_targets.get("circle_slots", []):
+		_draw_focus_frame(view.circle_view.buttons[slot], Color("#a4e6ff"))
+	for uid in effect_targets.get("stances", []):
+		_draw_focus_frame(view.stance_panel.card_button(uid), Color("#ffd18a"))
+
+
+func _draw_focus_frame(widget: Control, tint: Color) -> void:
+	if not is_instance_valid(widget): return
+	var bounds := widget.get_global_rect().grow(3)
+	var frame := StyleBoxFlat.new()
+	frame.bg_color = Color(tint, 0.07)
+	frame.border_color = tint
+	frame.set_border_width_all(2)
+	frame.set_corner_radius_all(9)
+	frame.shadow_color = Color(tint, 0.38)
+	frame.shadow_size = 7
+	focus_overlay.draw_style_box(frame, bounds)
 
 
 func _ready() -> void:
 	layer = 20
+	focus_overlay = Control.new()
+	focus_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	focus_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(focus_overlay)
+	focus_overlay.draw.connect(_draw_effect_targets)
 	overlay = Control.new()
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -462,22 +595,16 @@ func _source_position(uid: int) -> Vector2:
 	return _visible_position(get_viewport().get_visible_rect().size * Vector2(0.45, 0.45))
 
 
-func _ghost(uid: int, full_card: bool = false) -> Control:
-	var ghost: Control
-	if full_card and _sources.has(uid) and is_instance_valid(_sources[uid].get("node")):
-		ghost = _sources[uid].node.duplicate(0) as Control
-		ghost.size = _sources[uid].rect.size
-	else:
-		var panel := PanelContainer.new()
-		var label := Label.new()
-		panel.custom_minimum_size = Vector2(164, 78)
-		label.custom_minimum_size = Vector2(140, 36)
-		label.text = view.state.card(uid).name
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		panel.add_child(label)
-		panel.size = Vector2(164, 78)
-		ghost = panel
+func _ghost(uid: int) -> Control:
+	var ghost := PanelContainer.new()
+	var label := Label.new()
+	ghost.custom_minimum_size = Vector2(164, 78)
+	label.custom_minimum_size = Vector2(140, 36)
+	label.text = view.state.card(uid).name
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ghost.add_child(label)
+	ghost.size = Vector2(164, 78)
 	overlay.add_child(ghost)
 	ghost.theme = view.theme
 	ghost.modulate = Color.WHITE
@@ -594,22 +721,25 @@ func _show_enemy_card(event: Dictionary) -> void:
 	if data.is_empty(): return
 	var viewport_size := get_viewport().get_visible_rect().size
 	var extent := Vector2(minf(370,viewport_size.x-40),minf(440,viewport_size.y-130))
-	enemy_source_rect = Rect2(viewport_size/2,Vector2(80,80))
+	var enemy_source_rect := Rect2(viewport_size/2,Vector2(80,80))
 	var token: int = event.get("stance_uid",-1)
-	for button in view.stance_panel.buttons:
-		if button.get_meta("stance_uid",-2) == token: enemy_source_rect=button.get_global_rect(); break
-	if token < 0:
+	if token >= 0:
+		var button: Control = view.stance_panel.card_button(token)
+		if button != null: enemy_source_rect = button.get_global_rect()
+	else:
 		var source := _unit(data.get("owner",-1))
 		if source != null: enemy_source_rect=source.get_global_rect()
 	enemy_card = preload("res://scripts/enemy_effect_card.gd").new()
-	enemy_card.z_index = 5
+	if token >= 0:
+		enemy_card.set_meta("lifted_uid", token)
 	enemy_card.theme = view.theme
-	overlay.add_child(enemy_card)
+	card_stage.add_child(enemy_card)
 	enemy_card.configure(event.kind,data)
 	enemy_card.size = extent
 	enemy_card.position = enemy_source_rect.position
 	enemy_card.scale = enemy_source_rect.size/extent
-	enemy_card.modulate.a = 0.25
+	enemy_card.modulate.a = 1.0 if token >= 0 else 0.25
+	if token >= 0: view.stance_panel.lift_card(token)
 	var tween := create_tween().set_parallel(true)
 	tween.tween_property(enemy_card,"position",(viewport_size-extent)/2,_time(0.30)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.tween_property(enemy_card,"scale",Vector2.ONE,_time(0.30)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -621,10 +751,9 @@ func _show_enemy_card(event: Dictionary) -> void:
 
 func _hide_enemy_card() -> void:
 	if not is_instance_valid(enemy_card): return
-	var tween := create_tween().set_parallel(true)
-	tween.tween_property(enemy_card,"position",enemy_source_rect.position,_time(0.20)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	tween.tween_property(enemy_card,"scale",enemy_source_rect.size/enemy_card.size,_time(0.20))
-	tween.tween_property(enemy_card,"modulate:a",0.0,_time(0.20))
+	var right_edge := get_viewport().get_visible_rect().end.x
+	var tween := create_tween()
+	tween.tween_property(enemy_card, "position:x", right_edge + 12.0, _time(0.24)).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	await tween.finished
 	enemy_card.free()
 	enemy_card = null

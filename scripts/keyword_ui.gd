@@ -51,5 +51,5 @@ func _process(_delta: float) -> void:
 			for state in ["font_color","font_hover_color","font_pressed_color","font_focus_color","font_hover_pressed_color","font_disabled_color","font_outline_color"]: node.add_theme_color_override(state,Color.TRANSPARENT)
 		var rich = item.renderer.get_ref()
 		if not is_instance_valid(rich): item.renderer = null; continue
-		rich.configure(node.text,font_size,item.color,node.alignment if node is Button else node.horizontal_alignment)
+		rich.configure(node.text,font_size,item.color,node.alignment if node is Button else node.horizontal_alignment, node.get_meta("enemy_positions", false))
 	tracked = alive

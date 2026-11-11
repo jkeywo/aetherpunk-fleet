@@ -49,22 +49,36 @@ var feedback: CanvasLayer
 var menu: PopupMenu
 var dragged_uid := -1
 var drag_hover_slot := -1
-var drag_hover_ship := -1
+var drag_hover_ship := -999
 var drag_serial := 0
 var drag_payload: Dictionary = {}
 var history_dialog: AcceptDialog
-var header: HBoxContainer
+var inspection_scroll: ScrollContainer
 var trigger_preview_data: Dictionary={}
-var actions: HFlowContainer
+var actions: VBoxContainer
+var end_phase_highlight: Panel
+var campaign_attempt := 0
 
 
 func _ready() -> void:
 	get_tree().auto_accept_quit = true
-	state = State.new(-1, BattleSession.battle_content(ContentStore.snapshot()))
+	if BattleSession.campaign_battle:
+		var pending := CampaignStore.pending_battle()
+		if pending.is_empty():
+			get_tree().change_scene_to_file.call_deferred("res://scenes/campaign.tscn")
+			return
+		campaign_attempt = int(pending.id)
+		state = State.new(int(pending.seed), pending.document, pending.options)
+	else:
+		state = State.new(-1, BattleSession.battle_content(ContentStore.snapshot()))
 	BattleSession.clear_result()
 	theme = _make_theme()
 	_build_ui()
 	feedback = Feedback.new()
+	feedback.card_stage = Control.new()
+	feedback.card_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	feedback.card_stage.z_index = 5
+	add_child(feedback.card_stage)
 	add_child(feedback)
 	if state.init_error != "":
 		%Inspection.text = state.init_error
@@ -98,6 +112,7 @@ func _label(parent: Node, id: String, text: String, font: int = 15) -> Label:
 
 func _build_ui() -> void:
 	var background := preload("res://scripts/sky_background.gd").new()
+	background.show_top_strip = false
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
 	var scroll := ScrollContainer.new()
@@ -108,14 +123,8 @@ func _build_ui() -> void:
 	canvas.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(canvas)
-	header = HBoxContainer.new()
-	header.add_theme_constant_override("separation", 14)
-	canvas.add_child(header)
-	_button(header, "GearButton", "⚙", func(): menu.popup(Rect2i(Vector2i(%GearButton.global_position + Vector2(0, 40)), Vector2i(220, 0))))
-	var title := _label(header, "Title", "AETHERPUNK / FLEET COMMAND", 20)
-	title.modulate = Color("#e8bd77")
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_label(header, "Round", "")
+	_button(canvas, "GearButton", "⚙", func(): menu.popup(Rect2i(Vector2i(%GearButton.global_position + Vector2(0, 40)), Vector2i(220, 0))))
+	_label(canvas, "Round", "").horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_label(canvas, "AlliedTitle", "ALLIED FLEET", 13).modulate = Color("#91c8ad")
 	_label(canvas, "CircleTitle", "MAGIC CIRCLE", 13).modulate = Color("#d6adee")
 	_label(canvas, "EnemyTitle", "ENEMY FORMATION", 13).modulate = Color("#ffb0a0")
@@ -125,6 +134,14 @@ func _build_ui() -> void:
 	allies.ship_drag_exited.connect(_drag_leave_ship)
 	allies.ship_dropped.connect(_drop_ship)
 	enemies = _named(Formation.new(), "Enemies", canvas)
+	for side in [allies, enemies]:
+		side.z_index = 6
+		side.large_cards = true
+		side.large_unit_height = 156.0
+	enemies.drop_check = _can_drop_ship
+	enemies.ship_drag_hovered.connect(_drag_over_ship)
+	enemies.ship_drag_exited.connect(_drag_leave_ship)
+	enemies.ship_dropped.connect(_drop_ship)
 	allies.position_selected.connect(_ally_position_pressed)
 	allies.unit_selected.connect(func(id): if pending_play and not busy: _set_group_value("primary",id))
 	enemies.position_selected.connect(_enemy_position_pressed)
@@ -161,9 +178,8 @@ func _build_ui() -> void:
 	_button(canvas, "DeckPile", "Deck", func(): %Inspection.text = "Remaining draw pile: %d cards. Order is hidden." % state.deck.size())
 	_button(canvas, "DiscardPile", "Discard", _show_discard)
 	_build_pile_counters()
-	actions = HFlowContainer.new()
-	actions.add_theme_constant_override("h_separation", 7)
-	actions.add_theme_constant_override("v_separation", 6)
+	actions = VBoxContainer.new()
+	actions.add_theme_constant_override("separation", 4)
 	canvas.add_child(actions)
 	var choice := OptionButton.new()
 	choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -185,14 +201,31 @@ func _build_ui() -> void:
 	_button(actions, "ManaButton", "Mana 0/1", _pay_crystal)
 	_button(actions, "BoostButton", "Boosts", _show_boosts)
 	_button(actions, "CancelButton", "Cancel", _cancel)
-	_button(actions, "EndPhaseButton", "End Fleet Phase", _end_phase)
+	var end_phase := _button(canvas, "EndPhaseButton", "End Turn", _end_phase)
+	end_phase_highlight = Panel.new()
+	end_phase_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	end_phase.add_child(end_phase_highlight)
+	end_phase_highlight.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var highlight := StyleBoxFlat.new()
+	highlight.draw_center = false
+	highlight.border_color = Color("#ffe09a")
+	highlight.set_border_width_all(2)
+	highlight.set_corner_radius_all(10)
+	highlight.shadow_color = Color(1.0, 0.73, 0.26, 0.8)
+	highlight.shadow_size = 9
+	end_phase_highlight.add_theme_stylebox_override("panel", highlight)
+	end_phase_highlight.hide()
 	%EndPhaseButton.mouse_entered.connect(func():
 		if not busy and not pending_play and dragged_uid<0:_apply_trigger_preview(state.turn_trigger_preview()))
 	%EndPhaseButton.mouse_exited.connect(func():_refresh_trigger_preview())
-	_button(actions, "HistoryButton", "History", _show_history)
+	_button(canvas, "HistoryButton", "History", _show_history)
 	_button(actions, "WinButton", "Test Win", _navigate.bind("res://scenes/victory.tscn"))
 	_button(actions, "LossButton", "Test Loss", _navigate.bind("res://scenes/defeat.tscn"))
-	var inspection := _label(canvas, "Inspection", "", 14)
+	inspection_scroll = ScrollContainer.new()
+	inspection_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	canvas.add_child(inspection_scroll)
+	var inspection := _label(inspection_scroll, "Inspection", "", 14)
+	inspection.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspection.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	inspection.modulate = Color("#e8bd77")
 	_label(canvas, "Status", "", 12).modulate = Color("#80a7b7")
@@ -202,9 +235,10 @@ func _build_ui() -> void:
 	if BattleSession.editor_playtest:
 		menu.add_item("Return to Editor", 1)
 	menu.add_item("Main Menu", 2)
-	menu.add_separator()
-	menu.add_item("Test Win", 3)
-	menu.add_item("Test Loss", 4)
+	if not BattleSession.campaign_battle:
+		menu.add_separator()
+		menu.add_item("Test Win", 3)
+		menu.add_item("Test Loss", 4)
 	%WinButton.hide()
 	%LossButton.hide()
 	add_child(menu)
@@ -247,32 +281,43 @@ func _build_ui() -> void:
 
 func _layout() -> void:
 	var w: float = canvas.size.x
-	header.position = Vector2(16, 10)
-	header.size = Vector2(w - 32, 38)
-	%AlliedTitle.position = Vector2(20, 65)
-	%EnemyTitle.position = Vector2(w - 355, 65)
-	%CircleTitle.position = Vector2(w / 2 - 75, 49)
-	allies.position = Vector2(8, 82)
-	allies.size = Vector2(390, 304)
-	enemies.position = Vector2(w - 398, 82)
-	enemies.size = Vector2(390, 304)
-	circle_view.position = Vector2(w / 2 - 152, 83)
-	circle_view.size = Vector2(304, 286)
-	stance_panel.position = Vector2(382, 382)
-	stance_panel.size = Vector2(w - 398, 94)
-	hand_view.position = Vector2(118, 477)
+	var hand_top := maxf(800, canvas.size.y) - 245
+	var controls_top := hand_top - 127
+	var formation_width := minf(440, w / 2 - 175)
+	%GearButton.position = Vector2(16, 6)
+	%GearButton.size = Vector2(40, 36)
+	%Round.position = Vector2(w - 236, 10)
+	%Round.size = Vector2(220, 22)
+	%AlliedTitle.position = Vector2(20, 45)
+	%EnemyTitle.position = Vector2(w - formation_width, 45)
+	%CircleTitle.position = Vector2(w / 2 - 75, 16)
+	allies.position = Vector2(8, 62)
+	allies.size = Vector2(formation_width, controls_top - 82)
+	enemies.position = Vector2(w - formation_width - 8, 62)
+	enemies.size = allies.size
+	circle_view.position = Vector2(w / 2 - 170, 36)
+	circle_view.size = Vector2(340, controls_top - 49)
+	stance_panel.position = Vector2(w / 2 + 8, controls_top)
+	stance_panel.size = Vector2(w / 2 - 24, 124)
+	hand_view.position = Vector2(118, hand_top)
 	hand_view.size = Vector2(w - 236, 220)
-	%DeckPile.position = Vector2(16, 514)
+	%DeckPile.position = Vector2(16, hand_top + 34)
 	%DeckPile.size = Vector2(92, 158)
-	%DiscardPile.position = Vector2(w - 108, 514)
+	%DiscardPile.position = Vector2(w - 108, hand_top + 34)
 	%DiscardPile.size = Vector2(92, 158)
-	actions.position = Vector2(16, 710)
-	actions.size = Vector2(w - 32, 38)
-	%Inspection.position = Vector2(18, 714 + maxf(38, actions.get_combined_minimum_size().y))
-	canvas.custom_minimum_size.y = maxf(800, %Inspection.position.y + 48)
-	%Inspection.size = Vector2(w - 36, 42)
-	%Status.position = Vector2(20, 435)
-	%Status.size = Vector2(w - 430, 38)
+	%HistoryButton.position = Vector2(16, hand_top - 9)
+	%HistoryButton.size = Vector2(92, 36)
+	%EndPhaseButton.position = Vector2(w - 114, hand_top - 9)
+	%EndPhaseButton.size = Vector2(104, 36)
+	actions.position = Vector2(w / 2 - 110, controls_top + 3)
+	actions.size = Vector2(98, 108)
+	var help_width := actions.position.x - 28
+	%Status.position = Vector2(16, controls_top + 42)
+	%Status.size = Vector2(help_width, 20)
+	inspection_scroll.position = Vector2(16, controls_top + 62)
+	inspection_scroll.size = Vector2(help_width, hand_top - inspection_scroll.position.y - 8)
+	reaction_panel.position = %Status.position
+	reaction_panel.size = Vector2(help_width, hand_top - reaction_panel.position.y - 8)
 
 
 func _render() -> void:
@@ -300,7 +345,7 @@ func _render() -> void:
 		face.configure(state.card(uid), state.ships[state.card(uid).owner])
 		face.pressed.connect(_choose_card.bind(uid))
 		face.drag_provider = _begin_card_drag.bind(uid)
-		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, or an adjacent ally/empty position to swap/move. Basic actions immediately discard this card on drop." % state.ships[state.card(uid).owner].name
+		face.tooltip_text += "\nDrag to the circle to play, to %s to repair/recover, an adjacent ally/empty position to swap/move, or an enemy to attack. Basic actions immediately discard this card on drop." % state.ships[state.card(uid).owner].name
 		face.mouse_entered.connect(func(): hand_view.hover(face, true);_refresh_trigger_preview(uid))
 		face.mouse_exited.connect(func(): hand_view.hover(face, false);_refresh_trigger_preview())
 	hand_view.arrange()
@@ -346,7 +391,7 @@ func _show_board(snapshot: Dictionary) -> void:
 		pending_card["pending_status"] = "PENDING %d/%d" % [_payment_amount(), _current_cost()]
 		cards[selected_uid] = pending_card
 	circle_view.configure(displayed_circle, snapshot.expanded, cards, snapshot.used_triggers, selected_slot, [], {}, snapshot.persistence)
-	stance_panel.configure(snapshot.stance_row, snapshot.stunned, int(action_options.get("stance", -1)))
+	stance_panel.configure(snapshot.stance_row, snapshot.stunned, int(action_options.get("stance", -1)), state.enemy_row_capacity)
 	%CircleTitle.text = "MAGIC CIRCLE / %d" % (9 if snapshot.expanded else 4)
 	_show_piles(snapshot)
 
@@ -505,6 +550,7 @@ func _end_phase() -> void:
 func _present_resolution() -> void:
 	busy = true
 	reaction_panel.hide()
+	inspection_scroll.show()
 	%Status.show()
 	_update_controls()
 	await feedback.play(state.feedback_events.duplicate(true), self)
@@ -541,6 +587,8 @@ func _update_controls() -> void:
 	%CancelButton.disabled = busy or selected_uid == -2
 	%CancelButton.text = "Cancel Play" if pending_play else "Cancel"
 	%EndPhaseButton.disabled = busy or pending_play or state.phase!="fleet"
+	end_phase_highlight.visible = not %EndPhaseButton.disabled and state.hand.is_empty()
+	%EndPhaseButton.tooltip_text = "Your hand is empty. End your turn." if end_phase_highlight.visible else "End your turn."
 	if busy:
 		%Inspection.text = "Resolving action and chained effects…"
 	elif state.phase == "discard":
@@ -554,8 +602,9 @@ func _update_controls() -> void:
 		_try_resolve_pending.call_deferred()
 	else:
 		allies.show_basic_targets()
+		enemies.show_basic_targets()
 		enemies.show_rule_preview()
-		%Inspection.text = "Drag to the circle to play. Drop on ships/empty positions for immediate basic actions."
+		%Inspection.text = "Drag to the circle to play. Drop on a ship, adjacent empty position, or enemy for an immediate basic action."
 	var cards: Dictionary = {}
 	for uid in state.circle:
 		if uid>=0: cards[uid]=state.card(uid)
@@ -610,7 +659,21 @@ func _navigate(destination: String) -> void:
 		return
 	get_tree().paused = false
 	if destination in ["res://scenes/victory.tscn", "res://scenes/defeat.tscn"]:
-		BattleSession.record_result(state.result_summary(destination.get_file().get_basename()))
+		var reported := destination.get_file().get_basename()
+		var summary: Dictionary = state.result_summary(reported)
+		if BattleSession.campaign_battle:
+			if state.outcome != reported: return
+			if not CampaignStore.settle(campaign_attempt, summary):
+				var dialog := AcceptDialog.new()
+				dialog.title = "Campaign save"
+				dialog.dialog_text = CampaignStore.last_error
+				dialog.ok_button_text = "Retry save"
+				dialog.confirmed.connect(func(): _navigate.call_deferred(destination))
+				dialog.close_requested.connect(dialog.queue_free)
+				add_child(dialog)
+				dialog.popup_centered()
+				return
+		BattleSession.record_result(summary)
 	if destination in ["res://scenes/main_menu.tscn", "res://scenes/editor.tscn"]:
 		BattleSession.editor_playtest = false
 	get_tree().change_scene_to_file(destination)
@@ -664,12 +727,13 @@ func _notification(what: int) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and dragged_uid >= 0 and drag_hover_ship >= 0:
-		var widget: Control = allies.target_widget(drag_hover_ship)
+	if event is InputEventMouseMotion and dragged_uid >= 0 and drag_hover_ship != -999:
+		var formation_view: Control = enemies if drag_hover_ship < 0 else allies
+		var widget: Control = formation_view.target_widget(drag_hover_ship)
 		if widget != null:
 			var point: Vector2 = widget.get_global_transform_with_canvas().affine_inverse() * event.position
 			if not Rect2(Vector2.ZERO, widget.size).has_point(point):
-				drag_hover_ship = -1
+				drag_hover_ship = -999
 				_update_drag_feedback()
 	if event is InputEventMouseMotion and dragged_uid >= 0 and drag_hover_slot >= 0:
 		var button: Control = circle_view.buttons[drag_hover_slot]
@@ -685,7 +749,7 @@ func _begin_card_drag(uid: int) -> Dictionary:
 	drag_serial += 1
 	dragged_uid = uid
 	drag_hover_slot = -1
-	drag_hover_ship = -1
+	drag_hover_ship = -999
 	drag_payload = {"kind": "fleet_hand_card", "battle": get_instance_id(), "uid": uid, "serial": drag_serial}
 	for face in hand_view.get_children():
 		if face.get_meta("uid", -1) == uid:
@@ -735,7 +799,7 @@ func _drag_over_slot(slot: int, data: Variant) -> void:
 	if not _is_our_drag(data) or drag_hover_slot == slot:
 		return
 	drag_hover_slot = slot
-	drag_hover_ship = -1
+	drag_hover_ship = -999
 	_update_drag_feedback()
 
 
@@ -766,7 +830,7 @@ func _update_drag_feedback() -> void:
 	var highlight := -1
 	var trigger_data: Dictionary={}
 	var title: String = state.card(dragged_uid).name
-	if drag_hover_ship >= 0:
+	if drag_hover_ship != -999:
 		var preview: Dictionary = state.basic_preview(dragged_uid, drag_hover_ship)
 		trigger_data=state.trigger_preview(dragged_uid,[], -1,-1,-1,{},drag_hover_ship)
 		%Inspection.text = ("Release to act immediately. " if preview.ok else "Cannot drop: ") + preview.text
@@ -787,7 +851,7 @@ func _update_drag_feedback() -> void:
 		else:
 			%Inspection.text = "Cannot place %s: %s" % [title, error]
 	else:
-		%Inspection.text = "Drag %s to the circle to stage a play, its own ship to repair/recover, or an adjacent ship/empty position to swap/move. Basic actions resolve immediately on drop." % title
+		%Inspection.text = "Drag %s to the circle to stage a play, its own ship to repair/recover, an adjacent ship/empty position to swap/move, or an enemy to attack. Basic actions resolve immediately on drop." % title
 	circle_view.configure(state.circle, state.expanded, cards, state.used_triggers, highlight, contributors, details, state.persistence)
 	_apply_trigger_preview(trigger_data)
 
@@ -803,7 +867,7 @@ func _drop_card(slot: int, data: Variant) -> void:
 func _finish_card_drag(refresh: bool = true) -> void:
 	dragged_uid = -1
 	drag_hover_slot = -1
-	drag_hover_ship = -1
+	drag_hover_ship = -999
 	drag_payload.clear()
 	circle_view.drag_active = false
 	circle_view.valid_drop_slots.clear()
@@ -828,7 +892,7 @@ func _drag_over_ship(ship_id: int, data: Variant) -> void:
 
 func _drag_leave_ship(ship_id: int) -> void:
 	if dragged_uid >= 0 and drag_hover_ship == ship_id:
-		drag_hover_ship = -1
+		drag_hover_ship = -999
 		_update_drag_feedback()
 
 
@@ -844,12 +908,13 @@ func _drop_ship(ship_id: int, data: Variant) -> void:
 	await _present_resolution()
 
 
-func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
+func _update_basic_highlights(uid: int = -1, hovered: int = -999) -> void:
 	if uid < 0 and basic_target >= 0:
 		uid = selected_uid
 		hovered = basic_target
 	if uid < 0:
 		allies.show_basic_targets()
+		enemies.show_basic_targets()
 		return
 	var hints: Dictionary = {}
 	var valid: Array = []
@@ -859,6 +924,7 @@ func _update_basic_highlights(uid: int = -1, hovered: int = -1) -> void:
 		if preview.ok:
 			valid.append(ship_id)
 	allies.show_basic_targets(hints, valid, hovered, int(state.card(uid).owner))
+	enemies.show_basic_targets(hints, valid, hovered, int(state.card(uid).owner))
 
 
 func _stage_circle(uid: int, slot: int) -> void:
@@ -1123,12 +1189,14 @@ func _reaction_hovered(uid: int) -> void:
 	%Inspection.text=preview.text
 	reaction_text.text=preview.text
 	reaction_panel.show()
+	inspection_scroll.hide()
 	%Status.hide()
 
 func _reaction_exited(uid: int) -> void:
 	if hovered_reaction!=uid: return
 	hovered_reaction=-1
 	reaction_panel.hide()
+	inspection_scroll.show()
 	%Status.show()
 	if not busy: _update_controls()
 
@@ -1194,15 +1262,16 @@ func _refresh_trigger_preview(hover_uid: int = -1, hover_target: int = -999, hov
 			elif flags.movement:primary=state.position_of(hover_target)
 			elif flags.slot:choices.slot=state.position_of(hover_target)
 		data=state.trigger_preview(uid,payments,primary,move,slot,choices)
-	_apply_trigger_preview(data)
+	var hovered_owner: int = int(state.card(hover_uid).get("owner", -999)) if not busy and state.phase == "fleet" else -999
+	_apply_trigger_preview(data, hovered_owner)
 
-func _apply_trigger_preview(data: Dictionary = {}) -> void:
+func _apply_trigger_preview(data: Dictionary = {}, hovered_owner: int = -999) -> void:
 	trigger_preview_data=data.duplicate(true)
 	stance_panel.show_trigger_preview(data.get("reactions",[]),data.get("provisional",false))
 	circle_view.show_trigger_preview(data.get("cards",{}))
 	for face in hand_view.get_children():face.trigger_rules=data.get("cards",{}).get(face.get_meta("uid",-1),[])
 	for id in state.ships.size():
 		var widget=allies.target_widget(id)
-		if widget!=null and widget.has_method("show_trigger_preview"):widget.show_trigger_preview(data.get("ships",{}).get(id,[]))
+		if widget!=null and widget.has_method("show_trigger_preview"):widget.show_trigger_preview(data.get("ships",{}).get(id,[]), id == hovered_owner)
 	var discard_face=%DiscardPile.face
 	if discard_face!=null and not state.discard.is_empty():discard_face.trigger_rules=data.get("cards",{}).get(state.discard.back(),[])

@@ -1,5 +1,10 @@
 extends RefCounted
 
+static func back_icon() -> Texture2D:
+	var image := Image.new()
+	image.load_svg_from_string('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M16 6L8 14l8 8M8 14h14" fill="none" stroke="#fff2d5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+	return ImageTexture.create_from_image(image)
+
 static func make() -> Theme:
 	var result := Theme.new()
 	result.default_font_size = 15

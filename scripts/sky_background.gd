@@ -1,6 +1,7 @@
 extends Control
 const Art = preload("res://scripts/art_assets.gd")
 var dimming := .55
+var show_top_strip := true
 var far: Texture2D
 var near: Texture2D
 
@@ -31,4 +32,4 @@ func _draw() -> void:
 	_layer(far,6)
 	_layer(near,15)
 	draw_rect(Rect2(Vector2.ZERO,size),Color(.025,.06,.095,dimming))
-	draw_rect(Rect2(0,0,size.x,58),Color(.02,.045,.065,.5))
+	if show_top_strip: draw_rect(Rect2(0,0,size.x,58),Color(.02,.045,.065,.5))

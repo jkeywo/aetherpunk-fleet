@@ -80,6 +80,18 @@ text = ""
 horizontal_alignment = 1
 autowrap_mode = 2
 
+[node name="NewCampaignButton" type="Button" parent="Center/Panel/Margin/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "New Campaign"
+
+[node name="ContinueCampaignButton" type="Button" parent="Center/Panel/Margin/Content"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "Continue Campaign"
+
 [node name="PrimaryButton" type="Button" parent="Center/Panel/Margin/Content"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)

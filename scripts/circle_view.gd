@@ -21,6 +21,7 @@ var pulse_receiver := -1
 var pulse_event := ""
 var pulse_progress := 0.0
 var link_overlay: Control
+var _presented_uid := -1
 var drop_check: Callable
 var drag_active := false
 var valid_drop_slots: Array = []
@@ -64,6 +65,7 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 			add_child(button)
 			buttons.append(button)
 		link_overlay = Control.new()
+		link_overlay.z_index = 7
 		link_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		link_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		add_child(link_overlay)
@@ -74,7 +76,7 @@ func configure(circle: Array, is_expanded: bool, cards: Dictionary, used: Dictio
 		var button: Button = buttons[slot]
 		var provides: bool = uid >= 0 and contributors.has(uid) and selected >= 0 and Geometry.neighbours(selected, expanded).has(slot)
 		button.disabled = locked
-		button.visible = not locked
+		button.visible = not locked and (uid < 0 or uid != _presented_uid)
 		button.text = "Locked" if locked else Geometry.SLOT_NAMES[slot] + "\n+"
 		button.modulate = Color("#3b4859") if locked else Color.WHITE
 		button.tooltip_text = Geometry.SLOT_NAMES[slot]
@@ -155,6 +157,16 @@ func _draw() -> void:
 			tint = BONUS_COLOR if bonus_slots.has(other) else Color("#9b819e")
 			width = 5.0 if bonus_slots.has(other) else 2.0
 		draw_line((Geometry.CIRCLE_POINTS[link[0]] + Vector2.ONE / 2) * cell, (Geometry.CIRCLE_POINTS[link[1]] + Vector2.ONE / 2) * cell, tint, width, true)
+
+
+func show_card_in_presentation(uid: int) -> void:
+	if _presented_uid >= 0:
+		var previous := contents.find(_presented_uid)
+		if previous >= 0: buttons[previous].show()
+	_presented_uid = uid
+	if uid >= 0:
+		var slot := contents.find(uid)
+		if slot >= 0: buttons[slot].hide()
 
 
 func animate_chain(source_uid: int, receiver_uid: int, event_kind: String, duration: float) -> void:

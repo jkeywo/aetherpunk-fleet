@@ -1,6 +1,8 @@
 extends Button
 ## Shared card layout: type, title, top-right cost, discard crystals, ship border, rules.
 const Icons = preload("res://scripts/keyword_icons.gd")
+const Rules = preload("res://scripts/rules/rule_registry.gd")
+const KeywordText = preload("res://scripts/keyword_text.gd")
 var labels: Dictionary = {}
 var info: Dictionary = {}
 var owner_info: Dictionary = {}
@@ -14,6 +16,11 @@ var trigger_rules: Array=[]:
 		trigger_rules=value
 		queue_redraw()
 var ship_color := Color("#91c8ad")
+var resolving_rule_id := ""
+var resolving_rule_rows: Dictionary = {}
+var resolving_effect_rows: Dictionary = {}
+var resolving_effect_index := -1
+var rule_scroll: ScrollContainer
 
 func _init() -> void:
 	set_meta("plain_text",true)
@@ -38,7 +45,7 @@ func _init() -> void:
 func configure(card: Dictionary, owner: Dictionary = {}) -> void:
 	info = card.duplicate(true)
 	if card.has("rules"):
-		info["effect"] = "\n".join(card.rules.map(func(rule): return preload("res://scripts/rules/rule_registry.gd").rule_text(rule, str(owner.get("name", "")))))
+		info["effect"] = "\n".join(card.rules.map(func(rule): return Rules.rule_text(rule, str(owner.get("name", "")))))
 	owner_info = owner.duplicate(true)
 	ship_color = Color(owner.get("color","#91c8ad"))
 	labels.name.text = card.get("name","Untitled card") if not str(card.get("name","")).strip_edges().is_empty() else "Untitled card"
@@ -59,6 +66,95 @@ func configure(card: Dictionary, owner: Dictionary = {}) -> void:
 	_layout()
 	queue_redraw()
 
+func enable_rule_highlights() -> void:
+	if info.get("rules", []).is_empty(): return
+	labels.rules.hide()
+	rule_scroll = ScrollContainer.new()
+	rule_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(rule_scroll)
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 5)
+	rule_scroll.add_child(column)
+	for rule in info.rules:
+		var row := PanelContainer.new()
+		column.add_child(row)
+		var owner_name: String = owner_info.get("name", "")
+		var effects: Array = rule.get("effects", [])
+		if effects.size() <= 1:
+			_add_rule_text(row, Rules.rule_text(rule, owner_name).replace(" [once per action]", ""))
+		else:
+			var lines := VBoxContainer.new()
+			lines.add_theme_constant_override("separation", 3)
+			row.add_child(lines)
+			_add_rule_text(lines, Rules.rule_heading(rule, owner_name))
+			var effect_rows: Array[PanelContainer] = []
+			for effect in effects:
+				var effect_row := PanelContainer.new()
+				lines.add_child(effect_row)
+				effect_row.add_theme_stylebox_override("panel", _effect_style(false))
+				_add_rule_text(effect_row, Rules.text("effect", effect, owner_name))
+				effect_rows.append(effect_row)
+			resolving_effect_rows[rule.id] = effect_rows
+			for modifier in rule.get("modifiers", []):
+				_add_rule_text(lines, Rules.text("modifier", modifier, owner_name))
+			var suffix := Rules.rule_suffix(rule).replace(" [once per action]", "").strip_edges()
+			if not suffix.is_empty(): _add_rule_text(lines, suffix)
+		resolving_rule_rows[rule.id] = row
+	highlight_rule("")
+	_layout()
+
+
+func _add_rule_text(parent: Control, value: String) -> void:
+	var text := KeywordText.new()
+	text.fit_content = true
+	text.configure(value, 15)
+	parent.add_child(text)
+
+
+func highlight_effect(index: int) -> void:
+	var rows: Array = resolving_effect_rows.get(resolving_rule_id, [])
+	resolving_effect_index = index if index >= 0 and index < rows.size() else -1
+	for i in rows.size():
+		var row: PanelContainer = rows[i]
+		row.add_theme_stylebox_override("panel", _effect_style(i == resolving_effect_index))
+	if resolving_effect_index >= 0:
+		rule_scroll.ensure_control_visible.call_deferred(rows[resolving_effect_index])
+
+
+func _effect_style(active: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#66502f") if active else Color.TRANSPARENT
+	style.border_color = Color("#ffd18a")
+	style.border_width_left = 3 if active else 0
+	style.set_corner_radius_all(3)
+	style.content_margin_left = 6
+	style.content_margin_right = 4
+	style.content_margin_top = 3
+	style.content_margin_bottom = 3
+	return style
+
+func highlight_rule(rule_id: String) -> void:
+	highlight_effect(-1)
+	resolving_rule_id = rule_id if resolving_rule_rows.has(rule_id) else ""
+	for id in resolving_rule_rows:
+		var row: PanelContainer = resolving_rule_rows[id]
+		var active: bool = id == resolving_rule_id
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("#344737") if active else Color.TRANSPARENT
+		style.border_color = Color("#a6e6b8")
+		style.border_width_left = 3 if active else 0
+		style.set_corner_radius_all(4)
+		style.content_margin_left = 7
+		style.content_margin_right = 7
+		style.content_margin_top = 4
+		style.content_margin_bottom = 4
+		row.add_theme_stylebox_override("panel", style)
+		row.modulate = Color.WHITE if active or resolving_rule_id.is_empty() else Color("#92a3ad")
+	if not resolving_rule_id.is_empty():
+		rule_scroll.ensure_control_visible.call_deferred(resolving_rule_rows[resolving_rule_id])
+
+
 func _layout() -> void:
 	if labels.is_empty(): return
 	var wide := size.x >= 230
@@ -72,6 +168,9 @@ func _layout() -> void:
 	labels.positions.size = Vector2(68,13)
 	labels.rules.position = Vector2(10,64)
 	labels.rules.size = Vector2(size.x-20,maxf(20,size.y-86))
+	if rule_scroll != null:
+		rule_scroll.position = labels.rules.position
+		rule_scroll.size = labels.rules.size
 
 func _draw() -> void:
 	var frame := preload("res://scripts/art_assets.gd").texture("ui/card-frame.png")

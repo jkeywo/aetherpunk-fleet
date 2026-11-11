@@ -1,35 +1,29 @@
-extends Control
-## Position glyphs sit behind the owning monster and face the enemy direction.
+extends VBoxContainer
+## The header marks the monster's own position on the enemy formation.
+const Geometry = preload("res://scripts/battle_geometry.gd")
+const Icons = preload("res://scripts/keyword_icons.gd")
+const RigView = preload("res://scripts/rig_view.gd")
+
 var rig: Control
-var position_glyph: Texture2D
-var condition: Dictionary = {}
 
-func configure(visual: Dictionary, spec: Dictionary = {}, extent: Vector2 = Vector2(48,24)) -> void:
-	condition=spec.duplicate(true)
-	custom_minimum_size=extent
-	size=extent
-	mouse_filter=Control.MOUSE_FILTER_PASS
-	if spec.get("kind")=="reaction_trigger" and spec.get("family")=="position":
-		position_glyph=load("res://assets/generated/reactions/"+str(spec.get("position","front"))+".png")
-		tooltip_text=preload("res://scripts/rules/rule_registry.gd").common_reaction_text(spec)+". Front is left and Rear is right around the enemy; Upper Flank is above and Lower Flank below."
-		set_meta("reaction_badge",true)
-	rig=preload("res://scripts/rig_view.gd").new()
+func configure(visual: Dictionary, owner: int, extent: Vector2 = Vector2(48, 24)) -> void:
+	add_theme_constant_override("separation", 0)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rig = RigView.new()
+	rig.custom_minimum_size = extent
+	rig.set_meta("owner_portrait", owner)
 	add_child(rig)
-	rig.configure_data(visual,true)
-	resized.connect(_layout)
-	_layout()
-	queue_redraw()
-
-func _layout() -> void:
-	if rig==null:return
-	rig.position=size*Vector2(.27,.20) if position_glyph!=null else Vector2.ZERO
-	rig.size=size*Vector2(.46,.60) if position_glyph!=null else size
-	rig._layout()
-
-func _draw() -> void:
-	if position_glyph==null:return
-	# Enemy faces left, opposite to the player formation used by the source glyphs.
-	draw_set_transform(Vector2(size.x,0),0,Vector2(-1,1))
-	var square:=Vector2.ONE*minf(size.x,size.y)
-	draw_texture_rect(position_glyph,Rect2((size-square)/2,square),false,Color(1,1,1,.8))
-	draw_set_transform(Vector2.ZERO)
+	rig.configure_data(visual, true)
+	var point: int = visual.get("position", -1)
+	if point < 0 or point >= Geometry.POSITIONS.size(): return
+	var marker := TextureRect.new()
+	marker.name = "OwnerPosition"
+	marker.texture = Icons.texture(Geometry.POSITIONS[point], true)
+	marker.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	marker.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var marker_extent := roundf(extent.y * 0.6)
+	marker.custom_minimum_size = Vector2.ONE * marker_extent
+	marker.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	marker.mouse_filter = Control.MOUSE_FILTER_PASS
+	marker.tooltip_text = "Enemy " + Geometry.POSITION_NAMES[point]
+	add_child(marker)

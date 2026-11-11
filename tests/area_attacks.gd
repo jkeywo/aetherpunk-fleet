@@ -43,9 +43,9 @@ func _run() -> void:
 	b.enemies[0].armour=1;b.enemies[3].armour=1;b.cover[4]=2;b.enemies[0].guard=1
 	b.play(uid_for(b,"brace"),[],-1,-1,0)
 	expect(losses(b)==[3,0,0,6] and b.cover[4]==0 and b.enemies[0].guard==0,"Beam multi-hit bypassed cover/armour/shields.")
-	doc=encounter(beam());b=State.new(2,doc);b.enemy_formation[0]=-1
+	doc=encounter(beam());b=State.new(2,doc);b.enemies[0].hull=0; b._cleanup()
 	b.play(uid_for(b,"brace"),[],-1,-1,0)
-	expect(losses(b)==[0,0,0,4],"Empty Front stopped beam from reaching Rear.")
+	expect(b.enemy_formation[0] == 3 and b.enemy_formation[3] == -1 and losses(b)[3] == 4,"Beam did not hit the rear enemy after it advanced to Front.")
 	# Movement resolves before the beam's lane is chosen.
 	doc=encounter(beam());card_def(doc,"brace").rules[0].effects=[{"kind":"move","target":"owner","destination":"upper","guard":0},beam()]
 	b=State.new(2,doc);b.play(uid_for(b,"brace"),[],-1,-1,0)
