@@ -4,6 +4,8 @@ var last_result: Dictionary = {}
 var editor_playtest: bool = false
 var preparation_draft: Dictionary = {}
 var prepared_content: Dictionary = {}
+var encounter_content: Dictionary = {}
+var encounter_fingerprint := ""
 
 
 func battle_content(saved: Dictionary) -> Dictionary:

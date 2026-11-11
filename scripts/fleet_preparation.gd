@@ -203,7 +203,7 @@ func _build() -> void:
 	outer.add_child(footer)
 	status = _label(footer,"",14)
 	status.custom_minimum_size.y = 46
-	launch_button = _button(footer,"Launch Battle",_launch)
+	launch_button = _button(footer,"Set Up Encounter",_launch)
 	launch_button.custom_minimum_size = Vector2(200,46)
 
 func _menu(parent: Node, caption: String, options: Array, current: Variant, callback: Callable, key: String, enabled: bool = true) -> OptionButton:
@@ -470,9 +470,12 @@ func _launch() -> void:
 		status.text = "Cannot launch: " + str(errors[0])
 		return
 	_remember()
-	BattleSession.prepared_content = candidate.duplicate(true)
+	if BattleSession.encounter_fingerprint == fingerprint:
+		candidate.setup.enemies = BattleSession.encounter_content.get("setup", {}).get("enemies", candidate.setup.enemies).duplicate(true)
+	BattleSession.encounter_content = candidate.duplicate(true)
+	BattleSession.encounter_fingerprint = fingerprint
 	BattleSession.editor_playtest = false
-	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	get_tree().change_scene_to_file("res://scenes/encounter_setup.tscn")
 
 
 func _show_ship_info(index: int) -> void:

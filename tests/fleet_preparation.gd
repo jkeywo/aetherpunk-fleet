@@ -88,6 +88,8 @@ func _run() -> void:
 	expect(prep.draft.setup.fleet == chosen,"Returning from main menu lost session preparation.")
 	prep.launch_button.pressed.emit()
 	await scene_changed
+	current_scene.start_button.pressed.emit()
+	await scene_changed
 	var battle = current_scene
 	battle.feedback.duration_scale = 0.01
 	expect(battle.state.document.setup.fleet == chosen and battle.state.card_keys.size() == 16,"Launch ignored prepared levels/loadout.")

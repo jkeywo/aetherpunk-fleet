@@ -77,5 +77,7 @@ func _run() -> void:
 	var expected_keys: Array = Catalog.compile(prep._candidate()).deck_keys.duplicate()
 	prep.launch_button.pressed.emit()
 	await scene_changed
+	current_scene.start_button.pressed.emit()
+	await scene_changed
 	expect(current_scene.state.init_error == "" and current_scene.state.card_keys == expected_keys, "Launching from Fleet Deck did not use the previewed assembled deck.")
 	done("Tabbed fleet deck preview")

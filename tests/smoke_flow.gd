@@ -9,6 +9,8 @@ func _run() -> void:
 	expect(current_scene.name == "FleetPreparation", "Main menu bypassed fleet preparation.")
 	current_scene.launch_button.pressed.emit()
 	await scene_changed
+	current_scene.start_button.pressed.emit()
+	await scene_changed
 	var b = current_scene
 	b.feedback.duration_scale = 0.01
 	await flush()
