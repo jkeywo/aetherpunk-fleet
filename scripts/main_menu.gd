@@ -3,10 +3,15 @@ extends "res://scripts/screen.gd"
 
 func _ready() -> void:
 	super._ready()
+	var is_web := OS.has_feature("web")
+	%EditorButton.visible = not is_web
 	%EditorButton.pressed.connect(_navigate.bind("res://scenes/editor.tscn"))
 	if ContentStore.saved.is_empty():
 		primary_button.disabled = true
-		$Center/Panel/Margin/Content/Description.text = "Content could not be loaded. Open Editor to repair it."
+		$Center/Panel/Margin/Content/Description.text = (
+			"Content could not be loaded." if is_web
+			else "Content could not be loaded. Open Editor to repair it."
+		)
 		$Center/Panel/Margin/Content/Description.show()
 
 
