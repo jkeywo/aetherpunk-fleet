@@ -112,3 +112,17 @@ Each part has a sprite region, rendered size, draw layer, local hinge, parent at
 Pause, scrub the timeline, inspect the rest pose, and toggle anchor markers in the live preview. **Apply to Workshop Draft** updates only that entry's draft; **Cancel** leaves it unchanged. **Save All** validates the complete rig and saves its `visual_rig` definition alongside the unit in `data/content.json`; **Save & Test Battle** uses it immediately. **Revert Unsaved Changes** restores the saved rig. Existing entries without an override keep their default art. Applying an empty rig chooses the neutral fallback.
 
 The shared schema, preview and dialog live in `scripts/visuals/`. Rigs are declarative data, not executable scripts. Validation rejects missing sprites, out-of-bounds regions, missing/cyclic parent links and invalid motion values. The same anchored renderer is used in workshop, preparation, battle and results. Battle snapshots retain their own rig definitions, so later workshop edits cannot change an active battle or its result.
+
+## Play in a browser
+
+[Play Aetherfleet on GitHub Pages](https://jkeywo.github.io/aetherpunk-fleet/).
+
+To rebuild, install the export templates for Godot 4.7.2, create the output folder, and run:
+
+```powershell
+New-Item -ItemType Directory -Force build/web
+godot --headless --editor --import --quit
+godot --headless --export-release Web build/web/index.html
+```
+
+GitHub Pages serves the exported files from the root of the `gh-pages` branch. The desktop project is the place to save edits to project content.
