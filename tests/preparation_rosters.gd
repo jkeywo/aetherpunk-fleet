@@ -8,8 +8,16 @@ func drag(from_control: Control, destination: Control) -> void:
 	await motion(from);await mouse(from,true)
 	await motion(from+Vector2(-65,-50),true)
 	expect(root.gui_is_dragging(),"Native framed slot drag did not start.")
+	var prep = current_scene
+	if destination == prep.unassign_ship_slot:
+		expect(prep.unassign_ship_slot.visible and not prep.unassign_captain_slot.visible,"Dragging an assigned ship should show only Unassign airship.")
+	elif destination == prep.unassign_captain_slot:
+		expect(prep.unassign_captain_slot.visible and not prep.unassign_ship_slot.visible,"Dragging an assigned captain should show only Unassign captain.")
+	elif from_control.get_parent() in [prep.ship_bank, prep.captain_bank]:
+		expect(not prep.unassign_ship_slot.visible and not prep.unassign_captain_slot.visible,"Dragging from the available roster showed an unassign slot.")
 	var point: Vector2=destination.get_global_transform_with_canvas()*(destination.size/2)
 	await motion(point,true);await mouse(point,false);await flush()
+	expect(not prep.unassign_ship_slot.visible and not prep.unassign_captain_slot.visible,"An unassign slot remained visible after the drop.")
 func click(control: Control) -> void:
 	var point: Vector2=control.get_global_transform_with_canvas()*(control.size/2)
 	await motion(point);await mouse(point,true);await mouse(point,false);await flush()
@@ -28,6 +36,7 @@ func _run() -> void:
 	await scene_changed
 	await flush()
 	var prep=current_scene
+	expect(not prep.unassign_ship_slot.visible and not prep.unassign_captain_slot.visible,"Unassign slots were visible before any drag.")
 	expect(prep.ship_bank.get_child_count()==1 and prep.captain_bank.get_child_count()==1,"Assigned ships/captains still appear in available rows.")
 	expect(not prep.unassign_ship_slot is Button and not prep.unassign_captain_slot is Button,"Available rows still use command buttons.")
 	var badge: Control=prep.formation.target_widget(0).get_meta("captain_badge")

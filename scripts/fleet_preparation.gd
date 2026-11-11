@@ -362,8 +362,10 @@ func _show_drag_targets(data: Dictionary) -> void:
 		var id: int=formation.snapshot.formation[point]
 		notes[id if id>=0 else 100+point]="Assign captain" if data.kind=="captain" else "Move / swap ship"
 	formation.show_rule_preview(notes)
-	unassign_ship_slot.set_highlight(_can_unassign(data,"ship"))
-	unassign_captain_slot.set_highlight(_can_unassign(data,"captain"))
+	unassign_ship_slot.visible = _can_unassign(data,"ship")
+	unassign_ship_slot.set_highlight(unassign_ship_slot.visible)
+	unassign_captain_slot.visible = _can_unassign(data,"captain")
+	unassign_captain_slot.set_highlight(unassign_captain_slot.visible)
 
 func _can_drop_at(_local: Vector2, data: Variant, point: int) -> bool:
 	return _valid_drop(data,point)
@@ -391,8 +393,8 @@ func _notification(what: int) -> void:
 	if what==NOTIFICATION_DRAG_END:
 		drag_payload.clear()
 		if is_instance_valid(formation): formation.show_rule_preview({},selected_ship)
-		if is_instance_valid(unassign_ship_slot): unassign_ship_slot.set_highlight(false)
-		if is_instance_valid(unassign_captain_slot): unassign_captain_slot.set_highlight(false)
+		if is_instance_valid(unassign_ship_slot): unassign_ship_slot.hide()
+		if is_instance_valid(unassign_captain_slot): unassign_captain_slot.hide()
 
 
 
@@ -830,6 +832,7 @@ func _render_fleet_deck(compiled: Dictionary, candidate: Dictionary) -> void:
 func _render_banks() -> void:
 	unassign_ship_slot = Slot.new()
 	unassign_ship_slot.configure("Unassign airship","Drop a fleet ship here","",Color("#94785a"),false)
+	unassign_ship_slot.hide()
 	ship_bank.add_child(unassign_ship_slot)
 	unassign_ship_slot.set_drag_forwarding(Callable(),func(_pos,data): return _can_unassign(data,"ship"),func(_pos,data): _unassign(data,"ship"))
 	for ship in draft.ships:
@@ -842,6 +845,7 @@ func _render_banks() -> void:
 		frame.set_drag_forwarding(_drag_from.bind({"kind":"ship","ship":ship.id},frame),Callable(),Callable())
 	unassign_captain_slot = Slot.new()
 	unassign_captain_slot.configure("Unassign captain","Drop an assigned captain here","",Color("#94785a"),false)
+	unassign_captain_slot.hide()
 	captain_bank.add_child(unassign_captain_slot)
 	unassign_captain_slot.set_drag_forwarding(Callable(),func(_pos,data): return _can_unassign(data,"captain"),func(_pos,data): _unassign(data,"captain"))
 	for captain in draft.captains:
