@@ -7,6 +7,7 @@ func _ready() -> void:
 	if ContentStore.saved.is_empty():
 		primary_button.disabled = true
 		$Center/Panel/Margin/Content/Description.text = "Content could not be loaded. Open Editor to repair it."
+		$Center/Panel/Margin/Content/Description.show()
 
 
 func _navigate(destination: String) -> void:
