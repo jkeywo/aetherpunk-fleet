@@ -3,6 +3,7 @@ const Art = preload("res://scripts/art_assets.gd")
 const Rig = preload("res://scripts/rigged_art.gd")
 var rig_node: Node2D
 var definition: Dictionary = {}
+var enemy_facing := false
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -13,6 +14,7 @@ func configure(id: String, enemy: bool = false) -> void:
 	configure_data({"id":id},enemy)
 
 func configure_data(unit: Dictionary, enemy: bool = false) -> void:
+	enemy_facing = enemy
 	configure_definition(Art.visual_rig(unit,enemy))
 
 func configure_definition(value: Dictionary) -> void:
@@ -59,3 +61,15 @@ func _draw() -> void:
 		var box := Rect2(size*Vector2(.2,.3),size*Vector2(.6,.4))
 		draw_rect(box,Color("#91b9c6"),false,1,true)
 		draw_line(box.position,box.end,Color("#91b9c6"),1,true)
+
+func marker_global(id: String = "attack") -> Vector2:
+	if rig_node == null or definition.parts.is_empty(): return get_global_rect().get_center()
+	var actual := id
+	if not definition.get("markers", []).any(func(marker): return marker.id == actual):
+		actual = "attack" if id != "impact" else "impact"
+	if definition.get("markers", []).any(func(marker): return marker.id == actual):
+		return rig_node.to_global(rig_node.marker_position(actual))
+	# Legacy/custom rigs without markers still launch from their root's facing edge.
+	var root_part: Dictionary = definition.parts.filter(func(part): return part.get("parent", "") == "")[0]
+	var uv := [.5,.5] if id == "impact" else ([.05,.5] if enemy_facing else [.95,.5])
+	return rig_node.to_global(rig_node.poses(rig_node.elapsed)[root_part.id] * rig_node._uv(root_part, uv))

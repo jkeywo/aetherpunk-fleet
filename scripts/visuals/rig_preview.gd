@@ -6,6 +6,8 @@ var rig = Rig.new()
 var definition: Dictionary = {}
 var selected_id := ""
 var pivot_mode := false
+var marker_mode := false
+var selected_marker := "attack"
 var dragging := false
 var running := true
 var time := 0.0
@@ -71,6 +73,10 @@ func _draw() -> void:
 func _draw_overlay() -> void:
 	if pivot_mode or not rig.configuration_error.is_empty(): return
 	var poses: Dictionary = rig.poses(time)
+	if marker_mode:
+		var point := origin + rig.marker_position(selected_marker, time) * zoom
+		overlay.draw_circle(point, 12, Color("#6cecff"), false, 3, true)
+		overlay.draw_string(ThemeDB.fallback_font, point + Vector2(14,-10), selected_marker, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#6cecff"))
 	if not poses.has(selected_id): return
 	var point: Vector2 = origin+poses[selected_id].origin*zoom
 	overlay.draw_circle(point,9,Color("#ffe196"),false,2,true)
@@ -88,7 +94,7 @@ func _gui_input(event: InputEvent) -> void:
 		dragging = event.pressed
 		if dragging:
 			running = false
-			if not pivot_mode:
+			if not pivot_mode and not marker_mode:
 				# Select the topmost visible sprite; transparent atlas pixels do not steal clicks.
 				var ordered: Array = definition.get("parts",[]).duplicate()
 				ordered.sort_custom(func(a,b): return a.z>b.z)
@@ -109,6 +115,18 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 func _update_point(point: Vector2) -> void:
+	if marker_mode:
+		for marker in definition.get("markers", []):
+			if marker.id != selected_marker: continue
+			var poses: Dictionary = rig.poses(time)
+			if not poses.has(marker.part): return
+			var attached: Dictionary = rig.part_definitions()[marker.part]
+			var local: Vector2 = poses[marker.part].affine_inverse() * ((point-origin)/zoom)
+			var uv := local / Vector2(attached.size[0],attached.size[1]) + Vector2(attached.pivot[0],attached.pivot[1])
+			marker.uv = [clampf(uv.x,0,1),clampf(uv.y,0,1)]
+			rig.configure(definition)
+			changed.emit(); queue_redraw()
+		return
 	var item := part()
 	if item.is_empty() or not rig.configuration_error.is_empty(): return
 	if pivot_mode:

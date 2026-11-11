@@ -5,6 +5,9 @@ signal enemy_presentation_finished
 signal finished
 signal attack_started(attacker: int, target: int)
 signal area_attack_started(style: String, targets: Array)
+signal melee_started(attacker: int, target: int, path: Dictionary)
+signal melee_impacted(attacker: int, target: int)
+signal melee_finished(attacker: int, target: int)
 signal movement_started(paths: Dictionary)
 var duration_scale := 1.0
 var running := false
@@ -255,22 +258,107 @@ static func arc_position(start: Vector2, finish: Vector2, progress: float) -> Ve
 	return start.lerp(finish,progress)+normal*sin(progress*PI)*bend
 
 func _attack_effect(event: Dictionary) -> void:
-	var target:=_unit(int(event.target))
-	if target==null:return
-	var attacker: int=int(event.get("attacker",-999))
-	var source:=_unit(attacker)
-	var effect=preload("res://scripts/visuals/attack_vfx.gd").new()
-	effect.set_meta("attack_vfx",true)
-	effect.finish=_impact_point(target,event)
-	effect.start=_art_centre(source) if source!=null else effect.finish+Vector2(45 if attacker<0 else -45,0)
-	effect.tint=Color("#ffac79") if attacker<0 else Color("#8ceaff")
+	var target := _unit(int(event.target))
+	if target == null: return
+	var attacker: int = int(event.get("attacker", -999))
+	var style: String = event.get("presentation", "melee" if attacker < 0 else "ranged")
+	attack_started.emit(attacker, int(event.target))
+	if style == "melee": await _melee_effect(event)
+	elif style in ["beam", "explosion"]:
+		await _area_attack_effect(event.merged({"style":style, "targets":[int(event.target)]}, true))
+		_flash_defences(event, target)
+	else: await _projectile_effect(event)
+
+
+func _projectile_effect(event: Dictionary) -> void:
+	var target := _unit(int(event.target))
+	if target == null: return
+	var attacker: int = int(event.get("attacker", -999))
+	var source := _unit(attacker)
+	var effect = preload("res://scripts/visuals/attack_vfx.gd").new()
+	effect.set_meta("attack_vfx", true)
+	effect.z_index = 6
+	effect.finish = _impact_point(target, event)
+	effect.start = _attack_origin(source, event.get("origin_marker", "attack")) if source != null else effect.finish + Vector2(45 if attacker < 0 else -45, 0)
+	effect.tint = Color("#ffac79") if attacker < 0 else Color("#8ceaff")
 	overlay.add_child(effect)
 	effect.impacted.connect(func(): _flash_defences(event, target))
-	attack_started.emit(attacker,int(event.target))
-	var tween:=create_tween()
-	tween.tween_property(effect,"progress",1.0,_time(.30))
+	var tween := create_tween()
+	tween.tween_property(effect, "progress", 1.0, _time(.30))
 	await tween.finished
 	effect.queue_free()
+
+
+static func swoop_position(start: Vector2, finish: Vector2, progress: float) -> Vector2:
+	var displacement := finish - start
+	var normal := Vector2(-displacement.y, displacement.x).normalized()
+	return start.lerp(finish, progress) + normal * sin(progress * PI) * clampf(displacement.length() * .12, 20, 85)
+
+
+func _melee_effect(event: Dictionary) -> void:
+	var attacker: int = int(event.get("attacker", -999))
+	var source := _unit(attacker)
+	var target := _unit(int(event.target))
+	if source == null or target == null:
+		await _projectile_effect(event)
+		return
+	# Only the artwork leaves its slot; formation, shields and labels stay put.
+	var ghost = preload("res://scripts/rig_view.gd").new()
+	ghost.set_meta("melee_actor", attacker)
+	ghost.z_index = 6
+	overlay.add_child(ghost)
+	ghost.size = source.art.size
+	ghost.enemy_facing = attacker < 0
+	ghost.configure_definition(source.art.definition)
+	ghost.position = source.art.global_position
+	ghost.pivot_offset = ghost.size / 2
+	ghost.set_process(false)
+	if ghost.rig_node != null and source.art.rig_node != null: ghost.rig_node.elapsed = source.art.rig_node.elapsed
+	var marker: String = event.get("origin_marker", "attack")
+	var start: Vector2 = ghost.position
+	var origin_offset: Vector2 = ghost.marker_global(marker) - start
+	var contact := _impact_point(target, event)
+	var finish: Vector2 = contact - origin_offset
+	var saved_tint: Color = source.art.modulate
+	ghost.modulate = saved_tint
+	source.art.modulate.a = 0
+	melee_started.emit(attacker, int(event.target), {"from":start, "to":finish, "origin":start+origin_offset, "impact":contact})
+	var tween := create_tween()
+	tween.tween_method(func(progress):
+		ghost.position = swoop_position(start, finish, progress)
+		ghost.rotation = sin(progress * PI) * deg_to_rad(8) * signf(finish.x-start.x), 0.0, 1.0, _time(.34)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	await tween.finished
+	ghost.position = finish
+	ghost.rotation = 0
+	_flash_defences(event, target)
+	if int(event.get("amount", 0)) > 0:
+		target.art.modulate = Color("#ff5050")
+		create_tween().tween_property(target.art, "modulate", Color.WHITE, _time(.20))
+	var impact = preload("res://scripts/visuals/attack_vfx.gd").new()
+	impact.z_index = 6
+	impact.start = contact; impact.finish = contact; impact.progress = .65
+	impact.tint = Color("#ffac79")
+	overlay.add_child(impact)
+	melee_impacted.emit(attacker, int(event.target))
+	var strike := create_tween()
+	strike.tween_property(impact, "progress", 1.0, _time(.12))
+	await strike.finished
+	impact.queue_free()
+	var retreat := create_tween()
+	retreat.tween_method(func(progress):
+		ghost.position = swoop_position(finish, start, progress)
+		ghost.rotation = -sin(progress * PI) * deg_to_rad(6) * signf(finish.x-start.x), 0.0, 1.0, _time(.28)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	await retreat.finished
+	ghost.position = start; ghost.rotation = 0
+	if is_instance_valid(source): source.art.modulate = saved_tint
+	ghost.free()
+	melee_finished.emit(attacker, int(event.target))
+
+
+func _attack_origin(unit: Control, marker: String = "attack") -> Vector2:
+	if unit != null and "art" in unit and unit.art.has_method("marker_global"): return unit.art.marker_global(marker)
+	return _art_centre(unit) if unit != null else Vector2.ZERO
+
 
 func _flash_defences(event: Dictionary, target: Control) -> void:
 	if not is_instance_valid(target): return
@@ -283,28 +371,36 @@ func _flash_defences(event: Dictionary, target: Control) -> void:
 
 
 func _area_attack_effect(event: Dictionary) -> void:
+	var presentation: String = event.get("presentation", event.style)
+	area_attack_started.emit(event.style, event.targets.duplicate())
+	if presentation in ["melee", "ranged"]:
+		for id in event.targets:
+			var single: Dictionary = event.merged({"target":id}, true)
+			if presentation == "melee": await _melee_effect(single)
+			else: await _projectile_effect(single)
+		return
 	var effect = preload("res://scripts/visuals/area_attack_vfx.gd").new()
-	effect.style = event.style
-	effect.set_meta("area_vfx", event.style)
+	effect.style = presentation
+	effect.set_meta("area_vfx", presentation)
+	effect.z_index = 6
 	var source := _unit(int(event.attacker))
 	var target := _unit(int(event.target))
 	if target == null: effect.free(); return
 	effect.centre = _art_centre(target)
-	effect.start = _art_centre(source) if source != null else effect.centre + Vector2(-80, 0)
+	effect.start = _attack_origin(source, event.get("origin_marker", "attack")) if source != null else effect.centre + Vector2(-80, 0)
 	for id in event.targets:
 		var victim := _unit(int(id))
 		if victim != null: effect.impacts.append(_art_centre(victim))
-	effect.tint = Color("#ffac79") if event.style == "explosion" else Color("#8ceaff")
+	effect.tint = Color("#ffac79") if presentation == "explosion" else Color("#8ceaff")
 	overlay.add_child(effect)
-	area_attack_started.emit(event.style, event.targets.duplicate())
 	var tween := create_tween()
-	tween.tween_property(effect, "progress", 1.0, _time(.55 if event.style == "explosion" else .45))
+	tween.tween_property(effect, "progress", 1.0, _time(.55 if presentation == "explosion" else .45))
 	await tween.finished
 	effect.queue_free()
 
 
 func _art_centre(unit: Control) -> Vector2:
-	return unit.art.global_position+unit.art.size/2 if "art" in unit else unit.get_global_rect().get_center()
+	return unit.art.marker_global("impact") if "art" in unit and unit.art.has_method("marker_global") else unit.get_global_rect().get_center()
 
 
 func _ready() -> void:

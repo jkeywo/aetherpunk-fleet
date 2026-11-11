@@ -79,3 +79,23 @@ Inside those lists, `area_target` means the current main/splash unit. For Stun, 
 ```
 
 Both chunks appear in the generated effect editor. Each explosion list has Add effect, Remove, Up, and Down controls. Nested chunks retain validation and context restrictions. Both run through detached previews, normal trigger limits, payment/cancellation, and post-action monster reactions. Beam has a sustained cyan line through its victims; explosion has an orange projectile, shockwave, and radial sparks. Area feedback groups its visual while each victim keeps normal damage, defence, and hull-loss flash feedback. Keyword icons and tooltips distinguish both patterns. Existing content and immutable fixtures are unchanged.
+
+
+## Attack origins and presentation
+
+Visual rigs have an optional `markers` list: each point has a unique `id`, a `part` ID, and normalized `uv: [u,v]`. Its position follows that part's live pose, including parent transforms, flips, rotations, rig fitting, and viewport scaling. Shipped rigs define `attack` on the bow/head and `impact` on the body. Legacy/custom rigs without markers use the root's facing edge for attacks and its centre for impacts. An unknown origin falls back to `attack`, then that facing edge.
+
+In **Sprites & animation**, add/remove named points, choose a sprite part, and edit U/V. **Drag marker** selects marker mode; drag in the assembly preview to place it. Cyan crosses follow their parts through idle animation. Part deletion is blocked until its markers are moved or removed. Apply changes the workshop draft; Save All persists it. Rigs and attack effects remain detached in running battles.
+
+All three attack primitives (`attack`, `beam`, `explosion`) accept:
+
+- `presentation`: `auto`, `ranged`, `beam`, `explosion`, or `melee`.
+- `origin_marker`: a marker name, default `attack`.
+
+These fields configure feedback only. Short/Long range, beam lanes, blast adjacency, damage, and reaction timing are unchanged. Auto makes monster attacks melee; player attacks use projectile, beam, or explosion according to their primitive. Explicit presentation overrides auto for either side. For example, a player ram:
+
+```json
+{"kind":"attack", "target":"chosen_enemy", "damage":{"kind":"weapon_damage","target":"owner"}, "hits":1, "range":"Short", "presentation":"melee", "origin_marker":"attack"}
+```
+
+Melee hides source artwork, moves a detached copy along a curved path until its chosen marker contacts the target/defence, shows an impact, then returns and restores the source. Formation, labels, cover, and shields stay in their slots. A multi-target melee presentation visits each locked victim; ordinary hits retain their damage feedback. The transient copy does not alter battle state or RNG. Beam/explosion presentations also work for a single-target attack. A child attack in an explosion can explicitly request its own presentation; otherwise it shares the enclosing blast visual.

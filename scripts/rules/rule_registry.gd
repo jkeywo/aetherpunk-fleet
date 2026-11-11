@@ -69,6 +69,10 @@ static func ensure() -> void:
 	for operation in ["sum", "product", "min", "max"]:
 		add("value", operation, operation.capitalize(), {"values": field("values", [1, 1])}, _arithmetic.bind(operation))
 
+	for kind in ["attack", "beam", "explosion"]:
+		catalog.effect[kind].fields["presentation"] = field("enum", "auto", 0, ["auto", "ranged", "beam", "explosion", "melee"])
+		catalog.effect[kind].fields["origin_marker"] = field("string", "attack")
+
 	# Only expose fields that can affect this chunk.
 	for id in catalog.modifier:
 		var d: Dictionary = catalog.modifier[id]

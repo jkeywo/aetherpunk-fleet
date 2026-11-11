@@ -64,6 +64,15 @@ func poses(time: float) -> Dictionary:
 	return result
 
 
+func marker_position(id: String, time: float = -1.0) -> Vector2:
+	for marker in definition.get("markers", []):
+		if marker.id == id:
+			var transforms := poses(elapsed if time < 0 else time)
+			var parts := part_definitions()
+			if transforms.has(marker.part): return transforms[marker.part] * _uv(parts[marker.part], marker.uv)
+	return Vector2.ZERO
+
+
 func _draw() -> void:
 	if definition.is_empty() or atlas == null: return
 	var transforms := poses(elapsed)
@@ -90,3 +99,10 @@ func _draw() -> void:
 		for cable in definition.get("cables", []):
 			for end in [[cable.from, cable.from_uv], [cable.to, cable.to_uv]]:
 				draw_circle(transforms[end[0]] * _uv(parts[end[0]], end[1]), 3, Color("#78e8e8"))
+
+		for marker in definition.get("markers", []):
+			var point := marker_position(marker.id)
+			draw_circle(point, 7, Color("#6cecff"), false, 2, true)
+			draw_line(point - Vector2(11,0), point + Vector2(11,0), Color("#6cecff"), 2)
+			draw_line(point - Vector2(0,11), point + Vector2(0,11), Color("#6cecff"), 2)
+			draw_string(ThemeDB.fallback_font, point + Vector2(10,18), str(marker.id), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#6cecff"))

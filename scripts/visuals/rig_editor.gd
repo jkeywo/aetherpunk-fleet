@@ -14,6 +14,7 @@ var clock: HSlider
 var play: Button
 var fields: Dictionary = {}
 var import_dialog: FileDialog
+var edit_mode: OptionButton
 
 func configure(value: Dictionary, unit_id: String, display_name: String) -> void:
 	draft = Schema.editable(value,unit_id)
@@ -87,15 +88,16 @@ func _build() -> void:
 	_button(controls,"Animate",func():preview.rig.strength=1;preview.running=true;_sync_clock())
 	var anchors:=CheckButton.new();anchors.text="Anchors";anchors.button_pressed=true
 	controls.add_child(anchors);anchors.toggled.connect(func(value):preview.rig.show_anchors=value)
-	var mode:=OptionButton.new();mode.add_item("Assembly / drag attachment");mode.add_item("Sprite / click hinge")
+	var mode:=OptionButton.new();mode.add_item("Assembly / drag attachment");mode.add_item("Sprite / click hinge");mode.add_item("Attack markers / drag point");edit_mode=mode
 	middle.add_child(mode)
-	mode.item_selected.connect(func(index):preview.pivot_mode=index==1;preview.queue_redraw())
+	mode.item_selected.connect(func(index):preview.pivot_mode=index==1;preview.marker_mode=index==2;preview.queue_redraw())
 	preview=Preview.new();preview.size_flags_vertical=Control.SIZE_EXPAND_FILL;middle.add_child(preview)
 	preview.changed.connect(func():_sync_numbers();_validate();_sync_clock())
 	preview.selected.connect(func(id):selected_id=id;_select_list();_properties())
 	clock=HSlider.new();clock.min_value=0;clock.max_value=30;clock.step=.01;middle.add_child(clock)
 	clock.value_changed.connect(func(value):preview.running=false;preview.time=value;preview.rig.strength=1;_sync_clock())
-	_label(middle,"Assembly: drag a sprite to place its joint on its parent.\nSprite view: click its local hinge. Gold cross = selected hinge.")
+	_label(middle,"Assembly: drag a sprite to place its joint on its parent.\nSprite view: click its local hinge. Gold cross = selected hinge. Cyan cross = attack/impact marker.
+Marker mode: drag the selected named point on its sprite.").autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
 	properties=_scroll(columns,Vector2(340,410))
 	properties.get_parent().size_flags_horizontal=Control.SIZE_FILL
 	status=_label(body,"");status.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
@@ -163,6 +165,7 @@ func _properties() -> void:
 	fields.clear()
 	var item:=part()
 	if item.is_empty():_label(properties,"Add a sprite or choose a template.");return
+	_markers()
 	_label(properties,"PART / "+str(item.id))
 	var name_field:=LineEdit.new();name_field.text=item.get("label",item.id);properties.add_child(name_field)
 	name_field.text_changed.connect(func(value):item.label=value;parts.set_item_text(parts.get_selected_items()[0],value+"  ["+str(item.z)+"]"))
@@ -205,6 +208,10 @@ func _properties() -> void:
 	_cables()
 
 func _sync_numbers() -> void:
+	for marker in draft.get("markers", []):
+		for axis in 2:
+			var key := "marker_" + str(marker.id) + str(axis)
+			if fields.has(key): fields[key].set_value_no_signal(marker.uv[axis])
 	var item:=part()
 	for key in ["pivot","anchor","position","offset"]:
 		for axis in 2:
@@ -268,10 +275,64 @@ func remove_part() -> void:
 	var references: Array=[]
 	for item in draft.parts:
 		if item.get("parent","")==selected_id:references.append("child "+item.id)
+	for marker in draft.get("markers", []):
+		if marker.part==selected_id:references.append("marker " + marker.id)
 	for index in draft.cables.size():
 		if draft.cables[index].from==selected_id or draft.cables[index].to==selected_id:references.append("cable "+str(index+1))
 	if not references.is_empty():status.text="Reattach or remove these first: "+", ".join(references);return
 	draft.parts.erase(part());selected_id=draft.parts[0].id if not draft.parts.is_empty() else "";_refresh()
+
+func select_marker(id: String) -> void:
+	preview.selected_marker = id
+	preview.marker_mode = true
+	preview.pivot_mode = false
+	edit_mode.select(2)
+	preview.queue_redraw()
+
+
+func add_marker() -> void:
+	if part().is_empty() or draft.markers.size() >= 32: return
+	var id := "attack"
+	var index := 2
+	while draft.markers.any(func(marker): return marker.id == id):
+		id = "attack_" + str(index)
+		index += 1
+	draft.markers.append({"id":id, "part":selected_id, "uv":[.5,.5]})
+	select_marker(id)
+	_properties(); _changed()
+
+
+func _markers() -> void:
+	_label(properties, "ATTACK / IMPACT MARKERS")
+	_label(properties, "Named points follow their part. Attacks choose an origin marker; default: attack.").autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_button(properties, "Add marker", add_marker)
+	for marker in draft.markers:
+		var group := _box(properties)
+		var tools := _box(group, true)
+		_button(tools, "Drag " + str(marker.id), func(): select_marker(marker.id))
+		_button(tools, "Remove marker", func(): draft.markers.erase(marker); _properties(); _changed())
+		var name_field := LineEdit.new()
+		name_field.text = marker.id
+		group.add_child(name_field)
+		name_field.text_changed.connect(func(value):
+			if preview.selected_marker == marker.id: preview.selected_marker = value
+			for axis in 2:
+				var old_key := "marker_" + str(marker.id) + str(axis)
+				if fields.has(old_key):
+					fields["marker_" + value + str(axis)] = fields[old_key]
+					fields.erase(old_key)
+			marker.id = value; _changed())
+		var choose := OptionButton.new()
+		choose.fit_to_longest_item = false
+		for item in draft.parts:
+			choose.add_item("Part / " + str(item.get("label",item.id)))
+			choose.set_item_metadata(choose.item_count-1,item.id)
+			if marker.part == item.id: choose.select(choose.item_count-1)
+		group.add_child(choose)
+		choose.item_selected.connect(func(index): marker.part=choose.get_item_metadata(index); _changed())
+		for axis in 2:
+			_number(group, "Socket U" if axis==0 else "Socket V", marker.uv[axis], 0, 1, func(value): marker.uv[axis]=value, "marker_"+str(marker.id)+str(axis))
+
 
 func _cables() -> void:
 	_label(properties,"CABLES / endpoints follow their parts")

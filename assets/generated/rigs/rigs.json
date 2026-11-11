@@ -131,6 +131,24 @@
             0.34
           ]
         }
+      ],
+      "markers": [
+        {
+          "id": "attack",
+          "part": "hull",
+          "uv": [
+            0.96,
+            0.5
+          ]
+        },
+        {
+          "id": "impact",
+          "part": "hull",
+          "uv": [
+            0.5,
+            0.5
+          ]
+        }
       ]
     },
     {
@@ -262,6 +280,24 @@
             0.48
           ]
         }
+      ],
+      "markers": [
+        {
+          "id": "attack",
+          "part": "hull",
+          "uv": [
+            0.96,
+            0.5
+          ]
+        },
+        {
+          "id": "impact",
+          "part": "hull",
+          "uv": [
+            0.5,
+            0.5
+          ]
+        }
       ]
     },
     {
@@ -391,6 +427,24 @@
           "to_uv": [
             0.67,
             0.41
+          ]
+        }
+      ],
+      "markers": [
+        {
+          "id": "attack",
+          "part": "hull",
+          "uv": [
+            0.96,
+            0.5
+          ]
+        },
+        {
+          "id": "impact",
+          "part": "hull",
+          "uv": [
+            0.5,
+            0.5
           ]
         }
       ]
@@ -537,7 +591,25 @@
           ]
         }
       ],
-      "cables": []
+      "cables": [],
+      "markers": [
+        {
+          "id": "attack",
+          "part": "body",
+          "uv": [
+            0.06,
+            0.5
+          ]
+        },
+        {
+          "id": "impact",
+          "part": "body",
+          "uv": [
+            0.5,
+            0.5
+          ]
+        }
+      ]
     },
     {
       "id": "enemy-storm-ray",
@@ -681,7 +753,25 @@
           ]
         }
       ],
-      "cables": []
+      "cables": [],
+      "markers": [
+        {
+          "id": "attack",
+          "part": "body",
+          "uv": [
+            0.06,
+            0.5
+          ]
+        },
+        {
+          "id": "impact",
+          "part": "body",
+          "uv": [
+            0.5,
+            0.5
+          ]
+        }
+      ]
     },
     {
       "id": "enemy-needlewing",
@@ -891,7 +981,25 @@
           ]
         }
       ],
-      "cables": []
+      "cables": [],
+      "markers": [
+        {
+          "id": "attack",
+          "part": "body",
+          "uv": [
+            0.06,
+            0.5
+          ]
+        },
+        {
+          "id": "impact",
+          "part": "body",
+          "uv": [
+            0.5,
+            0.5
+          ]
+        }
+      ]
     }
   ]
 }

@@ -4,7 +4,7 @@ const BASE := "res://assets/generated/rigs/"
 static var texture_cache: Dictionary = {}
 
 static func empty(id: String = "visual") -> Dictionary:
-	return {"id": id, "canvas": [1000,650], "parts": [], "cables": []}
+	return {"id": id, "canvas": [1000,650], "parts": [], "cables": [], "markers": []}
 
 static func texture_path(rig: Dictionary, part: Dictionary, base: String = BASE) -> String:
 	var source: Variant = part.get("texture",rig.get("atlas",""))
@@ -89,6 +89,18 @@ static func validate(value: Variant, where: String = "Visual rig", single_root: 
 		while parent is String and parent!="" and ids.has(parent):
 			if visited.has(parent): errors.append(where+" / "+id+": parent links form a cycle."); break
 			visited.append(parent); parent=ids[parent].get("parent","")
+	var markers: Variant = value.get("markers", [])
+	var marker_ids: Array = []
+	if not markers is Array: errors.append(where + ": markers must be a list.")
+	else:
+		if markers.size() > 32: errors.append(where + ": use at most 32 markers.")
+		for marker in markers:
+			if not marker is Dictionary: errors.append(where + ": marker needs an ID, part and socket."); continue
+			if not marker.get("id") is String or str(marker.get("id", "")).strip_edges().is_empty() or marker_ids.has(marker.get("id")):
+				errors.append(where + ": marker IDs must be unique and nonempty.")
+			marker_ids.append(marker.get("id"))
+			if not ids.has(marker.get("part", "")): errors.append(where + ": marker part does not exist.")
+			if not vector(marker.get("uv"), 2, 0, 1): errors.append(where + ": marker socket must be between 0 and 1.")
 	var cables: Variant=value.get("cables",[])
 	if not cables is Array: errors.append(where+": cables must be a list.")
 	else:
@@ -117,6 +129,7 @@ static func editable(value: Dictionary, id: String = "visual") -> Dictionary:
 	result["id"]=id
 	result["canvas"]=result.get("canvas",[1000,650])
 	result["cables"]=result.get("cables",[])
+	result["markers"]=result.get("markers",[])
 	for part in result.parts:
 		part["z"]=part.get("z",0)
 		if part.get("parent","")=="":part.erase("parent")

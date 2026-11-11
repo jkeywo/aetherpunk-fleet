@@ -708,7 +708,7 @@ func _emit(kind: String, c: Dictionary, extra: Dictionary = {}) -> void:
 		var ctx := c.duplicate(true)
 		ctx.merge(source, true)
 		# A triggered rule is a fresh source, outside its cause's area envelope.
-		for key in ["attack_style", "area_range", "area_target"]: ctx.erase(key)
+		for key in ["attack_style", "area_range", "area_target", "attack_presentation", "origin_marker"]: ctx.erase(key)
 		ctx["state"] = self
 		ctx["event"] = event.duplicate(true)
 		var ancestry: Array = c.get("ancestry", [])
@@ -781,7 +781,7 @@ func _drain() -> void:
 				elif c.uid < 0:
 					_record("ship_rule", {"target": c.owner, "rule_key":c.key, "rule_text":Rules.rule_text(rule,unit(c.owner).name), "title": c.title})
 				_prepend(_effect_jobs(rule.get("effects", []), c))
-			"area_visual": _record("area_attack", {"style":job.style, "attacker":int(c.owner), "target":job.target, "targets":job.targets})
+			"area_visual": _record("area_attack", {"style":job.style, "presentation":job.presentation, "origin_marker":job.origin_marker, "attacker":int(c.owner), "target":job.target, "targets":job.targets})
 			"effect": Rules.execute(job.spec, c)
 			"hit": _hit(job, c)
 			"reaction_done":
@@ -927,6 +927,11 @@ func _enemy_target(owner: int, range_text: String) -> int:
 	return -999
 
 
+func _attack_presentation(p: Dictionary, owner: int, shape: String = "ranged") -> String:
+	var style: String = p.get("presentation", "auto")
+	return ("melee" if owner < 0 else shape) if style == "auto" else style
+
+
 func _area_range(p: Dictionary, c: Dictionary) -> String:
 	if c.get("area_range") == "Short": return "Short"
 	return weapon_range(c.owner, c) if p.get("range", "weapon") == "weapon" else p.range
@@ -947,7 +952,7 @@ func effect_beam(p: Dictionary, c: Dictionary) -> bool:
 		var target: int = -1 - int(opposing[point]) if int(c.owner) >= 0 else int(opposing[point])
 		if _area_legal(c.owner, target, _area_range(p, c)): victims.append(target)
 	if victims.is_empty(): return false
-	_record("area_attack", {"style":"beam", "attacker":int(c.owner), "targets":victims.duplicate(), "target":victims[0]})
+	_record("area_attack", {"style":"beam", "presentation":_attack_presentation(p, c.owner, "beam"), "origin_marker":p.get("origin_marker", "attack"), "attacker":int(c.owner), "targets":victims.duplicate(), "target":victims[0]})
 	var ctx := c.duplicate(true)
 	ctx["attack_style"] = "beam"
 	return effect_attack(p, ctx, victims)
@@ -972,7 +977,7 @@ func effect_explosion(p: Dictionary, c: Dictionary) -> bool:
 			var target: int = -1 - int(opposing[point]) if int(centre) < 0 else int(opposing[point])
 			if _area_legal(c.owner, target, range_text): neighbours.append(target)
 		# Freeze affected identities before the primary effects can move or defeat anything.
-		jobs.append({"kind":"area_visual", "ctx":c, "style":"explosion", "target":centre, "targets":[centre] + neighbours})
+		jobs.append({"kind":"area_visual", "ctx":c, "style":"explosion", "presentation":_attack_presentation(p, c.owner, "explosion"), "origin_marker":p.get("origin_marker", "attack"), "target":centre, "targets":[centre] + neighbours})
 		for target in [centre] + neighbours:
 			var ctx := c.duplicate(true)
 			ctx["area_target"] = target
@@ -1010,8 +1015,13 @@ func effect_attack(p: Dictionary, c: Dictionary, locked_targets: Variant = null)
 		if range_text == "Short" and (position_of(owner) == 3 or position_of(target) == 3): continue
 		_emit("attack_started", c, {"target": target, "amount": 1})
 		var jobs: Array = []
+		var visual_context := c.duplicate(true)
+		visual_context["attack_presentation"] = _attack_presentation(p, owner, c.get("attack_style", "ranged"))
+		visual_context["origin_marker"] = p.get("origin_marker", "attack")
+		# An explicitly styled child attack can have its own animation inside a blast.
+		if locked_targets == null and p.get("presentation", "auto") != "auto": visual_context.erase("attack_style")
 		for i in count:
-			jobs.append({"kind": "hit", "ctx": c.duplicate(true), "target": target, "damage": damage + each + (extra if i == 0 else 0), "index": i + 1, "total": count})
+			jobs.append({"kind": "hit", "ctx": visual_context.duplicate(true), "target": target, "damage": damage + each + (extra if i == 0 else 0), "index": i + 1, "total": count})
 		all_jobs.append_array(jobs)
 	_prepend(all_jobs)
 	return false
@@ -1037,7 +1047,7 @@ func _hit(job: Dictionary, c: Dictionary) -> void:
 	u.hull -= hull_lost
 	if _mode == "player" and target < 0:
 		root_context.damage[target] = int(root_context.damage.get(target, 0)) + hull_lost
-	var metrics := {"attacker": int(c.owner), "incoming_damage": incoming, "target": target, "amount": hull_lost, "hull_damage": hull_lost, "cover_absorbed": cover_absorbed, "armour_absorbed": armour_absorbed, "shields_absorbed": shields_absorbed, "blocked": cover_absorbed + armour_absorbed + shields_absorbed, "hit_id": hit_id, "hit_index": job.index, "hit_total": job.total, "attack_style": c.get("attack_style", "")}
+	var metrics := {"attacker": int(c.owner), "incoming_damage": incoming, "target": target, "amount": hull_lost, "hull_damage": hull_lost, "cover_absorbed": cover_absorbed, "armour_absorbed": armour_absorbed, "shields_absorbed": shields_absorbed, "blocked": cover_absorbed + armour_absorbed + shields_absorbed, "hit_id": hit_id, "hit_index": job.index, "hit_total": job.total, "attack_style": c.get("attack_style", ""), "presentation":c.get("attack_presentation", "ranged"), "origin_marker":c.get("origin_marker", "attack")}
 	if _mode == "player" and target < 0:
 		if not root_context.has("metrics"): root_context["metrics"] = {}
 		if not root_context.metrics.has(target): root_context.metrics[target] = {}

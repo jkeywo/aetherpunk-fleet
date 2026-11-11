@@ -3,6 +3,8 @@ extends RefCounted
 static var textures: Dictionary = {}
 static var matcher: RegEx
 const DEFINITIONS := {
+	"melee": ["Melee", "#ffaf88", "Attack presentation: the attacker swoops to the target, strikes, and returns. Range and target pattern remain defined separately.", "M3 4l12 12M6 2l16 16-4 4L2 6zM3 21l6-6M2 17l5 5"],
+	"ranged": ["Ranged", "#8ceaff", "Attack presentation: a projectile launches from the unit's named attack marker. Short/Long range is a separate gameplay rule.", "M2 12h18M15 7l6 5-6 5M3 6h6M3 18h6"],
 	"beam": ["Beam", "#8ceaff", "A piercing line: from Front or Rear hits enemy Front and Rear; from a flank hits the matching flank. Short range still excludes Rear.", "M2 8h20M2 12h20M2 16h20M8 5v14M17 5v14"],
 	"explosion": ["Explosion", "#ffac79", "Separate ordered effects on the main target and each occupied adjacent position. Targets are locked before the blast; empty slots are skipped.", "M12 2l2 6 6-4-3 7 5 2-7 2 3 7-6-4-5 4 2-7-7-2 6-2-3-7 7 4z"],
 	"cost": ["Cost", "#f0d49b", "Mana cost: pay with other hand cards and temporary mana crystals. Excess payment is lost.", "M12 3a9 9 0 110 18 9 9 0 010-18M10 8h3v9M9 17h7"],
