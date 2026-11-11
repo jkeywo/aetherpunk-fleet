@@ -93,7 +93,8 @@ body {
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
 
-	</head>
+	<!-- Source e0071b4 -->
+</head>
 	<body>
 		<canvas id="canvas">
 			Your browser does not support the canvas tag.
@@ -111,7 +112,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":24305704,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","mainPack":"index-e0071b4.pck","experimentalVK":false,"fileSizes":{"index-e0071b4.pck":34201904,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
@@ -199,17 +200,30 @@ const engine = new Engine(GODOT_CONFIG);
 		}
 	} else {
 		setStatusMode('progress');
-		engine.startGame({
-			'onProgress': function (current, total) {
-				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
-				} else {
-					statusProgress.removeAttribute('value');
-					statusProgress.removeAttribute('max');
-				}
-			},
-		}).then(() => {
+		(async () => {
+			const pack = GODOT_CONFIG.mainPack;
+			const payload = new Uint8Array(GODOT_CONFIG.fileSizes[pack]);
+			const parts = 9;
+			const chunkSize = 4 * 1024 * 1024;
+			let downloaded = 0;
+			statusProgress.max = payload.length;
+			statusProgress.value = 0;
+			await Promise.all([
+				engine.init(GODOT_CONFIG.executable),
+				...Array.from({ length: parts }, async (_, part) => {
+					const response = await fetch(pack + '.' + part);
+					if (!response.ok) throw new Error('Unable to load game data (' + response.status + ')');
+					const bytes = new Uint8Array(await response.arrayBuffer());
+					const offset = part * chunkSize;
+					if (bytes.length !== Math.min(chunkSize, payload.length - offset)) throw new Error('Incomplete game data');
+					payload.set(bytes, offset);
+					downloaded += bytes.length;
+					statusProgress.value = downloaded;
+				}),
+			]);
+			await engine.preloadFile(payload.buffer, pack);
+			await engine.start({ args: ['--main-pack', pack, ...GODOT_CONFIG.args] });
+		})().then(() => {
 			setStatusMode('hidden');
 		}, displayFailureNotice);
 	}
