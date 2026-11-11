@@ -603,6 +603,7 @@ func _update_controls() -> void:
 	else:
 		allies.show_basic_targets()
 		enemies.show_basic_targets()
+		allies.show_rule_preview()
 		enemies.show_rule_preview()
 		%Inspection.text = "Drag to the circle to play. Drop on a ship, adjacent empty position, or enemy for an immediate basic action."
 	var cards: Dictionary = {}
